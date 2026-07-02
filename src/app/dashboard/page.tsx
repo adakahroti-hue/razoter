@@ -33,6 +33,8 @@ interface ApiKeyEntry {
   lastUsedAt: string | null;
 }
 
+type ComboStrategy = 'failover-priority' | 'round-robin';
+
 interface ComboItem {
   providerId: string;
   providerName: string;
@@ -43,7 +45,18 @@ interface Combo {
   id: string;
   name: string;
   items: ComboItem[];
+  strategy: ComboStrategy;
   enabled: boolean;
+  createdAt: string;
+}
+
+interface Quota {
+  id: string;
+  providerId: string;
+  providerName: string;
+  monthlyLimit: number;
+  currentUsage: number;
+  resetDay: number;
   createdAt: string;
 }
 
@@ -120,8 +133,9 @@ export default function Dashboard() {
   const [config, setConfig] = useState<any>(null);
   const [apiKeys, setApiKeys] = useState<ApiKeyEntry[]>([]);
   const [combos, setCombos] = useState<Combo[]>([]);
+  const [quotas, setQuotas] = useState<Quota[]>([]);
 
-  const [activeTab, setActiveTab] = useState<'providers' | 'logs' | 'settings' | 'combos'>('providers');
+  const [activeTab, setActiveTab] = useState<'providers' | 'combos' | 'logs' | 'settings' | 'quotas'>('providers');
   const [showProviderModal, setShowProviderModal] = useState(false);
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
 
@@ -138,11 +152,13 @@ export default function Dashboard() {
 
   // Combo form
   const [showComboModal, setShowComboModal] = useState(false);
-  const [comboForm, setComboForm] = useState({ name: '' });
+  const [editingCombo, setEditingCombo] = useState<Combo | null>(null);
+  const [comboForm, setComboForm] = useState({ name: '', strategy: 'failover-priority' as ComboStrategy });
   const [comboItems, setComboItems] = useState<ComboItem[]>([]);
 
-  // Settings
-  const [settingsForm, setSettingsForm] = useState({ maxRetries: 3, timeoutMs: 30000 });
+  // Quota form
+  const [showQuotaModal, setShowQuotaModal] = useState(false);
+  const [quotaForm, setQuotaForm] = useState({ providerId: '', monthlyLimit: 0, resetDay: 1 });
 
   // ─── API helper ──────────────────────────────────
 
@@ -164,20 +180,22 @@ export default function Dashboard() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [provRes, logRes, statsRes, configRes, keysRes, combosRes] = await Promise.all([
+      const [provRes, logRes, statsRes, configRes, keysRes, combosRes, quotasRes] = await Promise.all([
         api('/api/providers'),
         api('/api/logs?limit=50'),
         api('/api/stats'),
         api('/api/config'),
         api('/api/api-keys'),
         api('/api/combos'),
+        api('/api/quotas'),
       ]);
       if (provRes.ok) setProviders(await provRes.json());
       if (logRes.ok) { const d = await logRes.json(); setLogs(d.logs || d); }
       if (statsRes.ok) setStats(await statsRes.json());
-      if (configRes.ok) { const c = await configRes.json(); setConfig(c); setSettingsForm({ maxRetries: c.maxRetries, timeoutMs: c.timeoutMs }); }
+      if (configRes.ok) { const c = await configRes.json(); setConfig(c); }
       if (keysRes.ok) setApiKeys(await keysRes.json());
       if (combosRes.ok) setCombos(await combosRes.json());
+      if (quotasRes.ok) setQuotas(await quotasRes.json());
     } catch (e) { console.error('Fetch error:', e); }
   }, [api]);
 
@@ -301,8 +319,16 @@ export default function Dashboard() {
   // ─── Combo actions ───────────────────────────────
 
   function openComboModal() {
-    setComboForm({ name: '' });
+    setComboForm({ name: '', strategy: 'failover-priority' });
     setComboItems([]);
+    setEditingCombo(null);
+    setShowComboModal(true);
+  }
+
+  function openEditComboModal(combo: Combo) {
+    setEditingCombo(combo);
+    setComboForm({ name: combo.name, strategy: combo.strategy || 'failover-priority' });
+    setComboItems([...combo.items]);
     setShowComboModal(true);
   }
 
@@ -332,12 +358,21 @@ export default function Dashboard() {
     if (comboItems.length === 0) { alert('Tambah minimal 1 model!'); return; }
     if (comboItems.some(item => !item.providerId || !item.model)) { alert('Isi semua field!'); return; }
     try {
-      const res = await api('/api/combos', {
-        method: 'POST',
-        body: JSON.stringify({ name: comboForm.name.trim(), items: comboItems }),
-      });
-      if (res.ok) { setShowComboModal(false); fetchData(); }
-      else { const err = await res.json(); alert(err.error || 'Failed'); }
+      if (editingCombo) {
+        const res = await api('/api/combos', {
+          method: 'PUT',
+          body: JSON.stringify({ id: editingCombo.id, name: comboForm.name.trim(), items: comboItems, strategy: comboForm.strategy }),
+        });
+        if (res.ok) { setShowComboModal(false); fetchData(); }
+        else { const err = await res.json(); alert(err.error || 'Failed'); }
+      } else {
+        const res = await api('/api/combos', {
+          method: 'POST',
+          body: JSON.stringify({ name: comboForm.name.trim(), items: comboItems, strategy: comboForm.strategy }),
+        });
+        if (res.ok) { setShowComboModal(false); fetchData(); }
+        else { const err = await res.json(); alert(err.error || 'Failed'); }
+      }
     } catch { alert('Network error'); }
   }
 
@@ -350,14 +385,42 @@ export default function Dashboard() {
     try { await api('/api/combos', { method: 'PUT', body: JSON.stringify({ id: combo.id, enabled: !combo.enabled }) }); fetchData(); } catch {}
   }
 
+  // ─── Quota actions ───────────────────────────────
+
+  function openQuotaModal() {
+    setQuotaForm({ providerId: '', monthlyLimit: 0, resetDay: 1 });
+    setShowQuotaModal(true);
+  }
+
+  async function handleSaveQuota() {
+    if (!quotaForm.providerId) { alert('Pilih provider!'); return; }
+    const provider = providers.find(p => p.id === quotaForm.providerId);
+    if (!provider) return;
+    try {
+      const res = await api('/api/quotas', {
+        method: 'POST',
+        body: JSON.stringify({ providerId: quotaForm.providerId, providerName: provider.name, monthlyLimit: quotaForm.monthlyLimit, resetDay: quotaForm.resetDay }),
+      });
+      if (res.ok) { setShowQuotaModal(false); fetchData(); }
+      else { const err = await res.json(); alert(err.error || 'Failed'); }
+    } catch { alert('Network error'); }
+  }
+
+  async function handleDeleteQuota(id: string) {
+    if (!confirm('Hapus quota ini?')) return;
+    try { await api(`/api/quotas?id=${id}`, { method: 'DELETE' }); fetchData(); } catch {}
+  }
+
+  function formatTokens(tokens: number): string {
+    if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
+    if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}K`;
+    return String(tokens);
+  }
+
   // ─── Settings ────────────────────────────────────
 
   async function handleChangeMode(mode: string) {
     try { await api('/api/config', { method: 'PUT', body: JSON.stringify({ mode }) }); fetchData(); } catch {}
-  }
-
-  async function handleSaveSettings() {
-    try { await api('/api/config', { method: 'PUT', body: JSON.stringify(settingsForm) }); fetchData(); } catch {}
   }
 
   async function handleHealthCheck() {
@@ -410,7 +473,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b border-slate-200 px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3"><h1 className="text-xl font-bold text-slate-900">Razoter</h1><span className="text-xs text-slate-400">v2.1</span></div>
+          <div className="flex items-center gap-3"><h1 className="text-xl font-bold text-slate-900">Razoter</h1><span className="text-xs text-slate-400">v2.2</span></div>
           <div className="flex items-center gap-4">
             <button onClick={handleHealthCheck} className="btn btn-secondary text-sm">🏥 Health Check</button>
             <button onClick={handleLogout} className="text-sm text-slate-500 hover:text-red-600">Logout</button>
@@ -431,9 +494,9 @@ export default function Dashboard() {
 
         {/* Tabs */}
         <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
-          {(['providers', 'combos', 'logs', 'settings'] as const).map(tab => (
+          {(['providers', 'combos', 'quotas', 'logs', 'settings'] as const).map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === tab ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-              {tab === 'providers' ? '🔌 Providers' : tab === 'combos' ? '🧩 Combos' : tab === 'logs' ? '📋 Logs' : '⚙️ Settings'}
+              {tab === 'providers' ? '🔌 Providers' : tab === 'combos' ? '🧩 Combos' : tab === 'quotas' ? '📊 Quotas' : tab === 'logs' ? '📋 Logs' : '⚙️ Settings'}
             </button>
           ))}
         </div>
@@ -503,6 +566,7 @@ export default function Dashboard() {
                           <h3 className="font-semibold text-slate-900 font-mono">{c.name}</h3>
                           {!c.enabled && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-200 text-slate-500">disabled</span>}
                           <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-600 text-xs">{c.items.length} models</span>
+                          <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-600 text-xs">{c.strategy === 'round-robin' ? '🔄 Round Robin' : '🔀 Failover Priority'}</span>
                         </div>
                         <div className="flex flex-wrap gap-2 mt-2">
                           {c.items.map((item, i) => (
@@ -516,11 +580,61 @@ export default function Dashboard() {
                       </div>
                       <div className="flex gap-2">
                         <button onClick={() => handleToggleCombo(c)} className={`text-xs px-2 py-1 rounded ${c.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{c.enabled ? 'ON' : 'OFF'}</button>
+                        <button onClick={() => openEditComboModal(c)} className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200">Edit</button>
                         <button onClick={() => handleDeleteCombo(c.id)} className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100">Hapus</button>
                       </div>
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ─── Quotas Tab ─────────────────────────── */}
+        {activeTab === 'quotas' && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Quota Tracker</h2>
+                <p className="text-sm text-slate-500">Pantau penggunaan token per provider. Provider yang melewati batas akan di-skip otomatis.</p>
+              </div>
+              <button onClick={openQuotaModal} className="btn btn-primary">+ Tambah Quota</button>
+            </div>
+            {quotas.length === 0 ? (
+              <div className="card text-center py-12 text-slate-400"><div className="text-4xl mb-2">📊</div><p>Belum ada quota. Tambah quota pertama!</p></div>
+            ) : (
+              <div className="space-y-3">
+                {quotas.map(q => {
+                  const pct = q.monthlyLimit > 0 ? Math.min(100, Math.round((q.currentUsage / q.monthlyLimit) * 100)) : 0;
+                  const isOver = q.monthlyLimit > 0 && q.currentUsage >= q.monthlyLimit;
+                  return (
+                    <div key={q.id} className="card">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-slate-900">{q.providerName}</h3>
+                            {isOver && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">LIMIT EXCEEDED</span>}
+                          </div>
+                          <div className="text-xs text-slate-500 mt-1">Reset tanggal {q.resetDay} setiap bulan</div>
+                        </div>
+                        <button onClick={() => handleDeleteQuota(q.id)} className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100">Hapus</button>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-600">{formatTokens(q.currentUsage)} / {q.monthlyLimit > 0 ? formatTokens(q.monthlyLimit) : '∞'} tokens</span>
+                          {q.monthlyLimit > 0 && <span className={`font-medium ${isOver ? 'text-red-600' : 'text-slate-700'}`}>{pct}%</span>}
+                        </div>
+                        {q.monthlyLimit > 0 && (
+                          <div className="w-full bg-slate-100 rounded-full h-2.5">
+                            <div className={`h-2.5 rounded-full transition-all ${pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, pct)}%` }}></div>
+                          </div>
+                        )}
+                        {q.monthlyLimit === 0 && <div className="text-xs text-slate-400">Unlimited — tracking only</div>}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -547,7 +661,7 @@ export default function Dashboard() {
                         <td className="px-4 py-2 text-slate-500 font-mono text-xs">{log.model}</td>
                         <td className="px-4 py-2">{statusBadge(log.status)}</td>
                         <td className="px-4 py-2 text-slate-500">{formatLatency(log.latencyMs)}</td>
-                        <td className="px-4 py-2 text-slate-500">{log.tokensUsed ?? '-'}</td>
+                        <td className="px-4 py-2 text-slate-500">{log.tokensUsed ? formatTokens(log.tokensUsed) : '-'}</td>
                       </tr>
                     ))
                   }
@@ -575,7 +689,6 @@ export default function Dashboard() {
               <h3 className="font-semibold text-slate-900 mb-3">🔑 API Keys</h3>
               <p className="text-sm text-slate-500 mb-4">Generate API key untuk menghubungkan Razoter ke platform tujuan.</p>
               
-              {/* Generate new key */}
               <div className="flex gap-2 mb-4">
                 <input type="text" className="input flex-1" placeholder="Nama key (e.g. Cursor, Open WebUI)" value={newKeyName} onChange={e => setNewKeyName(e.target.value)} />
                 <button onClick={handleGenerateApiKey} className="btn btn-primary whitespace-nowrap">🎲 Generate</button>
@@ -592,7 +705,6 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* Keys list */}
               {apiKeys.length > 0 && (
                 <div className="space-y-2">
                   <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">Key yang sudah dibuat:</div>
@@ -628,16 +740,6 @@ export default function Dashboard() {
                   </button>
                 ))}
               </div>
-            </div>
-
-            {/* Retry & Timeout */}
-            <div className="card">
-              <h3 className="font-semibold text-slate-900 mb-3">⚙️ Retry & Timeout</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-sm text-slate-600">Max Retries</label><input type="number" min={1} max={10} className="input mt-1" value={settingsForm.maxRetries} onChange={e => setSettingsForm(f => ({ ...f, maxRetries: parseInt(e.target.value) || 3 }))} /></div>
-                <div><label className="text-sm text-slate-600">Timeout (ms)</label><input type="number" min={5000} max={120000} step={1000} className="input mt-1" value={settingsForm.timeoutMs} onChange={e => setSettingsForm(f => ({ ...f, timeoutMs: parseInt(e.target.value) || 30000 }))} /></div>
-              </div>
-              <button onClick={handleSaveSettings} className="btn btn-primary mt-4">💾 Simpan</button>
             </div>
           </div>
         )}
@@ -695,19 +797,32 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ─── Create Combo Modal ─────────────────── */}
+      {/* ─── Create/Edit Combo Modal ─────────────── */}
       {showComboModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="p-6 space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-slate-900">Buat Combo Model</h3>
-                <button onClick={() => setShowComboModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+                <h3 className="text-lg font-semibold text-slate-900">{editingCombo ? 'Edit Combo' : 'Buat Combo Model'}</h3>
+                <button onClick={() => { setShowComboModal(false); setEditingCombo(null); }} className="text-slate-400 hover:text-slate-600">✕</button>
               </div>
               <div>
                 <label className="text-sm text-slate-600">Nama Combo</label>
                 <input type="text" className="input mt-1" placeholder="e.g. gpt-4-combo, fast-mix" value={comboForm.name} onChange={e => setComboForm(f => ({ ...f, name: e.target.value }))} />
                 <p className="text-xs text-slate-400 mt-1">Nama ini yang dipakai sebagai model di request API</p>
+              </div>
+              <div>
+                <label className="text-sm text-slate-600">Strategy</label>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <button type="button" onClick={() => setComboForm(f => ({ ...f, strategy: 'failover-priority' }))} className={`p-3 rounded-lg border-2 text-left text-sm transition-colors ${comboForm.strategy === 'failover-priority' ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                    <div className="font-medium text-slate-900">🔀 Failover Priority</div>
+                    <div className="text-xs text-slate-500 mt-1">Pilih random dari list. Gagal → coba lain.</div>
+                  </button>
+                  <button type="button" onClick={() => setComboForm(f => ({ ...f, strategy: 'round-robin' }))} className={`p-3 rounded-lg border-2 text-left text-sm transition-colors ${comboForm.strategy === 'round-robin' ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                    <div className="font-medium text-slate-900">🔄 Round Robin</div>
+                    <div className="text-xs text-slate-500 mt-1">Rotasi berurutan, merata ke semua model.</div>
+                  </button>
+                </div>
               </div>
               <div className="border-t border-slate-200 pt-4">
                 <div className="flex items-center justify-between mb-3">
@@ -740,8 +855,42 @@ export default function Dashboard() {
                 {comboItems.length === 0 && <div className="text-center py-4 text-slate-400 text-sm">Klik "+ Tambah Item" untuk mulai</div>}
               </div>
               <div className="flex gap-3 pt-2">
-                <button onClick={() => setShowComboModal(false)} className="btn btn-secondary flex-1">Batal</button>
-                <button onClick={handleSaveCombo} disabled={comboItems.length === 0 || !comboForm.name.trim()} className="btn btn-primary flex-1">🧩 Buat Combo</button>
+                <button onClick={() => { setShowComboModal(false); setEditingCombo(null); }} className="btn btn-secondary flex-1">Batal</button>
+                <button onClick={handleSaveCombo} disabled={comboItems.length === 0 || !comboForm.name.trim()} className="btn btn-primary flex-1">{editingCombo ? '💾 Update' : '🧩 Buat Combo'}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Add Quota Modal ─────────────────────── */}
+      {showQuotaModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
+            <div className="p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-slate-900">Tambah Quota</h3>
+                <button onClick={() => setShowQuotaModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+              </div>
+              <div>
+                <label className="text-sm text-slate-600">Provider</label>
+                <select className="input mt-1" value={quotaForm.providerId} onChange={e => setQuotaForm(f => ({ ...f, providerId: e.target.value }))}>
+                  <option value="">Pilih Provider...</option>
+                  {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm text-slate-600">Monthly Limit (tokens)</label>
+                <input type="number" className="input mt-1" placeholder="0 = unlimited" min={0} value={quotaForm.monthlyLimit} onChange={e => setQuotaForm(f => ({ ...f, monthlyLimit: parseInt(e.target.value) || 0 }))} />
+                <p className="text-xs text-slate-400 mt-1">Isi 0 untuk tracking only (tanpa limit)</p>
+              </div>
+              <div>
+                <label className="text-sm text-slate-600">Reset Day</label>
+                <input type="number" className="input mt-1" min={1} max={28} value={quotaForm.resetDay} onChange={e => setQuotaForm(f => ({ ...f, resetDay: parseInt(e.target.value) || 1 }))} />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setShowQuotaModal(false)} className="btn btn-secondary flex-1">Batal</button>
+                <button onClick={handleSaveQuota} disabled={!quotaForm.providerId} className="btn btn-primary flex-1">📊 Tambah</button>
               </div>
             </div>
           </div>

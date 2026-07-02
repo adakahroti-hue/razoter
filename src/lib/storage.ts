@@ -1,4 +1,4 @@
-import { Provider, AppConfig, RequestLog, RateLimitEntry, ApiKey, Combo } from './types';
+import { Provider, AppConfig, RequestLog, RateLimitEntry, ApiKey, Combo, Quota } from './types';
 import { supabase } from './supabase';
 import { randomUUID } from 'crypto';
 
@@ -446,6 +446,9 @@ export async function deleteApiKey(id: string): Promise<boolean> {
 
 // ─── Combos ──────────────────────────────────────────────
 
+// In-memory round-robin index for combos (not persisted)
+const comboRoundRobinIndex = new Map<string, number>();
+
 export async function getCombos(): Promise<Combo[]> {
   const { data, error } = await supabase
     .from('combos')
@@ -460,18 +463,19 @@ export async function getCombos(): Promise<Combo[]> {
     id: row.id,
     name: row.name,
     items: row.items ?? [],
+    strategy: row.strategy ?? 'failover-priority',
     enabled: row.enabled ?? true,
     createdAt: row.created_at,
   }));
 }
 
-export async function addCombo(name: string, items: Combo['items']): Promise<Combo> {
+export async function addCombo(name: string, items: Combo['items'], strategy: Combo['strategy'] = 'failover-priority'): Promise<Combo> {
   const id = randomUUID();
   const now = new Date().toISOString();
 
   const { data, error } = await supabase
     .from('combos')
-    .insert({ id, name, items, enabled: true, created_at: now })
+    .insert({ id, name, items, strategy, enabled: true, created_at: now })
     .select()
     .single();
 
@@ -480,13 +484,14 @@ export async function addCombo(name: string, items: Combo['items']): Promise<Com
     throw new Error(`Failed to add combo: ${error.message}`);
   }
 
-  return { id: data.id, name: data.name, items: data.items ?? [], enabled: data.enabled, createdAt: data.created_at };
+  return { id: data.id, name: data.name, items: data.items ?? [], strategy: data.strategy ?? 'failover-priority', enabled: data.enabled, createdAt: data.created_at };
 }
 
 export async function updateCombo(id: string, updates: Partial<Combo>): Promise<Combo | null> {
   const updateObj: Record<string, any> = {};
   if (updates.name !== undefined) updateObj.name = updates.name;
   if (updates.items !== undefined) updateObj.items = updates.items;
+  if (updates.strategy !== undefined) updateObj.strategy = updates.strategy;
   if (updates.enabled !== undefined) updateObj.enabled = updates.enabled;
 
   const { data, error } = await supabase
@@ -502,7 +507,7 @@ export async function updateCombo(id: string, updates: Partial<Combo>): Promise<
   }
   if (!data) return null;
 
-  return { id: data.id, name: data.name, items: data.items ?? [], enabled: data.enabled, createdAt: data.created_at };
+  return { id: data.id, name: data.name, items: data.items ?? [], strategy: data.strategy ?? 'failover-priority', enabled: data.enabled, createdAt: data.created_at };
 }
 
 export async function deleteCombo(id: string): Promise<boolean> {
@@ -523,7 +528,7 @@ export async function deleteCombo(id: string): Promise<boolean> {
 export async function resolveComboModel(modelName: string): Promise<{ providerId: string; model: string } | null> {
   const { data, error } = await supabase
     .from('combos')
-    .select('items')
+    .select('items, strategy')
     .eq('name', modelName)
     .eq('enabled', true)
     .limit(1)
@@ -533,8 +538,125 @@ export async function resolveComboModel(modelName: string): Promise<{ providerId
     return null;
   }
 
-  // Pick a random item from the combo
   const items = data.items as Combo['items'];
-  const picked = items[Math.floor(Math.random() * items.length)];
+  const strategy = (data.strategy as Combo['strategy']) ?? 'failover-priority';
+
+  let picked: Combo['items'][0];
+
+  if (strategy === 'round-robin') {
+    // Round-robin: cycle through items in order
+    const idx = comboRoundRobinIndex.get(modelName) ?? 0;
+    picked = items[idx % items.length];
+    comboRoundRobinIndex.set(modelName, idx + 1);
+  } else {
+    // Failover-priority: pick random (first is "priority" but rotation gives failover)
+    picked = items[Math.floor(Math.random() * items.length)];
+  }
+
   return { providerId: picked.providerId, model: picked.model };
+}
+
+// ─── Quotas ──────────────────────────────────────────────
+
+export async function getQuotas(): Promise<Quota[]> {
+  const { data, error } = await supabase
+    .from('quotas')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Supabase getQuotas error:', error);
+    return [];
+  }
+  return (data ?? []).map(row => ({
+    id: row.id,
+    providerId: row.provider_id,
+    providerName: row.provider_name,
+    monthlyLimit: row.monthly_limit ?? 0,
+    currentUsage: row.current_usage ?? 0,
+    resetDay: row.reset_day ?? 1,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function addQuota(providerId: string, providerName: string, monthlyLimit: number, resetDay: number): Promise<Quota> {
+  const id = randomUUID();
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from('quotas')
+    .insert({ id, provider_id: providerId, provider_name: providerName, monthly_limit: monthlyLimit, current_usage: 0, reset_day: resetDay, created_at: now })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Supabase addQuota error:', error);
+    throw new Error(`Failed to add quota: ${error.message}`);
+  }
+
+  return { id: data.id, providerId: data.provider_id, providerName: data.provider_name, monthlyLimit: data.monthly_limit, currentUsage: data.current_usage, resetDay: data.reset_day, createdAt: data.created_at };
+}
+
+export async function updateQuota(id: string, updates: Partial<Quota>): Promise<Quota | null> {
+  const updateObj: Record<string, any> = {};
+  if (updates.monthlyLimit !== undefined) updateObj.monthly_limit = updates.monthlyLimit;
+  if (updates.resetDay !== undefined) updateObj.reset_day = updates.resetDay;
+
+  const { data, error } = await supabase
+    .from('quotas')
+    .update(updateObj)
+    .eq('id', id)
+    .select()
+    .maybeSingle();
+
+  if (error) {
+    console.error('Supabase updateQuota error:', error);
+    return null;
+  }
+  if (!data) return null;
+
+  return { id: data.id, providerId: data.provider_id, providerName: data.provider_name, monthlyLimit: data.monthly_limit, currentUsage: data.current_usage, resetDay: data.reset_day, createdAt: data.created_at };
+}
+
+export async function deleteQuota(id: string): Promise<boolean> {
+  const { error, count } = await supabase
+    .from('quotas')
+    .delete({ count: 'exact' })
+    .eq('id', id);
+
+  if (error) {
+    console.error('Supabase deleteQuota error:', error);
+    return false;
+  }
+  return (count ?? 0) > 0;
+}
+
+export async function incrementQuotaUsage(providerId: string, tokens: number): Promise<void> {
+  // Get current quota for this provider
+  const { data } = await supabase
+    .from('quotas')
+    .select('id, current_usage')
+    .eq('provider_id', providerId)
+    .limit(1)
+    .maybeSingle();
+
+  if (data) {
+    await supabase
+      .from('quotas')
+      .update({ current_usage: (data.current_usage ?? 0) + tokens })
+      .eq('id', data.id);
+  }
+}
+
+export async function checkQuotaLimit(providerId: string): Promise<boolean> {
+  // Returns true if provider is within quota (or no quota set)
+  const { data } = await supabase
+    .from('quotas')
+    .select('monthly_limit, current_usage')
+    .eq('provider_id', providerId)
+    .limit(1)
+    .maybeSingle();
+
+  if (!data || !data.monthly_limit || data.monthly_limit === 0) return true; // no limit
+  return (data.current_usage ?? 0) < data.monthly_limit;
 }

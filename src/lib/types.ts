@@ -33,6 +33,8 @@ export interface ApiKey {
 
 // ─── Combo types ────────────────────────────────────
 
+export type ComboStrategy = 'failover-priority' | 'round-robin';
+
 export interface ComboItem {
   providerId: string;
   providerName: string;
@@ -43,6 +45,7 @@ export interface Combo {
   id: string;
   name: string;
   items: ComboItem[];
+  strategy: ComboStrategy;
   enabled: boolean;
   createdAt: string;
 }
@@ -98,4 +101,16 @@ export interface Stats {
 export interface RateLimitEntry {
   count: number;
   resetAt: number;
+}
+
+// ─── Quota types ───────────────────────────────────
+
+export interface Quota {
+  id: string;
+  providerId: string;
+  providerName: string;
+  monthlyLimit: number;       // max tokens per month (0 = unlimited)
+  currentUsage: number;       // tokens used this month
+  resetDay: number;           // day of month to reset (1-28)
+  createdAt: string;
 }

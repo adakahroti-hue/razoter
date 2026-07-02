@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyApiKey } from '@/lib/auth';
 import { selectProvider, getNextProvider, pickModel } from '@/lib/rotation';
-import { getConfig, addLog, updateProviderStats, updateProviderRateLimit, getEnabledProviders, checkRateLimit, resolveComboModel, getProvider } from '@/lib/storage';
+import { getConfig, addLog, updateProviderStats, updateProviderRateLimit, getEnabledProviders, checkRateLimit, resolveComboModel, getProvider, checkQuotaLimit, incrementQuotaUsage } from '@/lib/storage';
 import { withCors, handleCorsPreflight, corsHeaders } from '@/lib/cors';
 
 export async function OPTIONS() {
@@ -162,6 +162,15 @@ export async function POST(request: NextRequest) {
     triedIds.add(currentProvider.id);
     const attemptStart = Date.now();
 
+    // Check quota limit before trying this provider
+    const withinQuota = await checkQuotaLimit(currentProvider.id);
+    if (!withinQuota) {
+      // Skip this provider, try next
+      const next = await getNextProvider(config.mode, currentProvider.id, triedIds);
+      if (next) { currentProvider = next; attempt--; continue; }
+      break;
+    }
+
     // Pick the best model from this provider's selected models
     const selectedModel = pickModel(currentProvider, requestedModel);
 
@@ -235,6 +244,11 @@ export async function POST(request: NextRequest) {
           latencyMs,
           tokensUsed: data.usage?.total_tokens,
         });
+
+        // Track token usage for quota
+        if (data.usage?.total_tokens) {
+          await incrementQuotaUsage(currentProvider.id, data.usage.total_tokens);
+        }
 
         const res = NextResponse.json(data, { status: 200 });
         res.headers.set('X-RateLimit-Limit', String(rateLimitResult.limit));
