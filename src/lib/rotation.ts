@@ -1,18 +1,34 @@
 import { Provider, RotationMode } from './types';
 import { getEnabledProviders, getRoundRobinIndex, incrementRoundRobinIndex } from './storage';
 
+function isRateLimited(provider: Provider): boolean {
+  if (provider.rateLimitRemaining === undefined) return false;
+  if (provider.rateLimitRemaining > 0) return false;
+  // If remaining is 0, check if reset time has passed
+  if (provider.rateLimitReset && Date.now() / 1000 > provider.rateLimitReset) return false;
+  return true;
+}
+
+function filterAvailable(providers: Provider[]): Provider[] {
+  const available = providers.filter(p => !isRateLimited(p));
+  // If all are rate-limited, fall back to all enabled providers
+  return available.length > 0 ? available : providers;
+}
+
 export function selectProvider(mode: RotationMode): Provider | null {
   const providers = getEnabledProviders();
   if (providers.length === 0) return null;
 
+  const available = filterAvailable(providers);
+
   switch (mode) {
     case 'priority':
-      return selectByPriority(providers);
+      return selectByPriority(available);
     case 'round-robin':
-      return selectRoundRobin(providers);
+      return selectRoundRobin(available);
     case 'failover':
     default:
-      return selectFailover(providers);
+      return selectFailover(available);
   }
 }
 
@@ -58,6 +74,13 @@ export function getNextProvider(
 ): Provider | null {
   const order = getProviderOrder(mode);
   
+  for (const provider of order) {
+    if (!triedIds.has(provider.id) && provider.enabled && provider.id !== failedProviderId && !isRateLimited(provider)) {
+      return provider;
+    }
+  }
+  
+  // If all non-rate-limited providers have been tried, allow rate-limited ones as fallback
   for (const provider of order) {
     if (!triedIds.has(provider.id) && provider.enabled && provider.id !== failedProviderId) {
       return provider;

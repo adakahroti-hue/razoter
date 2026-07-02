@@ -2,10 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyApiKey } from '@/lib/auth';
 import { getLogs, getProviders } from '@/lib/storage';
 import { Stats } from '@/lib/types';
+import { withCors, handleCorsPreflight } from '@/lib/cors';
+
+export async function OPTIONS() {
+  return handleCorsPreflight();
+}
 
 export async function GET(request: NextRequest) {
   if (!verifyApiKey(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return withCors(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
   }
 
   const logs = getLogs(500);
@@ -42,5 +47,5 @@ export async function GET(request: NextRequest) {
     providerBreakdown,
   };
 
-  return NextResponse.json(stats);
+  return withCors(NextResponse.json(stats));
 }

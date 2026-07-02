@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyApiKey } from '@/lib/auth';
 import { getEnabledProviders, updateProvider } from '@/lib/storage';
+import { withCors, handleCorsPreflight } from '@/lib/cors';
+
+export async function OPTIONS() {
+  return handleCorsPreflight();
+}
 
 export async function GET(request: NextRequest) {
   if (!verifyApiKey(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return withCors(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
   }
 
   const providers = getEnabledProviders();
@@ -45,9 +50,9 @@ export async function GET(request: NextRequest) {
     })
   );
 
-  const healthResults = results.map(r => 
+  const healthResults = results.map(r =>
     r.status === 'fulfilled' ? r.value : { status: 'error', error: 'Check failed' }
   );
 
-  return NextResponse.json({ health: healthResults });
+  return withCors(NextResponse.json({ health: healthResults }));
 }

@@ -12,6 +12,9 @@ export interface Provider {
   errorCount: number;
   avgLatency: number;
   healthStatus: 'healthy' | 'degraded' | 'down' | 'unknown';
+  rateLimitRemaining?: number;
+  rateLimitReset?: number; // Unix timestamp (seconds) when limit resets
+  rateLimitTotal?: number;
 }
 
 export type RotationMode = 'failover' | 'round-robin' | 'priority';
@@ -50,4 +53,9 @@ export interface Stats {
     errors: number;
     avgLatency: number;
   }[];
+}
+
+export interface RateLimitEntry {
+  count: number;
+  resetAt: number; // Unix timestamp (ms) when the window resets
 }
