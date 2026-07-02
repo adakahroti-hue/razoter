@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyApiKey } from '@/lib/auth';
+import { verifyDashboardAuth } from '@/lib/auth';
 import { getLogs, getProviders } from '@/lib/storage';
 import { Stats } from '@/lib/types';
 import { withCors, handleCorsPreflight } from '@/lib/cors';
@@ -9,7 +9,7 @@ export async function OPTIONS() {
 }
 
 export async function GET(request: NextRequest) {
-  if (!await verifyApiKey(request)) {
+  if (!await verifyDashboardAuth(request)) {
     return withCors(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
   }
 

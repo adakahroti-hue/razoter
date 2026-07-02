@@ -50,22 +50,35 @@ interface Stats {
   }[];
 }
 
-function getStoredKey(): string | null {
+function getStoredToken(): string | null {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem('razoter_api_key');
+  return localStorage.getItem('razoter_token');
 }
 
-function setStoredKey(key: string) {
-  localStorage.setItem('razoter_api_key', key);
+function setStoredToken(token: string) {
+  localStorage.setItem('razoter_token', token);
 }
 
-function clearStoredKey() {
-  localStorage.removeItem('razoter_api_key');
+function clearStoredToken() {
+  localStorage.removeItem('razoter_token');
+  localStorage.removeItem('razoter_user');
+}
+
+function getStoredUser(): { id: string; username: string } | null {
+  if (typeof window === 'undefined') return null;
+  const raw = localStorage.getItem('razoter_user');
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+function setStoredUser(user: { id: string; username: string }) {
+  localStorage.setItem('razoter_user', JSON.stringify(user));
 }
 
 export default function Dashboard() {
-  const [apiKey, setApiKey] = useState<string | null>(null);
-  const [loginInput, setLoginInput] = useState('');
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -98,33 +111,33 @@ export default function Dashboard() {
     enabled: true,
   });
 
-  // Check for stored key on mount
+  // Check for stored token on mount
   useEffect(() => {
-    const stored = getStoredKey();
+    const stored = getStoredToken();
     if (stored) {
-      setApiKey(stored);
+      setAuthToken(stored);
     } else {
       setLoading(false);
     }
   }, []);
 
   const api = useCallback(async (path: string, options?: RequestInit) => {
-    const key = getStoredKey();
-    if (!key) {
-      setApiKey(null);
-      throw new Error('No API key');
+    const token = getStoredToken();
+    if (!token) {
+      setAuthToken(null);
+      throw new Error('No auth token');
     }
     const res = await fetch(path, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${key}`,
+        'Authorization': `Bearer ${token}`,
         ...options?.headers,
       },
     });
     if (res.status === 401) {
-      clearStoredKey();
-      setApiKey(null);
+      clearStoredToken();
+      setAuthToken(null);
       throw new Error('Unauthorized');
     }
     return res.json();
@@ -150,7 +163,7 @@ export default function Dashboard() {
         setApiKeyMasked(configRes.apiKeyMasked);
       }
     } catch (err: any) {
-      if (err.message !== 'Unauthorized' && err.message !== 'No API key') {
+      if (err.message !== 'Unauthorized' && err.message !== 'No auth token') {
         console.error('Failed to fetch data:', err);
       }
     } finally {
@@ -159,32 +172,37 @@ export default function Dashboard() {
   }, [api]);
 
   useEffect(() => {
-    if (!apiKey) return;
+    if (!authToken) return;
     fetchData();
     const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
-  }, [apiKey, fetchData]);
+  }, [authToken, fetchData]);
 
   // ─── Auth ────────────────────────────────────────────
 
   const handleLogin = async () => {
-    if (!loginInput.trim()) {
-      setLoginError('Please enter an API key');
+    if (!loginUsername.trim() || !loginPassword.trim()) {
+      setLoginError('Please enter username and password');
       return;
     }
     setLoginLoading(true);
     setLoginError('');
     try {
-      const res = await fetch('/api/config', {
-        headers: { 'Authorization': `Bearer ${loginInput.trim()}` },
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: loginUsername.trim(), password: loginPassword }),
       });
-      if (res.ok) {
-        setStoredKey(loginInput.trim());
-        setApiKey(loginInput.trim());
-        setLoginInput('');
+      const data = await res.json();
+      if (res.ok && data.token) {
+        setStoredToken(data.token);
+        setStoredUser(data.user);
+        setAuthToken(data.token);
+        setLoginUsername('');
+        setLoginPassword('');
         setLoginError('');
       } else {
-        setLoginError('Invalid API key. Please try again.');
+        setLoginError(data.error || 'Invalid username or password');
       }
     } catch {
       setLoginError('Connection failed. Please try again.');
@@ -194,8 +212,8 @@ export default function Dashboard() {
   };
 
   const handleLogout = () => {
-    clearStoredKey();
-    setApiKey(null);
+    clearStoredToken();
+    setAuthToken(null);
     setProviders([]);
     setLogs([]);
     setStats(null);
@@ -305,10 +323,8 @@ export default function Dashboard() {
         body: JSON.stringify({ action: 'change_key', currentKey: currentKeyInput, newKey: newKeyInput }),
       });
       if (res.success) {
-        setKeyChangeSuccess('API key updated! You will be logged out.');
+        setKeyChangeSuccess('API key updated!');
         setApiKeyMasked(res.apiKeyMasked);
-        setStoredKey(newKeyInput);
-        setApiKey(newKeyInput);
         setCurrentKeyInput('');
         setNewKeyInput('');
         setTimeout(() => {
@@ -335,8 +351,6 @@ export default function Dashboard() {
       if (res.success && res.apiKey) {
         setRegeneratedKey(res.apiKey);
         setApiKeyMasked(res.apiKeyMasked);
-        setStoredKey(res.apiKey);
-        setApiKey(res.apiKey);
         setKeyChangeSuccess('New key generated! Copy it now — it won\'t be shown again.');
       } else {
         setKeyChangeError(res.error || 'Failed to regenerate key');
@@ -384,7 +398,7 @@ export default function Dashboard() {
 
   // ─── Login screen ────────────────────────────────────
 
-  if (!apiKey) {
+  if (!authToken) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
         <div className="w-full max-w-md">
@@ -394,17 +408,28 @@ export default function Dashboard() {
             </h1>
             <p className="text-slate-500 text-sm">API Proxy & Router Dashboard</p>
           </div>
-          <div className="bg-white border border-gray-200 rounded-2xl p-8 space-y-6 shadow-sm">
+          <div className="bg-white border border-gray-200 rounded-2xl p-8 space-y-5 shadow-sm">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">API Key</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Username</label>
               <input
-                type="password"
-                value={loginInput}
-                onChange={e => { setLoginInput(e.target.value); setLoginError(''); }}
+                type="text"
+                value={loginUsername}
+                onChange={e => { setLoginUsername(e.target.value); setLoginError(''); }}
                 onKeyDown={e => e.key === 'Enter' && handleLogin()}
-                placeholder="Enter your Razoter API key"
+                placeholder="Enter your username"
                 className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-all"
                 autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Password</label>
+              <input
+                type="password"
+                value={loginPassword}
+                onChange={e => { setLoginPassword(e.target.value); setLoginError(''); }}
+                onKeyDown={e => e.key === 'Enter' && handleLogin()}
+                placeholder="Enter your password"
+                className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-all"
               />
               {loginError && (
                 <p className="text-red-600 text-sm mt-2">{loginError}</p>
@@ -418,12 +443,12 @@ export default function Dashboard() {
               {loginLoading ? (
                 <span className="flex items-center justify-center gap-2">
                   <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Verifying...
+                  Signing in...
                 </span>
               ) : 'Sign In'}
             </button>
             <p className="text-xs text-slate-400 text-center">
-              The API key is stored locally in your browser.
+              Session is stored locally in your browser.
             </p>
           </div>
         </div>
@@ -768,10 +793,10 @@ export default function Dashboard() {
 
             {/* Security Section */}
             <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-              <h3 className="font-semibold mb-4 text-slate-900">🔐 Security</h3>
+              <h3 className="font-semibold mb-4 text-slate-900">🔐 Proxy API Key</h3>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm text-slate-600 mb-1">Current API Key</label>
+                  <label className="block text-sm text-slate-600 mb-1">Current API Key (for proxy clients)</label>
                   <div className="flex items-center gap-2">
                     <code className="bg-slate-50 border border-gray-200 rounded-lg px-3 py-2 text-slate-700 text-sm font-mono flex-1">
                       {apiKeyMasked || '••••••••'}

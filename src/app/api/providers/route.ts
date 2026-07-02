@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyApiKey } from '@/lib/auth';
+import { verifyDashboardAuth } from '@/lib/auth';
 import { getProviders, addProvider, updateProvider, deleteProvider } from '@/lib/storage';
 import { withCors, handleCorsPreflight } from '@/lib/cors';
 
@@ -8,7 +8,7 @@ export async function OPTIONS() {
 }
 
 export async function GET(request: NextRequest) {
-  if (!await verifyApiKey(request)) {
+  if (!await verifyDashboardAuth(request)) {
     return withCors(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
   }
 
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!await verifyApiKey(request)) {
+  if (!await verifyDashboardAuth(request)) {
     return withCors(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
   }
 
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  if (!await verifyApiKey(request)) {
+  if (!await verifyDashboardAuth(request)) {
     return withCors(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
   }
 
@@ -84,7 +84,7 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  if (!await verifyApiKey(request)) {
+  if (!await verifyDashboardAuth(request)) {
     return withCors(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
   }
 
