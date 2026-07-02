@@ -77,3 +77,4 @@ Set environment variables in Vercel dashboard:
 ## License
 
 MIT
+# Auto-deploy trigger
