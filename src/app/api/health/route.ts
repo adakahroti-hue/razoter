@@ -1,0 +1,53 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyApiKey } from '@/lib/auth';
+import { getEnabledProviders, updateProvider } from '@/lib/storage';
+
+export async function GET(request: NextRequest) {
+  if (!verifyApiKey(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const providers = getEnabledProviders();
+  const results = await Promise.allSettled(
+    providers.map(async (provider) => {
+      const startTime = Date.now();
+      try {
+        const baseUrl = provider.baseUrl.replace(/\/$/, '');
+        // Try the models endpoint first, then base
+        const res = await fetch(`${baseUrl}/models`, {
+          method: 'GET',
+          headers: { 'Authorization': `Bearer ${provider.apiKey}` },
+          signal: AbortSignal.timeout(10000),
+        });
+        const latency = Date.now() - startTime;
+        
+        const status = res.ok ? 'healthy' : 'degraded';
+        updateProvider(provider.id, { healthStatus: status });
+        
+        return {
+          providerId: provider.id,
+          providerName: provider.name,
+          status,
+          latencyMs: latency,
+          statusCode: res.status,
+        };
+      } catch (error: any) {
+        const latency = Date.now() - startTime;
+        updateProvider(provider.id, { healthStatus: 'down' });
+        return {
+          providerId: provider.id,
+          providerName: provider.name,
+          status: 'down' as const,
+          latencyMs: latency,
+          error: error.message,
+        };
+      }
+    })
+  );
+
+  const healthResults = results.map(r => 
+    r.status === 'fulfilled' ? r.value : { status: 'error', error: 'Check failed' }
+  );
+
+  return NextResponse.json({ health: healthResults });
+}

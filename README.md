@@ -1,36 +1,79 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🚀 Razoter
 
-## Getting Started
+**API Proxy Router** — Merge multiple OpenAI-compatible endpoints into one with automatic rotation.
 
-First, run the development server:
+## Features
+
+- **3 Rotation Modes**: Failover, Round-Robin, Priority
+- **OpenAI-Compatible**: Standard Chat Completions API
+- **Dashboard**: Manage providers, view logs & stats
+- **Auto-Retry**: Automatic failover on errors (429/500/timeout)
+- **Health Monitoring**: Track provider health status
+
+## Quick Start
+
+### 1. Install & Run
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Set API Key
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Create `.env.local`:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```env
+RAZOTER_API_KEY=your-secret-key
+NEXT_PUBLIC_RAZOTER_API_KEY=your-secret-key
+```
 
-## Learn More
+### 3. Add Providers
 
-To learn more about Next.js, take a look at the following resources:
+Open `http://localhost:3000/dashboard` and add your API providers:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **Base URL**: `https://api.openai.com/v1` (or any OpenAI-compatible)
+- **API Key**: Your provider's API key
+- **Model**: `gpt-4`, `claude-3-sonnet`, etc.
+- **Priority**: Lower number = higher priority
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 4. Use the Proxy
 
-## Deploy on Vercel
+```bash
+curl -X POST http://localhost:3000/api/v1/chat/completions \
+  -H "Authorization: Bearer your-secret-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Rotation Modes
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Mode | Description |
+|------|-------------|
+| **Failover** | Use primary provider, auto-switch on error |
+| **Round-Robin** | Distribute requests evenly |
+| **Priority** | Use in priority order (lower = higher) |
+
+## Deployment (Vercel)
+
+```bash
+npm i -g vercel
+vercel --prod
+```
+
+Set environment variables in Vercel dashboard:
+- `RAZOTER_API_KEY`
+- `NEXT_PUBLIC_RAZOTER_API_KEY`
+
+## Tech Stack
+
+- Next.js 16 (App Router)
+- Tailwind CSS
+- TypeScript
+
+## License
+
+MIT
