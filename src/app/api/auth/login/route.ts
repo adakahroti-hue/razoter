@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateUser, generateToken } from '@/lib/auth';
+import { authenticateUser, generateToken, ensureDefaultAdmin } from '@/lib/auth';
 import { withCors, handleCorsPreflight } from '@/lib/cors';
 
 export async function OPTIONS() {
@@ -19,6 +19,9 @@ export async function POST(request: NextRequest) {
         )
       );
     }
+
+    // Auto-create admin user if no users exist
+    await ensureDefaultAdmin();
 
     const user = await authenticateUser(username, password);
     if (!user) {
