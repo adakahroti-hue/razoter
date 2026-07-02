@@ -19,18 +19,20 @@ function dbToProvider(row: any): Provider {
     name: row.name,
     baseUrl: row.base_url,
     apiKey: row.api_key,
-    model: row.model,
+    models: row.models ?? (row.model ? [row.model] : []),
+    selectedModels: row.selected_models ?? (row.model ? [row.model] : []),
     priority: row.priority,
     enabled: row.enabled,
-    createdAt: row.created_at,
-    lastUsed: row.last_used ?? undefined,
-    requestCount: row.request_count ?? 0,
-    errorCount: row.error_count ?? 0,
-    avgLatency: row.avg_latency ?? 0,
     healthStatus: row.health_status ?? 'unknown',
-    rateLimitRemaining: row.rate_limit_remaining ?? undefined,
-    rateLimitReset: row.rate_limit_reset ?? undefined,
-    rateLimitTotal: row.rate_limit_total ?? undefined,
+    lastHealthCheck: row.last_health_check ?? null,
+    totalRequests: row.request_count ?? 0,
+    successCount: (row.request_count ?? 0) - (row.error_count ?? 0),
+    errorCount: row.error_count ?? 0,
+    avgLatencyMs: row.avg_latency ?? 0,
+    rateLimitRemaining: row.rate_limit_remaining ?? null,
+    rateLimitReset: row.rate_limit_reset ?? null,
+    rateLimitTotal: row.rate_limit_total ?? null,
+    createdAt: row.created_at,
   };
 }
 
@@ -46,15 +48,15 @@ function dbToConfig(row: any): AppConfig {
 function dbToLog(row: any): RequestLog {
   return {
     id: row.id,
-    timestamp: row.timestamp,
     providerId: row.provider_id,
     providerName: row.provider_name,
     model: row.model,
     status: row.status,
-    statusCode: row.status_code ?? undefined,
+    statusCode: row.status_code ?? null,
     latencyMs: row.latency_ms,
-    errorMessage: row.error_message ?? undefined,
-    tokensUsed: row.tokens_used ?? undefined,
+    tokensUsed: row.tokens_used ?? null,
+    errorMessage: row.error_message ?? null,
+    createdAt: row.timestamp ?? row.created_at,
   };
 }
 
@@ -108,7 +110,15 @@ export async function getProvider(id: string): Promise<Provider | undefined> {
   return data ? dbToProvider(data) : undefined;
 }
 
-export async function addProvider(data: Omit<Provider, 'id' | 'createdAt' | 'requestCount' | 'errorCount' | 'avgLatency' | 'healthStatus'>): Promise<Provider> {
+export async function addProvider(data: {
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  models: string[];
+  selectedModels: string[];
+  priority: number;
+  enabled: boolean;
+}): Promise<Provider> {
   const id = randomUUID();
   const now = new Date().toISOString();
 
@@ -117,7 +127,9 @@ export async function addProvider(data: Omit<Provider, 'id' | 'createdAt' | 'req
     name: data.name,
     base_url: data.baseUrl,
     api_key: data.apiKey,
-    model: data.model,
+    models: data.models,
+    selected_models: data.selectedModels,
+    model: data.selectedModels[0] || data.models[0] || '', // backward compat
     priority: data.priority,
     enabled: data.enabled,
     created_at: now,
@@ -141,19 +153,22 @@ export async function addProvider(data: Omit<Provider, 'id' | 'createdAt' | 'req
 }
 
 export async function updateProvider(id: string, data: Partial<Provider>): Promise<Provider | null> {
-  // Build update object, only setting fields that are provided
   const updateObj: Record<string, any> = {};
   if (data.name !== undefined) updateObj.name = data.name;
   if (data.baseUrl !== undefined) updateObj.base_url = data.baseUrl;
   if (data.apiKey !== undefined) updateObj.api_key = data.apiKey;
-  if (data.model !== undefined) updateObj.model = data.model;
+  if (data.models !== undefined) updateObj.models = data.models;
+  if (data.selectedModels !== undefined) {
+    updateObj.selected_models = data.selectedModels;
+    updateObj.model = data.selectedModels[0] || ''; // backward compat
+  }
   if (data.priority !== undefined) updateObj.priority = data.priority;
   if (data.enabled !== undefined) updateObj.enabled = data.enabled;
-  if (data.lastUsed !== undefined) updateObj.last_used = data.lastUsed;
-  if (data.requestCount !== undefined) updateObj.request_count = data.requestCount;
-  if (data.errorCount !== undefined) updateObj.error_count = data.errorCount;
-  if (data.avgLatency !== undefined) updateObj.avg_latency = data.avgLatency;
   if (data.healthStatus !== undefined) updateObj.health_status = data.healthStatus;
+  if (data.lastHealthCheck !== undefined) updateObj.last_health_check = data.lastHealthCheck;
+  if (data.totalRequests !== undefined) updateObj.request_count = data.totalRequests;
+  if (data.errorCount !== undefined) updateObj.error_count = data.errorCount;
+  if (data.avgLatencyMs !== undefined) updateObj.avg_latency = data.avgLatencyMs;
   if (data.rateLimitRemaining !== undefined) updateObj.rate_limit_remaining = data.rateLimitRemaining;
   if (data.rateLimitReset !== undefined) updateObj.rate_limit_reset = data.rateLimitReset;
   if (data.rateLimitTotal !== undefined) updateObj.rate_limit_total = data.rateLimitTotal;
@@ -200,14 +215,13 @@ export async function getEnabledProviders(): Promise<Provider[]> {
 }
 
 export async function updateProviderStats(providerId: string, success: boolean, latencyMs: number): Promise<void> {
-  // Fetch current stats
   const provider = await getProvider(providerId);
   if (!provider) return;
 
-  const newRequestCount = provider.requestCount + 1;
+  const newRequestCount = provider.totalRequests + 1;
   const newErrorCount = provider.errorCount + (success ? 0 : 1);
   const newAvgLatency = Math.round(
-    (provider.avgLatency * provider.requestCount + latencyMs) / newRequestCount
+    (provider.avgLatencyMs * provider.totalRequests + latencyMs) / newRequestCount
   );
 
   const errorRate = newErrorCount / newRequestCount;
@@ -223,7 +237,6 @@ export async function updateProviderStats(providerId: string, success: boolean, 
       error_count: newErrorCount,
       avg_latency: newAvgLatency,
       health_status: healthStatus,
-      last_used: new Date().toISOString(),
     })
     .eq('id', providerId);
 
@@ -267,7 +280,6 @@ export async function getConfig(): Promise<AppConfig> {
 
   if (error || !data) {
     console.error('Supabase getConfig error:', error);
-    // Return defaults if config row doesn't exist yet
     return {
       mode: 'failover',
       razoterApiKey: process.env.RAZOTER_API_KEY || 'razoter-default-key-change-me',
@@ -295,7 +307,6 @@ export async function updateConfig(data: Partial<AppConfig>): Promise<AppConfig>
 
   if (error) {
     console.error('Supabase updateConfig error:', error);
-    // Fall back to current config with requested updates applied
     const current = await getConfig();
     return { ...current, ...data };
   }
@@ -314,7 +325,7 @@ export function incrementRoundRobinIndex(max: number): number {
 
 // ─── Logs ─────────────────────────────────────────────────
 
-export async function addLog(log: Omit<RequestLog, 'id' | 'timestamp'>): Promise<RequestLog> {
+export async function addLog(log: Omit<RequestLog, 'id' | 'createdAt'>): Promise<RequestLog> {
   const id = randomUUID();
   const timestamp = new Date().toISOString();
 
@@ -339,8 +350,7 @@ export async function addLog(log: Omit<RequestLog, 'id' | 'timestamp'>): Promise
 
   if (error) {
     console.error('Supabase addLog error:', error);
-    // Return the log object even if DB insert fails
-    return { ...log, id, timestamp };
+    return { ...log, id, createdAt: timestamp };
   }
   return dbToLog(data);
 }
@@ -363,7 +373,7 @@ export async function clearLogs(): Promise<void> {
   const { error } = await supabase
     .from('request_logs')
     .delete()
-    .neq('id', '00000000-0000-0000-0000-000000000000'); // delete all rows
+    .neq('id', '00000000-0000-0000-0000-000000000000');
 
   if (error) {
     console.error('Supabase clearLogs error:', error);

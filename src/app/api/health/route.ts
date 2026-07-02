@@ -1,24 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyDashboardAuth } from '@/lib/auth';
-import { getEnabledProviders, updateProvider } from '@/lib/storage';
+import { getEnabledProviders, getProvider, updateProvider } from '@/lib/storage';
 import { withCors, handleCorsPreflight } from '@/lib/cors';
 
 export async function OPTIONS() {
   return handleCorsPreflight();
 }
 
+/**
+ * GET /api/health — Check health of all enabled providers
+ * GET /api/health?id=xxx — Check health of a specific provider
+ */
 export async function GET(request: NextRequest) {
   if (!await verifyDashboardAuth(request)) {
     return withCors(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
   }
 
-  const providers = await getEnabledProviders();
+  const providerId = request.nextUrl.searchParams.get('id');
+
+  let providers;
+  if (providerId) {
+    const p = await getProvider(providerId);
+    providers = p ? [p] : [];
+  } else {
+    providers = await getEnabledProviders();
+  }
+
   const results = await Promise.allSettled(
     providers.map(async (provider) => {
       const startTime = Date.now();
       try {
-        const baseUrl = provider.baseUrl.replace(/\/$/, '');
-        // Try the models endpoint first, then base
+        const baseUrl = provider.baseUrl.replace(/\/+$/, '');
         const res = await fetch(`${baseUrl}/models`, {
           method: 'GET',
           headers: { 'Authorization': `Bearer ${provider.apiKey}` },
@@ -27,7 +39,10 @@ export async function GET(request: NextRequest) {
         const latency = Date.now() - startTime;
         
         const status = res.ok ? 'healthy' : 'degraded';
-        await updateProvider(provider.id, { healthStatus: status });
+        await updateProvider(provider.id, { 
+          healthStatus: status,
+          lastHealthCheck: new Date().toISOString(),
+        });
         
         return {
           providerId: provider.id,
@@ -38,7 +53,10 @@ export async function GET(request: NextRequest) {
         };
       } catch (error: any) {
         const latency = Date.now() - startTime;
-        await updateProvider(provider.id, { healthStatus: 'down' });
+        await updateProvider(provider.id, { 
+          healthStatus: 'down',
+          lastHealthCheck: new Date().toISOString(),
+        });
         return {
           providerId: provider.id,
           providerName: provider.name,

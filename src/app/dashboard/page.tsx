@@ -2,36 +2,40 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
+// ─── Types ─────────────────────────────────────────
+
 interface Provider {
   id: string;
   name: string;
   baseUrl: string;
   apiKey: string;
-  model: string;
+  models: string[];
+  selectedModels: string[];
   priority: number;
   enabled: boolean;
-  createdAt: string;
-  lastUsed?: string;
-  requestCount: number;
-  errorCount: number;
-  avgLatency: number;
   healthStatus: string;
-  rateLimitRemaining?: number;
-  rateLimitReset?: number;
-  rateLimitTotal?: number;
+  lastHealthCheck: string | null;
+  totalRequests: number;
+  successCount: number;
+  errorCount: number;
+  avgLatencyMs: number;
+  rateLimitRemaining: number | null;
+  rateLimitReset: number | null;
+  rateLimitTotal: number | null;
+  createdAt: string;
 }
 
 interface RequestLog {
   id: string;
-  timestamp: string;
   providerId: string;
   providerName: string;
   model: string;
   status: string;
   statusCode?: number;
   latencyMs: number;
-  errorMessage?: string;
   tokensUsed?: number;
+  errorMessage?: string;
+  createdAt: string;
 }
 
 interface Stats {
@@ -40,500 +44,513 @@ interface Stats {
   errorCount: number;
   successRate: number;
   avgLatency: number;
-  providerBreakdown: {
+  providerBreakdown: Array<{
     providerId: string;
     providerName: string;
     requests: number;
     successes: number;
     errors: number;
     avgLatency: number;
-  }[];
+  }>;
 }
 
-function getStoredToken(): string | null {
+// ─── Helpers ───────────────────────────────────────
+
+function getToken(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('razoter_token');
 }
 
-function setStoredToken(token: string) {
+function setToken(token: string) {
   localStorage.setItem('razoter_token', token);
 }
 
-function clearStoredToken() {
+function clearToken() {
   localStorage.removeItem('razoter_token');
   localStorage.removeItem('razoter_user');
 }
 
-function getStoredUser(): { id: string; username: string } | null {
-  if (typeof window === 'undefined') return null;
-  const raw = localStorage.getItem('razoter_user');
-  if (!raw) return null;
-  try { return JSON.parse(raw); } catch { return null; }
-}
-
-function setStoredUser(user: { id: string; username: string }) {
-  localStorage.setItem('razoter_user', JSON.stringify(user));
-}
+// ─── Main Component ────────────────────────────────
 
 export default function Dashboard() {
-  const [authToken, setAuthToken] = useState<string | null>(null);
-  const [loginUsername, setLoginUsername] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
+  // Auth state
+  const [token, setTokenState] = useState<string | null>(null);
+  const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
-  const [loginLoading, setLoginLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Data state
   const [providers, setProviders] = useState<Provider[]>([]);
   const [logs, setLogs] = useState<RequestLog[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
-  const [mode, setMode] = useState<string>('failover');
+  const [config, setConfig] = useState<any>(null);
+
+  // UI state
   const [activeTab, setActiveTab] = useState<'providers' | 'logs' | 'settings'>('providers');
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [showProviderModal, setShowProviderModal] = useState(false);
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [maxRetries, setMaxRetries] = useState(3);
-  const [timeoutMs, setTimeoutMs] = useState(30000);
 
-  // API Key management state
-  const [apiKeyMasked, setApiKeyMasked] = useState('');
-  const [showKeyChange, setShowKeyChange] = useState(false);
-  const [currentKeyInput, setCurrentKeyInput] = useState('');
-  const [newKeyInput, setNewKeyInput] = useState('');
-  const [keyChangeError, setKeyChangeError] = useState('');
-  const [keyChangeSuccess, setKeyChangeSuccess] = useState('');
-  const [regeneratedKey, setRegeneratedKey] = useState('');
-
-  // Form state
-  const [form, setForm] = useState({
+  // Provider form state
+  const [providerForm, setProviderForm] = useState({
     name: '',
     baseUrl: '',
     apiKey: '',
-    model: '',
-    priority: 10,
-    enabled: true,
+  });
+  const [discoveredModels, setDiscoveredModels] = useState<string[]>([]);
+  const [selectedModels, setSelectedModels] = useState<string[]>([]);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; error?: string; latencyMs?: number; modelCount?: number } | null>(null);
+
+  // API key state
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [currentApiKey, setCurrentApiKey] = useState('');
+  const [newApiKey, setNewApiKey] = useState('');
+  const [generatedKey, setGeneratedKey] = useState('');
+
+  // Settings form
+  const [settingsForm, setSettingsForm] = useState({
+    maxRetries: 3,
+    timeoutMs: 30000,
   });
 
-  // Check for stored token on mount
-  useEffect(() => {
-    const stored = getStoredToken();
-    if (stored) {
-      setAuthToken(stored);
-    } else {
-      setLoading(false);
-    }
-  }, []);
+  // ─── API helper ──────────────────────────────────
 
-  const api = useCallback(async (path: string, options?: RequestInit) => {
-    const token = getStoredToken();
-    if (!token) {
-      setAuthToken(null);
-      throw new Error('No auth token');
-    }
-    const res = await fetch(path, {
+  const api = useCallback(async (url: string, options: RequestInit = {}) => {
+    const t = token || getToken();
+    const res = await fetch(url, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        ...options?.headers,
+        ...(t ? { Authorization: `Bearer ${t}` } : {}),
+        ...(options.headers || {}),
       },
     });
     if (res.status === 401) {
-      clearStoredToken();
-      setAuthToken(null);
+      clearToken();
+      setTokenState(null);
       throw new Error('Unauthorized');
     }
-    return res.json();
-  }, []);
+    return res;
+  }, [token]);
+
+  // ─── Data fetching ───────────────────────────────
 
   const fetchData = useCallback(async () => {
     try {
-      const [providersRes, logsRes, statsRes, configRes] = await Promise.all([
+      const [provRes, logRes, statsRes, configRes] = await Promise.all([
         api('/api/providers'),
-        api('/api/logs'),
+        api('/api/logs?limit=50'),
         api('/api/stats'),
         api('/api/config'),
       ]);
-      setProviders(providersRes);
-      setLogs(logsRes.logs || []);
-      setStats(statsRes);
-      if (configRes.mode) {
-        setMode(configRes.mode);
-        setMaxRetries(configRes.maxRetries || 3);
-        setTimeoutMs(configRes.timeoutMs || 30000);
+
+      if (provRes.ok) setProviders(await provRes.json());
+      if (logRes.ok) {
+        const logData = await logRes.json();
+        setLogs(logData.logs || logData);
       }
-      if (configRes.apiKeyMasked) {
-        setApiKeyMasked(configRes.apiKeyMasked);
+      if (statsRes.ok) setStats(await statsRes.json());
+      if (configRes.ok) {
+        const c = await configRes.json();
+        setConfig(c);
+        setSettingsForm({ maxRetries: c.maxRetries, timeoutMs: c.timeoutMs });
       }
-    } catch (err: any) {
-      if (err.message !== 'Unauthorized' && err.message !== 'No auth token') {
-        console.error('Failed to fetch data:', err);
-      }
-    } finally {
-      setLoading(false);
+    } catch (e) {
+      console.error('Fetch error:', e);
     }
   }, [api]);
 
   useEffect(() => {
-    if (!authToken) return;
+    const t = getToken();
+    if (t) {
+      setTokenState(t);
+      fetchData();
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (!token) return;
     fetchData();
     const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
-  }, [authToken, fetchData]);
+  }, [token, fetchData]);
 
-  // ─── Auth ────────────────────────────────────────────
+  // ─── Auth handlers ───────────────────────────────
 
-  const handleLogin = async () => {
-    if (!loginUsername.trim() || !loginPassword.trim()) {
-      setLoginError('Please enter username and password');
-      return;
-    }
-    setLoginLoading(true);
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
     setLoginError('');
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: loginUsername.trim(), password: loginPassword }),
+        body: JSON.stringify(loginForm),
       });
       const data = await res.json();
-      if (res.ok && data.token) {
-        setStoredToken(data.token);
-        setStoredUser(data.user);
-        setAuthToken(data.token);
-        setLoginUsername('');
-        setLoginPassword('');
-        setLoginError('');
-      } else {
-        setLoginError(data.error || 'Invalid username or password');
+      if (!res.ok) {
+        setLoginError(data.error || 'Login failed');
+        return;
+      }
+      setToken(data.token);
+      setTokenState(data.token);
+    } catch {
+      setLoginError('Network error');
+    }
+  }
+
+  function handleLogout() {
+    clearToken();
+    setTokenState(null);
+  }
+
+  // ─── Provider actions ────────────────────────────
+
+  async function handleTestConnection() {
+    if (!providerForm.baseUrl || !providerForm.apiKey) return;
+    setTestingConnection(true);
+    setTestResult(null);
+    setDiscoveredModels([]);
+    setSelectedModels([]);
+
+    try {
+      const res = await api('/api/providers/test', {
+        method: 'POST',
+        body: JSON.stringify({
+          baseUrl: providerForm.baseUrl,
+          apiKey: providerForm.apiKey,
+        }),
+      });
+      const data = await res.json();
+      setTestResult(data);
+      if (data.success && data.models) {
+        setDiscoveredModels(data.models);
+        // If editing, keep existing selections; otherwise select all
+        if (editingProvider) {
+          const existing = editingProvider.selectedModels.filter(m => data.models.includes(m));
+          setSelectedModels(existing.length > 0 ? existing : data.models);
+        } else {
+          setSelectedModels(data.models);
+        }
       }
     } catch {
-      setLoginError('Connection failed. Please try again.');
+      setTestResult({ success: false, error: 'Network error' });
     } finally {
-      setLoginLoading(false);
+      setTestingConnection(false);
     }
-  };
+  }
 
-  const handleLogout = () => {
-    clearStoredToken();
-    setAuthToken(null);
-    setProviders([]);
-    setLogs([]);
-    setStats(null);
-  };
+  function toggleModel(model: string) {
+    setSelectedModels(prev =>
+      prev.includes(model) ? prev.filter(m => m !== model) : [...prev, model]
+    );
+  }
 
-  // ─── Provider actions ────────────────────────────────
+  function selectAllModels() {
+    setSelectedModels([...discoveredModels]);
+  }
 
-  const handleSaveProvider = async () => {
-    if (!form.name || !form.baseUrl || !form.apiKey || !form.model) {
-      alert('Please fill all required fields');
+  function deselectAllModels() {
+    setSelectedModels([]);
+  }
+
+  async function handleSaveProvider() {
+    if (!providerForm.name || !providerForm.baseUrl || !providerForm.apiKey) return;
+    if (discoveredModels.length === 0) {
+      alert('Test connection dulu untuk discover models!');
+      return;
+    }
+    if (selectedModels.length === 0) {
+      alert('Pilih minimal 1 model!');
       return;
     }
 
-    if (editingProvider) {
+    try {
+      const body = {
+        name: providerForm.name,
+        baseUrl: providerForm.baseUrl,
+        apiKey: providerForm.apiKey,
+        models: discoveredModels,
+        selectedModels,
+        priority: 10,
+        enabled: true,
+      };
+
+      let res;
+      if (editingProvider) {
+        res = await api('/api/providers', {
+          method: 'PUT',
+          body: JSON.stringify({ id: editingProvider.id, ...body }),
+        });
+      } else {
+        res = await api('/api/providers', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        });
+      }
+
+      if (res.ok) {
+        setShowProviderModal(false);
+        resetProviderForm();
+        fetchData();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to save provider');
+      }
+    } catch {
+      alert('Network error');
+    }
+  }
+
+  async function handleDeleteProvider(id: string) {
+    if (!confirm('Hapus provider ini?')) return;
+    try {
+      await api(`/api/providers?id=${id}`, { method: 'DELETE' });
+      fetchData();
+    } catch {}
+  }
+
+  async function handleToggleProvider(provider: Provider) {
+    try {
       await api('/api/providers', {
         method: 'PUT',
-        body: JSON.stringify({ id: editingProvider.id, ...form }),
+        body: JSON.stringify({ id: provider.id, enabled: !provider.enabled }),
       });
-    } else {
-      await api('/api/providers', {
-        method: 'POST',
-        body: JSON.stringify(form),
-      });
-    }
+      fetchData();
+    } catch {}
+  }
 
-    setShowAddModal(false);
-    setEditingProvider(null);
-    resetForm();
-    fetchData();
-  };
-
-  const handleDeleteProvider = async (id: string) => {
-    if (!confirm('Delete this provider?')) return;
-    await api(`/api/providers?id=${id}`, { method: 'DELETE' });
-    fetchData();
-  };
-
-  const handleToggleProvider = async (provider: Provider) => {
-    await api('/api/providers', {
-      method: 'PUT',
-      body: JSON.stringify({ id: provider.id, enabled: !provider.enabled }),
-    });
-    fetchData();
-  };
-
-  const handleChangeMode = async (newMode: string) => {
-    await api('/api/config', {
-      method: 'PUT',
-      body: JSON.stringify({ mode: newMode }),
-    });
-    setMode(newMode);
-  };
-
-  const handleUpdateConfig = async () => {
-    await api('/api/config', {
-      method: 'PUT',
-      body: JSON.stringify({ maxRetries, timeoutMs }),
-    });
-    fetchData();
-  };
-
-  const handleCheckHealth = async () => {
-    setLoading(true);
-    await api('/api/health');
-    fetchData();
-  };
-
-  const handleClearLogs = async () => {
-    if (!confirm('Clear all logs?')) return;
-    await api('/api/logs', { method: 'DELETE' });
-    fetchData();
-  };
-
-  const resetForm = () => {
-    setForm({ name: '', baseUrl: '', apiKey: '', model: '', priority: 10, enabled: true });
-  };
-
-  const startEdit = (provider: Provider) => {
+  function openEditModal(provider: Provider) {
     setEditingProvider(provider);
-    setForm({
+    setProviderForm({
       name: provider.name,
       baseUrl: provider.baseUrl,
-      apiKey: '',
-      model: provider.model,
-      priority: provider.priority,
-      enabled: provider.enabled,
+      apiKey: provider.apiKey, // This is masked, but we'll keep it
     });
-    setShowAddModal(true);
-  };
+    setDiscoveredModels(provider.models);
+    setSelectedModels(provider.selectedModels);
+    setTestResult(null);
+    setShowProviderModal(true);
+  }
 
-  // ─── API Key Management ──────────────────────────────
+  function resetProviderForm() {
+    setProviderForm({ name: '', baseUrl: '', apiKey: '' });
+    setDiscoveredModels([]);
+    setSelectedModels([]);
+    setTestResult(null);
+    setEditingProvider(null);
+  }
 
-  const handleChangeApiKey = async () => {
-    setKeyChangeError('');
-    setKeyChangeSuccess('');
-    if (!currentKeyInput || !newKeyInput) {
-      setKeyChangeError('Both fields are required');
-      return;
-    }
-    if (newKeyInput.length < 8) {
-      setKeyChangeError('New key must be at least 8 characters');
-      return;
-    }
+  // ─── Settings actions ────────────────────────────
+
+  async function handleChangeMode(mode: string) {
     try {
-      const res = await api('/api/config', {
+      await api('/api/config', {
         method: 'PUT',
-        body: JSON.stringify({ action: 'change_key', currentKey: currentKeyInput, newKey: newKeyInput }),
+        body: JSON.stringify({ mode }),
       });
-      if (res.success) {
-        setKeyChangeSuccess('API key updated!');
-        setApiKeyMasked(res.apiKeyMasked);
-        setCurrentKeyInput('');
-        setNewKeyInput('');
-        setTimeout(() => {
-          setShowKeyChange(false);
-          setKeyChangeSuccess('');
-        }, 2000);
-      } else {
-        setKeyChangeError(res.error || 'Failed to change key');
-      }
-    } catch (err: any) {
-      setKeyChangeError(err.message || 'Failed to change key');
-    }
-  };
+      fetchData();
+    } catch {}
+  }
 
-  const handleRegenerateKey = async () => {
-    if (!confirm('Generate a new API key? The current key will stop working immediately.')) return;
-    setKeyChangeError('');
-    setKeyChangeSuccess('');
+  async function handleSaveSettings() {
+    try {
+      await api('/api/config', {
+        method: 'PUT',
+        body: JSON.stringify(settingsForm),
+      });
+      fetchData();
+    } catch {}
+  }
+
+  async function handleGenerateApiKey() {
     try {
       const res = await api('/api/config', {
         method: 'PUT',
         body: JSON.stringify({ action: 'regenerate_key' }),
       });
-      if (res.success && res.apiKey) {
-        setRegeneratedKey(res.apiKey);
-        setApiKeyMasked(res.apiKeyMasked);
-        setKeyChangeSuccess('New key generated! Copy it now — it won\'t be shown again.');
-      } else {
-        setKeyChangeError(res.error || 'Failed to regenerate key');
+      const data = await res.json();
+      if (data.apiKey) {
+        setGeneratedKey(data.apiKey);
       }
-    } catch (err: any) {
-      setKeyChangeError(err.message || 'Failed to regenerate key');
+      fetchData();
+    } catch {}
+  }
+
+  async function handleChangeApiKey() {
+    if (!currentApiKey || !newApiKey) return;
+    try {
+      const res = await api('/api/config', {
+        method: 'PUT',
+        body: JSON.stringify({ action: 'change_key', currentKey: currentApiKey, newKey: newApiKey }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCurrentApiKey('');
+        setNewApiKey('');
+        alert('API key berhasil diubah!');
+      } else {
+        alert(data.error || 'Gagal mengubah API key');
+      }
+    } catch {
+      alert('Network error');
     }
-  };
+  }
 
-  // ─── UI helpers ──────────────────────────────────────
+  async function handleHealthCheck() {
+    try {
+      await api('/api/health');
+      fetchData();
+    } catch {}
+  }
 
-  const getHealthBadge = (status: string) => {
-    const classes: Record<string, string> = {
-      healthy: 'bg-green-100 text-green-700',
-      degraded: 'bg-yellow-100 text-yellow-700',
+  async function handleClearLogs() {
+    if (!confirm('Hapus semua logs?')) return;
+    try {
+      await api('/api/logs', { method: 'DELETE' });
+      fetchData();
+    } catch {}
+  }
+
+  // ─── UI helpers ──────────────────────────────────
+
+  function healthBadge(status: string) {
+    const colors: Record<string, string> = {
+      healthy: 'bg-emerald-100 text-emerald-700',
+      degraded: 'bg-amber-100 text-amber-700',
       down: 'bg-red-100 text-red-700',
-      unknown: 'bg-gray-100 text-gray-600',
+      unknown: 'bg-slate-100 text-slate-500',
     };
-    return <span className={`text-xs px-2 py-0.5 rounded-full ${classes[status] || classes.unknown}`}>{status}</span>;
-  };
+    return (
+      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colors[status] || colors.unknown}`}>
+        {status}
+      </span>
+    );
+  }
 
-  const getStatusBadge = (status: string) => {
-    const classes: Record<string, string> = {
-      success: 'bg-green-100 text-green-700',
+  function statusBadge(status: string) {
+    const colors: Record<string, string> = {
+      success: 'bg-emerald-100 text-emerald-700',
       error: 'bg-red-100 text-red-700',
-      timeout: 'bg-yellow-100 text-yellow-700',
+      timeout: 'bg-amber-100 text-amber-700',
       retry: 'bg-blue-100 text-blue-700',
     };
-    return <span className={`text-xs px-2 py-0.5 rounded-full ${classes[status] || ''}`}>{status}</span>;
-  };
-
-  const formatTime = (ms: number) => {
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(1)}s`;
-  };
-
-  const formatResetTime = (timestamp?: number) => {
-    if (!timestamp) return null;
-    const now = Math.floor(Date.now() / 1000);
-    const diff = timestamp - now;
-    if (diff <= 0) return 'now';
-    if (diff < 60) return `${diff}s`;
-    return `${Math.floor(diff / 60)}m ${diff % 60}s`;
-  };
-
-  // ─── Login screen ────────────────────────────────────
-
-  if (!authToken) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
-        <div className="w-full max-w-md">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2">
-              Razoter
-            </h1>
-            <p className="text-slate-500 text-sm">API Proxy & Router Dashboard</p>
-          </div>
-          <div className="bg-white border border-gray-200 rounded-2xl p-8 space-y-5 shadow-sm">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Username</label>
-              <input
-                type="text"
-                value={loginUsername}
-                onChange={e => { setLoginUsername(e.target.value); setLoginError(''); }}
-                onKeyDown={e => e.key === 'Enter' && handleLogin()}
-                placeholder="Enter your username"
-                className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-all"
-                autoFocus
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Password</label>
-              <input
-                type="password"
-                value={loginPassword}
-                onChange={e => { setLoginPassword(e.target.value); setLoginError(''); }}
-                onKeyDown={e => e.key === 'Enter' && handleLogin()}
-                placeholder="Enter your password"
-                className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-all"
-              />
-              {loginError && (
-                <p className="text-red-600 text-sm mt-2">{loginError}</p>
-              )}
-            </div>
-            <button
-              onClick={handleLogin}
-              disabled={loginLoading}
-              className="w-full px-4 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed rounded-xl text-sm font-medium text-white transition-colors"
-            >
-              {loginLoading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Signing in...
-                </span>
-              ) : 'Sign In'}
-            </button>
-            <p className="text-xs text-slate-400 text-center">
-              Session is stored locally in your browser.
-            </p>
-          </div>
-        </div>
-      </div>
+      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colors[status] || 'bg-slate-100 text-slate-500'}`}>
+        {status}
+      </span>
     );
   }
 
-  // ─── Loading ─────────────────────────────────────────
+  function formatTime(ts: string) {
+    return new Date(ts).toLocaleString('id-ID', {
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    });
+  }
 
-  if (loading && providers.length === 0) {
+  function formatLatency(ms: number) {
+    return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
+  }
+
+  // ─── Login screen ────────────────────────────────
+
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center space-y-4">
-          <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-slate-500">Loading dashboard...</p>
-        </div>
+        <div className="pulse-dot text-4xl">⏳</div>
       </div>
     );
   }
 
-  // ─── Main Dashboard ──────────────────────────────────
+  if (!token) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <form onSubmit={handleLogin} className="card w-full max-w-sm space-y-4">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-slate-900">Razoter</h1>
+            <p className="text-sm text-slate-500 mt-1">Dashboard Login</p>
+          </div>
+          {loginError && (
+            <div className="bg-red-50 text-red-700 px-3 py-2 rounded-lg text-sm">{loginError}</div>
+          )}
+          <input
+            type="text"
+            placeholder="Username"
+            className="input"
+            value={loginForm.username}
+            onChange={e => setLoginForm(f => ({ ...f, username: e.target.value }))}
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            className="input"
+            value={loginForm.password}
+            onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))}
+          />
+          <button type="submit" className="btn btn-primary w-full">Login</button>
+        </form>
+      </div>
+    );
+  }
+
+  // ─── Dashboard UI ────────────────────────────────
 
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <header className="border-b border-gray-200 bg-white backdrop-blur-sm sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-              Razoter
-            </h1>
-            <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full hidden sm:inline">
-              v1.0
-            </span>
-          </div>
+      <header className="bg-white border-b border-slate-200 px-6 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700 hidden sm:inline">
-              {providers.filter(p => p.enabled).length} active
-            </span>
-            <button onClick={fetchData} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-slate-700 transition-colors">
-              ↻ Refresh
+            <h1 className="text-xl font-bold text-slate-900">Razoter</h1>
+            <span className="text-xs text-slate-400">v2.0</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <button onClick={handleHealthCheck} className="btn btn-secondary text-sm">
+              🏥 Health Check
             </button>
-            <button onClick={handleLogout} className="px-3 py-1.5 bg-gray-100 hover:bg-red-50 rounded-lg text-sm text-slate-500 hover:text-red-600 transition-colors">
+            <button onClick={handleLogout} className="text-sm text-slate-500 hover:text-red-600">
               Logout
             </button>
           </div>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <main className="max-w-7xl mx-auto px-6 py-6 space-y-6">
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
-          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
-            <div className="text-2xl sm:text-3xl font-bold text-indigo-600">{stats?.totalRequests || 0}</div>
-            <div className="text-xs sm:text-sm text-slate-500 mt-1">Total Requests</div>
+        {stats && (
+          <div className="grid grid-cols-4 gap-4">
+            <div className="card text-center">
+              <div className="text-2xl font-bold text-slate-900">{stats.totalRequests}</div>
+              <div className="text-xs text-slate-500">Total Requests</div>
+            </div>
+            <div className="card text-center">
+              <div className="text-2xl font-bold text-emerald-600">{stats.successRate}%</div>
+              <div className="text-xs text-slate-500">Success Rate</div>
+            </div>
+            <div className="card text-center">
+              <div className="text-2xl font-bold text-slate-900">{formatLatency(stats.avgLatency)}</div>
+              <div className="text-xs text-slate-500">Avg Latency</div>
+            </div>
+            <div className="card text-center">
+              <div className="text-2xl font-bold text-slate-900">{providers.length}</div>
+              <div className="text-xs text-slate-500">Providers</div>
+            </div>
           </div>
-          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
-            <div className="text-2xl sm:text-3xl font-bold text-green-600">{stats?.successRate || 0}%</div>
-            <div className="text-xs sm:text-sm text-slate-500 mt-1">Success Rate</div>
-          </div>
-          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
-            <div className="text-2xl sm:text-3xl font-bold text-yellow-600">{formatTime(stats?.avgLatency || 0)}</div>
-            <div className="text-xs sm:text-sm text-slate-500 mt-1">Avg Latency</div>
-          </div>
-          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
-            <div className="text-2xl sm:text-3xl font-bold text-purple-600">{providers.length}</div>
-            <div className="text-xs sm:text-sm text-slate-500 mt-1">Providers</div>
-          </div>
-        </div>
+        )}
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit overflow-x-auto">
+        <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
           {(['providers', 'logs', 'settings'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+              className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                 activeTab === tab
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              {tab === 'providers' && '⚙️ Providers'}
-              {tab === 'logs' && '📋 Logs'}
-              {tab === 'settings' && '🔧 Settings'}
+              {tab === 'providers' ? '🔌 Providers' : tab === 'logs' ? '📋 Logs' : '⚙️ Settings'}
             </button>
           ))}
         </div>
@@ -541,122 +558,82 @@ export default function Dashboard() {
         {/* Providers Tab */}
         {activeTab === 'providers' && (
           <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <h2 className="text-lg font-semibold text-slate-900">API Providers</h2>
-              <div className="flex gap-2">
-                <button onClick={handleCheckHealth} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-slate-700 transition-colors">
-                  🏥 Health Check
-                </button>
-                <button onClick={() => { resetForm(); setEditingProvider(null); setShowAddModal(true); }} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm text-white transition-colors">
-                  + Add Provider
-                </button>
-              </div>
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-semibold text-slate-900">Providers</h2>
+              <button
+                onClick={() => { resetProviderForm(); setShowProviderModal(true); }}
+                className="btn btn-primary"
+              >
+                + Add Provider
+              </button>
             </div>
 
             {providers.length === 0 ? (
-              <div className="bg-white border border-gray-200 rounded-xl text-center py-12 text-slate-500 shadow-sm">
-                <p className="text-lg mb-2">No providers configured</p>
-                <p className="text-sm">Add your first API provider to get started</p>
+              <div className="card text-center py-12 text-slate-400">
+                <div className="text-4xl mb-2">🔌</div>
+                <p>Belum ada provider. Tambah provider pertama!</p>
               </div>
             ) : (
-              <div className="grid gap-3">
-                {providers.map(provider => (
-                  <div key={provider.id} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
-                          provider.enabled ? 'bg-green-500' : 'bg-gray-400'
-                        }`} />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-semibold text-slate-900">{provider.name}</span>
-                            {getHealthBadge(provider.healthStatus)}
-                            {provider.rateLimitRemaining !== undefined && provider.rateLimitRemaining <= 0 && (
-                              <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">rate limited</span>
-                            )}
-                          </div>
-                          <div className="text-xs sm:text-sm text-slate-500 mt-0.5 flex flex-wrap gap-x-4 gap-y-1">
-                            <span>{provider.model}</span>
-                            <span className="text-slate-300 hidden sm:inline">•</span>
-                            <span className="font-mono text-xs truncate max-w-[200px]">{provider.baseUrl}</span>
-                            <span className="text-slate-300 hidden sm:inline">•</span>
-                            <span>Priority: {provider.priority}</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4 sm:gap-6">
-                        <div className="text-right text-sm">
-                          <div className="text-slate-700">{provider.requestCount} reqs</div>
-                          <div className="text-slate-500">{formatTime(provider.avgLatency)} avg</div>
-                          {/* Rate limit info */}
-                          {provider.rateLimitRemaining !== undefined && (
-                            <div className="text-xs mt-1">
-                              <span className={provider.rateLimitRemaining > 0 ? 'text-green-600' : 'text-red-600'}>
-                                {provider.rateLimitRemaining}
-                              </span>
-                              {provider.rateLimitTotal !== undefined && (
-                                <span className="text-slate-400">/{provider.rateLimitTotal}</span>
-                              )}
-                              {provider.rateLimitReset !== undefined && (
-                                <span className="text-slate-400 ml-1">resets {formatResetTime(provider.rateLimitReset)}</span>
-                              )}
-                            </div>
+              <div className="space-y-3">
+                {providers.map(p => (
+                  <div key={p.id} className="card">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-slate-900">{p.name}</h3>
+                          {healthBadge(p.healthStatus)}
+                          {!p.enabled && (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-200 text-slate-500">
+                              disabled
+                            </span>
                           )}
                         </div>
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => handleToggleProvider(provider)}
-                            className={`px-2 py-1 rounded text-xs ${
-                              provider.enabled 
-                                ? 'bg-gray-100 hover:bg-gray-200 text-slate-700'
-                                : 'bg-red-50 hover:bg-red-100 text-red-600'
-                            }`}
-                          >
-                            {provider.enabled ? '✓' : '✗'}
-                          </button>
-                          <button onClick={() => startEdit(provider)} className="px-2 py-1 rounded text-xs bg-gray-100 hover:bg-gray-200 text-slate-700">
-                            ✎
-                          </button>
-                          <button onClick={() => handleDeleteProvider(provider.id)} className="px-2 py-1 rounded text-xs bg-red-50 hover:bg-red-100 text-red-600">
-                            🗑
-                          </button>
+                        <div className="text-xs text-slate-400 mt-1 font-mono">{p.baseUrl}</div>
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {p.selectedModels.map(m => (
+                            <span key={m} className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-600 text-xs font-mono">
+                              {m}
+                            </span>
+                          ))}
+                          {p.selectedModels.length < p.models.length && (
+                            <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-400 text-xs">
+                              +{p.models.length - p.selectedModels.length} more
+                            </span>
+                          )}
                         </div>
+                        <div className="flex gap-4 mt-2 text-xs text-slate-500">
+                          <span>📊 {p.totalRequests} req</span>
+                          <span>✅ {p.successCount} ok</span>
+                          <span>❌ {p.errorCount} err</span>
+                          <span>⚡ {formatLatency(p.avgLatencyMs)} avg</span>
+                          {p.rateLimitRemaining !== null && (
+                            <span>🚦 {p.rateLimitRemaining}/{p.rateLimitTotal} remaining</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleToggleProvider(p)}
+                          className={`text-xs px-2 py-1 rounded ${p.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}
+                        >
+                          {p.enabled ? 'ON' : 'OFF'}
+                        </button>
+                        <button
+                          onClick={() => openEditModal(p)}
+                          className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteProvider(p.id)}
+                          className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100"
+                        >
+                          Hapus
+                        </button>
                       </div>
                     </div>
                   </div>
                 ))}
-              </div>
-            )}
-
-            {/* Provider Breakdown */}
-            {stats?.providerBreakdown && stats.providerBreakdown.length > 0 && (
-              <div className="bg-white border border-gray-200 rounded-xl p-5 mt-6 shadow-sm">
-                <h3 className="font-semibold mb-4 text-slate-900">Provider Breakdown</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {stats.providerBreakdown.map(pb => (
-                    <div key={pb.providerId} className="bg-slate-50 rounded-lg p-4">
-                      <div className="font-medium text-slate-900 mb-2">{pb.providerName}</div>
-                      <div className="space-y-1 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-slate-500">Requests</span>
-                          <span>{pb.requests}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-500">Success</span>
-                          <span className="text-green-600">{pb.successes}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-500">Errors</span>
-                          <span className="text-red-600">{pb.errors}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-500">Avg Latency</span>
-                          <span>{formatTime(pb.avgLatency)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
               </div>
             )}
           </div>
@@ -667,313 +644,348 @@ export default function Dashboard() {
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-semibold text-slate-900">Request Logs</h2>
-              <button onClick={handleClearLogs} className="px-3 py-1.5 bg-red-50 hover:bg-red-100 rounded-lg text-sm text-red-600 transition-colors">
-                Clear Logs
+              <button onClick={handleClearLogs} className="btn btn-secondary text-sm">
+                🗑️ Clear Logs
               </button>
             </div>
 
-            {logs.length === 0 ? (
-              <div className="bg-white border border-gray-200 rounded-xl text-center py-12 text-slate-500 shadow-sm">
-                <p>No requests logged yet</p>
-              </div>
-            ) : (
-              <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto shadow-sm">
-                <table className="w-full min-w-[600px]">
-                  <thead>
-                    <tr className="border-b border-gray-200 text-left text-sm text-slate-500">
-                      <th className="px-4 py-3">Time</th>
-                      <th className="px-4 py-3">Provider</th>
-                      <th className="px-4 py-3">Model</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3">Latency</th>
-                      <th className="px-4 py-3">Tokens</th>
+            <div className="card overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 text-left">
+                    <th className="px-4 py-2 text-slate-500 font-medium">Time</th>
+                    <th className="px-4 py-2 text-slate-500 font-medium">Provider</th>
+                    <th className="px-4 py-2 text-slate-500 font-medium">Model</th>
+                    <th className="px-4 py-2 text-slate-500 font-medium">Status</th>
+                    <th className="px-4 py-2 text-slate-500 font-medium">Latency</th>
+                    <th className="px-4 py-2 text-slate-500 font-medium">Tokens</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {logs.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
+                        Belum ada logs
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {logs.map(log => (
-                      <tr key={log.id} className="border-b border-gray-100 hover:bg-slate-50 transition-colors">
-                        <td className="px-4 py-3 text-sm text-slate-500 font-mono">
-                          {new Date(log.timestamp).toLocaleTimeString()}
-                        </td>
-                        <td className="px-4 py-3 text-sm font-medium text-slate-700">
-                          {log.providerName}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-slate-500">
-                          {log.model}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            {getStatusBadge(log.status)}
-                            {log.statusCode && (
-                              <span className="text-xs text-slate-400">{log.statusCode}</span>
-                            )}
-                          </div>
-                          {log.errorMessage && (
-                            <div className="text-xs text-red-500 mt-1 max-w-xs truncate">
-                              {log.errorMessage}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-slate-500">
-                          {formatTime(log.latencyMs)}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-slate-500">
-                          {log.tokensUsed || '-'}
-                        </td>
+                  ) : (
+                    logs.map(log => (
+                      <tr key={log.id} className="border-t border-slate-100">
+                        <td className="px-4 py-2 text-slate-500 font-mono text-xs">{formatTime(log.createdAt)}</td>
+                        <td className="px-4 py-2 text-slate-700">{log.providerName}</td>
+                        <td className="px-4 py-2 text-slate-500 font-mono text-xs">{log.model}</td>
+                        <td className="px-4 py-2">{statusBadge(log.status)}</td>
+                        <td className="px-4 py-2 text-slate-500">{formatLatency(log.latencyMs)}</td>
+                        <td className="px-4 py-2 text-slate-500">{log.tokensUsed ?? '-'}</td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
         {/* Settings Tab */}
         {activeTab === 'settings' && (
-          <div className="space-y-6 max-w-2xl">
+          <div className="space-y-6">
             {/* Rotation Mode */}
-            <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-              <h3 className="font-semibold mb-4 text-slate-900">Rotation Mode</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="card">
+              <h3 className="font-semibold text-slate-900 mb-3">🔄 Rotation Mode</h3>
+              <div className="grid grid-cols-3 gap-3">
                 {[
-                  { id: 'failover', name: 'Failover', icon: '🔄', desc: 'Use primary, auto-switch on error' },
-                  { id: 'round-robin', name: 'Round-Robin', icon: '⚡', desc: 'Distribute evenly across all' },
-                  { id: 'priority', name: 'Priority', icon: '📊', desc: 'Use in priority order' },
+                  { mode: 'failover', label: 'Failover', desc: 'Gagal → switch ke provider lain', icon: '🔄' },
+                  { mode: 'round-robin', label: 'Round Robin', desc: 'Rotasi merata antar provider', icon: '⚡' },
+                  { mode: 'priority', label: 'Priority', desc: 'Provider prioritas lebih tinggi dipilih duluan', icon: '📊' },
                 ].map(m => (
-                  <div
-                    key={m.id}
-                    onClick={() => handleChangeMode(m.id)}
-                    className={`p-4 rounded-xl cursor-pointer border transition-all ${
-                      mode === m.id
+                  <button
+                    key={m.mode}
+                    onClick={() => handleChangeMode(m.mode)}
+                    className={`p-4 rounded-lg border-2 text-left transition-colors ${
+                      config?.mode === m.mode
                         ? 'border-indigo-500 bg-indigo-50'
-                        : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-slate-50'
+                        : 'border-slate-200 hover:border-slate-300'
                     }`}
                   >
-                    <div className="text-2xl mb-2">{m.icon}</div>
-                    <div className="font-semibold text-slate-900">{m.name}</div>
+                    <div className="text-lg mb-1">{m.icon}</div>
+                    <div className="font-medium text-slate-900">{m.label}</div>
                     <div className="text-xs text-slate-500 mt-1">{m.desc}</div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
 
-            {/* Advanced Settings */}
-            <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-              <h3 className="font-semibold mb-4 text-slate-900">Advanced Settings</h3>
-              <div className="space-y-4">
+            {/* Retry & Timeout */}
+            <div className="card">
+              <h3 className="font-semibold text-slate-900 mb-3">⚙️ Retry & Timeout</h3>
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-slate-600 mb-1">Max Retries</label>
+                  <label className="text-sm text-slate-600">Max Retries</label>
                   <input
                     type="number"
-                    value={maxRetries}
-                    onChange={e => setMaxRetries(parseInt(e.target.value))}
                     min={1}
                     max={10}
-                    className="w-32 bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-indigo-500"
+                    className="input mt-1"
+                    value={settingsForm.maxRetries}
+                    onChange={e => setSettingsForm(f => ({ ...f, maxRetries: parseInt(e.target.value) || 3 }))}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-slate-600 mb-1">Timeout (ms)</label>
+                  <label className="text-sm text-slate-600">Timeout (ms)</label>
                   <input
                     type="number"
-                    value={timeoutMs}
-                    onChange={e => setTimeoutMs(parseInt(e.target.value))}
                     min={5000}
                     max={120000}
                     step={1000}
-                    className="w-48 bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-indigo-500"
+                    className="input mt-1"
+                    value={settingsForm.timeoutMs}
+                    onChange={e => setSettingsForm(f => ({ ...f, timeoutMs: parseInt(e.target.value) || 30000 }))}
                   />
                 </div>
-                <button onClick={handleUpdateConfig} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm text-white transition-colors">
-                  Save Settings
+              </div>
+              <button onClick={handleSaveSettings} className="btn btn-primary mt-4">
+                💾 Simpan Settings
+              </button>
+            </div>
+
+            {/* API Key Management */}
+            <div className="card">
+              <h3 className="font-semibold text-slate-900 mb-3">🔑 API Key Razoter</h3>
+              <p className="text-sm text-slate-500 mb-4">
+                API key ini dipakai untuk menghubungkan Razoter ke platform tujuan (Cursor, Open WebUI, dll).
+              </p>
+              
+              {config && (
+                <div className="bg-slate-50 rounded-lg p-3 mb-4">
+                  <div className="text-xs text-slate-500 mb-1">Current Key:</div>
+                  <code className="text-sm text-slate-700 font-mono">{config.apiKeyMasked}</code>
+                </div>
+              )}
+
+              {/* Generate new key */}
+              <div className="space-y-3">
+                <button onClick={handleGenerateApiKey} className="btn btn-primary w-full">
+                  🎲 Generate API Key Baru
                 </button>
+                {generatedKey && (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                    <div className="text-sm font-medium text-emerald-800 mb-2">✅ API Key baru:</div>
+                    <code className="text-sm text-emerald-700 font-mono break-all">{generatedKey}</code>
+                    <div className="text-xs text-emerald-600 mt-2">
+                      ⚠️ Copy sekarang! Tidak akan ditampilkan lagi.
+                    </div>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(generatedKey)}
+                      className="btn btn-secondary text-xs mt-2"
+                    >
+                      📋 Copy
+                    </button>
+                  </div>
+                )}
+
+                <div className="border-t border-slate-200 pt-3">
+                  <button
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="text-sm text-indigo-600 hover:text-indigo-800"
+                  >
+                    {showApiKey ? '🔼 Sembunyikan' : '🔽 Ubah API Key Manual'}
+                  </button>
+                  {showApiKey && (
+                    <div className="mt-3 space-y-2">
+                      <input
+                        type="password"
+                        placeholder="Current API Key"
+                        className="input"
+                        value={currentApiKey}
+                        onChange={e => setCurrentApiKey(e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        placeholder="New API Key"
+                        className="input"
+                        value={newApiKey}
+                        onChange={e => setNewApiKey(e.target.value)}
+                      />
+                      <button onClick={handleChangeApiKey} className="btn btn-secondary w-full text-sm">
+                        Ubah API Key
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Security Section */}
-            <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-              <h3 className="font-semibold mb-4 text-slate-900">🔐 Proxy API Key</h3>
-              <div className="space-y-4">
+            {/* API Endpoint Info */}
+            <div className="card">
+              <h3 className="font-semibold text-slate-900 mb-3">📡 Endpoint Info</h3>
+              <div className="bg-slate-50 rounded-lg p-4 font-mono text-sm space-y-2">
                 <div>
-                  <label className="block text-sm text-slate-600 mb-1">Current API Key (for proxy clients)</label>
-                  <div className="flex items-center gap-2">
-                    <code className="bg-slate-50 border border-gray-200 rounded-lg px-3 py-2 text-slate-700 text-sm font-mono flex-1">
-                      {apiKeyMasked || '••••••••'}
-                    </code>
-                  </div>
+                  <span className="text-slate-500">Base URL:</span>{' '}
+                  <span className="text-slate-700">https://razoter.vercel.app</span>
                 </div>
-
-                {/* Regenerate */}
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <button
-                    onClick={handleRegenerateKey}
-                    className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 rounded-lg text-sm text-white transition-colors"
-                  >
-                    🔄 Regenerate Key
-                  </button>
-                  <button
-                    onClick={() => { setShowKeyChange(!showKeyChange); setKeyChangeError(''); setKeyChangeSuccess(''); }}
-                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-slate-700 transition-colors"
-                  >
-                    ✏️ Change Key
-                  </button>
+                <div>
+                  <span className="text-slate-500">Endpoint:</span>{' '}
+                  <span className="text-slate-700">/api/v1/chat/completions</span>
                 </div>
-
-                {/* Show regenerated key */}
-                {regeneratedKey && (
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                    <p className="text-yellow-700 text-sm mb-2">⚠️ Copy this key now. It won&apos;t be shown again:</p>
-                    <code className="text-sm text-yellow-800 break-all font-mono">{regeneratedKey}</code>
-                    <button
-                      onClick={() => { navigator.clipboard.writeText(regeneratedKey); }}
-                      className="ml-2 text-xs text-yellow-600 hover:text-yellow-700 underline"
-                    >
-                      Copy
-                    </button>
-                  </div>
-                )}
-
-                {/* Change key form */}
-                {showKeyChange && (
-                  <div className="bg-slate-50 rounded-lg p-4 space-y-3 border border-gray-200">
-                    <div>
-                      <label className="block text-xs text-slate-600 mb-1">Current Key</label>
-                      <input
-                        type="password"
-                        value={currentKeyInput}
-                        onChange={e => setCurrentKeyInput(e.target.value)}
-                        placeholder="Enter current key"
-                        className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-indigo-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-slate-600 mb-1">New Key</label>
-                      <input
-                        type="password"
-                        value={newKeyInput}
-                        onChange={e => setNewKeyInput(e.target.value)}
-                        placeholder="Enter new key (min 8 chars)"
-                        className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-indigo-500"
-                      />
-                    </div>
-                    <button
-                      onClick={handleChangeApiKey}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm text-white transition-colors"
-                    >
-                      Update Key
-                    </button>
-                    {keyChangeError && <p className="text-red-600 text-sm">{keyChangeError}</p>}
-                    {keyChangeSuccess && <p className="text-green-600 text-sm">{keyChangeSuccess}</p>}
-                  </div>
-                )}
+                <div>
+                  <span className="text-slate-500">Auth:</span>{' '}
+                  <span className="text-slate-700">Bearer &lt;your-api-key&gt;</span>
+                </div>
               </div>
-            </div>
-
-            {/* API Info */}
-            <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-              <h3 className="font-semibold mb-4 text-slate-900">API Endpoint</h3>
-              <div className="bg-slate-50 rounded-lg p-4 font-mono text-sm">
-                <p className="text-slate-600 mb-2">Use this endpoint with any OpenAI-compatible client:</p>
-                <code className="text-indigo-600 break-all">POST {typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/chat/completions</code>
-                <p className="text-slate-400 mt-3 text-xs">
-                  Set your Razoter API key as the Authorization: Bearer ***
-                </p>
+              <div className="mt-3 text-xs text-slate-500">
+                <p className="font-medium mb-1">Cara pakai di platform lain:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Base URL: <code>https://razoter.vercel.app/v1</code></li>
+                  <li>API Key: pakai key yang di-generate di atas</li>
+                  <li>Model: bebas (akan di-redirect ke provider yang aktif)</li>
+                </ul>
               </div>
             </div>
           </div>
         )}
-      </div>
+      </main>
 
-      {/* Add/Edit Provider Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-gray-200 rounded-2xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-xl">
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold text-slate-900">
-                {editingProvider ? 'Edit Provider' : 'Add Provider'}
-              </h3>
-              <button onClick={() => { setShowAddModal(false); setEditingProvider(null); }} className="text-slate-400 hover:text-slate-600">
-                ✕
-              </button>
-            </div>
+      {/* ─── Add/Edit Provider Modal ──────────────── */}
+      {showProviderModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-slate-900">
+                  {editingProvider ? 'Edit Provider' : 'Tambah Provider'}
+                </h3>
+                <button
+                  onClick={() => { setShowProviderModal(false); resetProviderForm(); }}
+                  className="text-slate-400 hover:text-slate-600"
+                >
+                  ✕
+                </button>
+              </div>
 
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-slate-600 mb-1">Name *</label>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={e => setForm({ ...form, name: e.target.value })}
-                  placeholder="e.g., OpenAI Production"
-                  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-slate-600 mb-1">Base URL *</label>
-                <input
-                  type="text"
-                  value={form.baseUrl}
-                  onChange={e => setForm({ ...form, baseUrl: e.target.value })}
-                  placeholder="https://api.openai.com/v1"
-                  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-slate-600 mb-1">
-                  API Key * {editingProvider && <span className="text-slate-400">(leave empty to keep current)</span>}
-                </label>
-                <input
-                  type="password"
-                  value={form.apiKey}
-                  onChange={e => setForm({ ...form, apiKey: e.target.value })}
-                  placeholder="sk-..."
-                  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-slate-600 mb-1">Model *</label>
-                <input
-                  type="text"
-                  value={form.model}
-                  onChange={e => setForm({ ...form, model: e.target.value })}
-                  placeholder="gpt-4"
-                  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+              {/* Basic Info */}
+              <div className="space-y-3">
                 <div>
-                  <label className="block text-sm text-slate-600 mb-1">Priority</label>
+                  <label className="text-sm text-slate-600">Nama Provider</label>
                   <input
-                    type="number"
-                    value={form.priority}
-                    onChange={e => setForm({ ...form, priority: parseInt(e.target.value) })}
-                    min={1}
-                    className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:border-indigo-500"
+                    type="text"
+                    className="input mt-1"
+                    placeholder="e.g. OpenRouter, Together AI"
+                    value={providerForm.name}
+                    onChange={e => setProviderForm(f => ({ ...f, name: e.target.value }))}
                   />
-                  <p className="text-xs text-slate-400 mt-1">Lower = higher priority</p>
                 </div>
-                <div className="flex items-center pt-6">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form.enabled}
-                      onChange={e => setForm({ ...form, enabled: e.target.checked })}
-                      className="w-4 h-4 rounded border-gray-300 bg-white text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <span className="text-sm text-slate-700">Enabled</span>
-                  </label>
+                <div>
+                  <label className="text-sm text-slate-600">Base URL</label>
+                  <input
+                    type="text"
+                    className="input mt-1"
+                    placeholder="https://openrouter.ai/api/v1"
+                    value={providerForm.baseUrl}
+                    onChange={e => setProviderForm(f => ({ ...f, baseUrl: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-slate-600">API Key</label>
+                  <input
+                    type="password"
+                    className="input mt-1"
+                    placeholder="sk-..."
+                    value={providerForm.apiKey}
+                    onChange={e => setProviderForm(f => ({ ...f, apiKey: e.target.value }))}
+                  />
                 </div>
               </div>
-            </div>
 
-            <div className="flex gap-3 pt-2">
-              <button onClick={() => { setShowAddModal(false); setEditingProvider(null); }} className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-slate-700 transition-colors">
-                Cancel
-              </button>
-              <button onClick={handleSaveProvider} className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm text-white transition-colors">
-                {editingProvider ? 'Update' : 'Add'} Provider
-              </button>
+              {/* Test Connection */}
+              <div className="border-t border-slate-200 pt-4">
+                <button
+                  onClick={handleTestConnection}
+                  disabled={testingConnection || !providerForm.baseUrl || !providerForm.apiKey}
+                  className="btn btn-primary w-full"
+                >
+                  {testingConnection ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="pulse-dot">⏳</span> Testing...
+                    </span>
+                  ) : (
+                    '🔌 Test Connection & Discover Models'
+                  )}
+                </button>
+
+                {testResult && (
+                  <div className={`mt-3 p-3 rounded-lg text-sm ${
+                    testResult.success
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : 'bg-red-50 text-red-700'
+                  }`}>
+                    {testResult.success ? (
+                      <div>
+                        <div className="font-medium">✅ Connected!</div>
+                        <div className="text-xs mt-1">
+                          {testResult.modelCount} models ditemukan • {formatLatency(testResult.latencyMs || 0)}
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="font-medium">❌ Failed</div>
+                        <div className="text-xs mt-1">{testResult.error}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Model Selector */}
+              {discoveredModels.length > 0 && (
+                <div className="border-t border-slate-200 pt-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium text-slate-700">
+                      Pilih Model ({selectedModels.length}/{discoveredModels.length})
+                    </label>
+                    <div className="flex gap-2">
+                      <button onClick={selectAllModels} className="text-xs text-indigo-600 hover:text-indigo-800">
+                        Pilih Semua
+                      </button>
+                      <button onClick={deselectAllModels} className="text-xs text-slate-500 hover:text-slate-700">
+                        Hapus Semua
+                      </button>
+                    </div>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
+                    {discoveredModels.map(model => (
+                      <label
+                        key={model}
+                        className="flex items-center gap-3 px-3 py-2 hover:bg-slate-50 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedModels.includes(model)}
+                          onChange={() => toggleModel(model)}
+                          className="rounded border-slate-300 text-indigo-600"
+                        />
+                        <span className="text-sm font-mono text-slate-700">{model}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => { setShowProviderModal(false); resetProviderForm(); }}
+                  className="btn btn-secondary flex-1"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={handleSaveProvider}
+                  disabled={discoveredModels.length === 0 || selectedModels.length === 0}
+                  className="btn btn-primary flex-1"
+                >
+                  {editingProvider ? '💾 Update' : '+ Tambah'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

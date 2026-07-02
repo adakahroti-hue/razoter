@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyApiKey } from '@/lib/auth';
-import { selectProvider, getNextProvider } from '@/lib/rotation';
+import { selectProvider, getNextProvider, pickModel } from '@/lib/rotation';
 import { getConfig, addLog, updateProviderStats, updateProviderRateLimit, getEnabledProviders, checkRateLimit } from '@/lib/storage';
 import { withCors, handleCorsPreflight, corsHeaders } from '@/lib/cors';
 
-// Handle CORS preflight
 export async function OPTIONS() {
   return handleCorsPreflight();
 }
@@ -17,11 +16,7 @@ function getClientIp(request: NextRequest): string {
   );
 }
 
-function parseRateLimitHeaders(headers: Headers): {
-  remaining?: number;
-  reset?: number;
-  total?: number;
-} {
+function parseRateLimitHeaders(headers: Headers) {
   const remaining = headers.get('x-ratelimit-remaining');
   const reset = headers.get('x-ratelimit-reset');
   const limit = headers.get('x-ratelimit-limit');
@@ -73,15 +68,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (!body.model || !body.messages) {
+  if (!body.messages) {
     return withCors(
       NextResponse.json(
-        { error: { message: 'Missing required fields: model, messages', type: 'invalid_request_error' } },
+        { error: { message: 'Missing required field: messages', type: 'invalid_request_error' } },
         { status: 400 }
       )
     );
   }
 
+  const requestedModel = body.model || '';
   const isStreaming = body.stream === true;
   const config = await getConfig();
   const enabledProviders = await getEnabledProviders();
@@ -103,8 +99,11 @@ export async function POST(request: NextRequest) {
     triedIds.add(currentProvider.id);
     const attemptStart = Date.now();
 
+    // Pick the best model from this provider's selected models
+    const selectedModel = pickModel(currentProvider, requestedModel);
+
     try {
-      const upstreamUrl = `${currentProvider.baseUrl.replace(/\/$/, '')}/chat/completions`;
+      const upstreamUrl = `${currentProvider.baseUrl.replace(/\/+$/, '')}/chat/completions`;
       
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs);
@@ -117,7 +116,7 @@ export async function POST(request: NextRequest) {
         },
         body: JSON.stringify({
           ...body,
-          model: currentProvider.model || body.model,
+          model: selectedModel || requestedModel,
         }),
         signal: controller.signal,
       });
@@ -125,7 +124,6 @@ export async function POST(request: NextRequest) {
       clearTimeout(timeoutId);
       const latencyMs = Date.now() - attemptStart;
 
-      // Parse rate limit headers from provider response (for both success and 429)
       const rl = parseRateLimitHeaders(upstreamResponse.headers);
       await updateProviderRateLimit(
         currentProvider.id,
@@ -141,7 +139,7 @@ export async function POST(request: NextRequest) {
           await addLog({
             providerId: currentProvider.id,
             providerName: currentProvider.name,
-            model: body.model,
+            model: selectedModel || requestedModel,
             status: 'success',
             statusCode: 200,
             latencyMs,
@@ -168,7 +166,7 @@ export async function POST(request: NextRequest) {
         await addLog({
           providerId: currentProvider.id,
           providerName: currentProvider.name,
-          model: body.model,
+          model: selectedModel || requestedModel,
           status: 'success',
           statusCode: 200,
           latencyMs,
@@ -182,17 +180,15 @@ export async function POST(request: NextRequest) {
         return withCors(res);
       }
 
-      // Retryable errors: 429, 500, 502, 503, 504
       const statusCode = upstreamResponse.status;
       
-      // Handle 429 with retry-after
       if (statusCode === 429) {
         const retryAfter = upstreamResponse.headers.get('retry-after');
         await updateProviderStats(currentProvider.id, false, latencyMs);
         await addLog({
           providerId: currentProvider.id,
           providerName: currentProvider.name,
-          model: body.model,
+          model: selectedModel || requestedModel,
           status: 'retry',
           statusCode,
           latencyMs,
@@ -200,19 +196,14 @@ export async function POST(request: NextRequest) {
         });
         lastError = { message: `Rate limited (429) from ${currentProvider.name}` };
         
-        // If streaming and this is the last attempt, return the error as SSE
         if (isStreaming && attempt === config.maxRetries - 1) {
-          const sseData = `data: ${JSON.stringify({ error: { message: lastError.message, type: 'rate_limit_error' } })}\n\ndata: [DONE]\n\n`;
+          const sseData = `data: ${JSON.stringify({ error: { message: lastError.message, type: 'rate_limit_error' } })}\ndata: [DONE]\n\n`;
           return new NextResponse(sseData, {
             status: 429,
-            headers: {
-              'Content-Type': 'text/event-stream',
-              ...corsHeaders(),
-            },
+            headers: { 'Content-Type': 'text/event-stream', ...corsHeaders() },
           });
         }
 
-        // Get next provider
         const next = await getNextProvider(config.mode, currentProvider.id, triedIds);
         if (!next) break;
         currentProvider = next;
@@ -227,14 +218,13 @@ export async function POST(request: NextRequest) {
       await addLog({
         providerId: currentProvider.id,
         providerName: currentProvider.name,
-        model: body.model,
-        status: statusCode >= 500 ? 'error' : 'error',
+        model: selectedModel || requestedModel,
+        status: 'error',
         statusCode,
         latencyMs,
         errorMessage: errorBody?.error?.message || errorBody?.message || `HTTP ${statusCode}`,
       });
 
-      // Non-retryable client errors (4xx except 429)
       if (statusCode >= 400 && statusCode < 500) {
         return withCors(NextResponse.json(errorBody, { status: statusCode }));
       }
@@ -249,7 +239,7 @@ export async function POST(request: NextRequest) {
       await addLog({
         providerId: currentProvider.id,
         providerName: currentProvider.name,
-        model: body.model,
+        model: selectedModel || requestedModel,
         status: isTimeout ? 'timeout' : 'error',
         latencyMs,
         errorMessage: isTimeout ? 'Request timed out' : error.message,
@@ -258,13 +248,11 @@ export async function POST(request: NextRequest) {
       lastError = { message: isTimeout ? 'Request timed out' : error.message };
     }
 
-    // Get next provider for retry
     const next = await getNextProvider(config.mode, currentProvider.id, triedIds);
     if (!next) break;
     currentProvider = next;
   }
 
-  // All providers failed
   const errorResponse = {
     error: {
       message: `All providers failed after ${triedIds.size} attempts. Last error: ${lastError?.message || 'Unknown'}`,
@@ -274,26 +262,22 @@ export async function POST(request: NextRequest) {
   };
 
   if (isStreaming) {
-    const sseData = `data: ${JSON.stringify(errorResponse)}\n\ndata: [DONE]\n\n`;
+    const sseData = `data: ${JSON.stringify(errorResponse)}\ndata: [DONE]\n\n`;
     return new NextResponse(sseData, {
       status: 502,
-      headers: {
-        'Content-Type': 'text/event-stream',
-        ...corsHeaders(),
-      },
+      headers: { 'Content-Type': 'text/event-stream', ...corsHeaders() },
     });
   }
 
   return withCors(NextResponse.json(errorResponse, { status: 502 }));
 }
 
-// Also handle GET for compatibility check
 export async function GET() {
   return withCors(
     NextResponse.json({
       status: 'ok',
       service: 'Razoter',
-      version: '1.0.0',
+      version: '2.0.0',
       endpoint: '/api/v1/chat/completions',
     })
   );

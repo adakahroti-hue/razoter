@@ -29,12 +29,22 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { name, baseUrl, apiKey, model, priority, enabled } = body;
+    const { name, baseUrl, apiKey, models, selectedModels, priority, enabled } = body;
 
-    if (!name || !baseUrl || !apiKey || !model) {
+    if (!name || !baseUrl || !apiKey) {
       return withCors(
         NextResponse.json(
-          { error: 'Missing required fields: name, baseUrl, apiKey, model' },
+          { error: 'Missing required fields: name, baseUrl, apiKey' },
+          { status: 400 }
+        )
+      );
+    }
+
+    // models is required and must be a non-empty array
+    if (!Array.isArray(models) || models.length === 0) {
+      return withCors(
+        NextResponse.json(
+          { error: 'At least one model is required. Click "Test Connection" to discover models.' },
           { status: 400 }
         )
       );
@@ -42,9 +52,12 @@ export async function POST(request: NextRequest) {
 
     const provider = await addProvider({
       name,
-      baseUrl: baseUrl.replace(/\/$/, ''),
+      baseUrl: baseUrl.replace(/\/+$/, ''),
       apiKey,
-      model,
+      models,
+      selectedModels: Array.isArray(selectedModels) && selectedModels.length > 0
+        ? selectedModels
+        : models, // default: all models selected
       priority: priority ?? 10,
       enabled: enabled ?? true,
     });
@@ -69,7 +82,7 @@ export async function PUT(request: NextRequest) {
     }
 
     if (updates.baseUrl) {
-      updates.baseUrl = updates.baseUrl.replace(/\/$/, '');
+      updates.baseUrl = updates.baseUrl.replace(/\/+$/, '');
     }
 
     const updated = await updateProvider(id, updates);
