@@ -8,11 +8,11 @@ export async function OPTIONS() {
 }
 
 export async function GET(request: NextRequest) {
-  if (!verifyApiKey(request)) {
+  if (!await verifyApiKey(request)) {
     return withCors(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
   }
 
-  const providers = getEnabledProviders();
+  const providers = await getEnabledProviders();
   const results = await Promise.allSettled(
     providers.map(async (provider) => {
       const startTime = Date.now();
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
         const latency = Date.now() - startTime;
         
         const status = res.ok ? 'healthy' : 'degraded';
-        updateProvider(provider.id, { healthStatus: status });
+        await updateProvider(provider.id, { healthStatus: status });
         
         return {
           providerId: provider.id,
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
         };
       } catch (error: any) {
         const latency = Date.now() - startTime;
-        updateProvider(provider.id, { healthStatus: 'down' });
+        await updateProvider(provider.id, { healthStatus: 'down' });
         return {
           providerId: provider.id,
           providerName: provider.name,

@@ -9,12 +9,12 @@ export async function OPTIONS() {
 }
 
 export async function GET(request: NextRequest) {
-  if (!verifyApiKey(request)) {
+  if (!await verifyApiKey(request)) {
     return withCors(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
   }
 
-  const logs = getLogs(500);
-  const providers = getProviders();
+  const logs = await getLogs(500);
+  const providers = await getProviders();
 
   const successCount = logs.filter(l => l.status === 'success').length;
   const errorCount = logs.filter(l => l.status === 'error' || l.status === 'timeout').length;

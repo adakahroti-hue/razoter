@@ -8,11 +8,11 @@ export async function OPTIONS() {
 }
 
 export async function GET(request: NextRequest) {
-  if (!verifyApiKey(request)) {
+  if (!await verifyApiKey(request)) {
     return withCors(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
   }
 
-  const config = getConfig();
+  const config = await getConfig();
   return withCors(
     NextResponse.json({
       mode: config.mode,
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  if (!verifyApiKey(request)) {
+  if (!await verifyApiKey(request)) {
     return withCors(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
   }
 
@@ -39,7 +39,7 @@ export async function PUT(request: NextRequest) {
           NextResponse.json({ error: 'Both currentKey and newKey are required' }, { status: 400 })
         );
       }
-      const config = getConfig();
+      const config = await getConfig();
       if (currentKey !== config.razoterApiKey) {
         return withCors(
           NextResponse.json({ error: 'Current key is incorrect' }, { status: 403 })
@@ -50,7 +50,7 @@ export async function PUT(request: NextRequest) {
           NextResponse.json({ error: 'New key must be at least 8 characters' }, { status: 400 })
         );
       }
-      updateConfig({ razoterApiKey: newKey });
+      await updateConfig({ razoterApiKey: newKey });
       return withCors(
         NextResponse.json({
           success: true,
@@ -67,7 +67,7 @@ export async function PUT(request: NextRequest) {
       for (let i = 0; i < 32; i++) {
         newApiKey += chars.charAt(Math.floor(Math.random() * chars.length));
       }
-      updateConfig({ razoterApiKey: newApiKey });
+      await updateConfig({ razoterApiKey: newApiKey });
       return withCors(
         NextResponse.json({
           success: true,
@@ -90,7 +90,7 @@ export async function PUT(request: NextRequest) {
     if (maxRetries !== undefined) updates.maxRetries = Math.max(1, Math.min(10, maxRetries));
     if (timeoutMs !== undefined) updates.timeoutMs = Math.max(5000, Math.min(120000, timeoutMs));
 
-    const config = updateConfig(updates);
+    const config = await updateConfig(updates);
     return withCors(
       NextResponse.json({
         mode: config.mode,

@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
 import { getConfig } from './storage';
 
-export function verifyApiKey(request: NextRequest): boolean {
-  const config = getConfig();
+export async function verifyApiKey(request: NextRequest): Promise<boolean> {
+  const config = await getConfig();
   const authHeader = request.headers.get('authorization');
   
   if (!authHeader) return false;

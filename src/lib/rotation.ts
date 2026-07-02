@@ -15,8 +15,8 @@ function filterAvailable(providers: Provider[]): Provider[] {
   return available.length > 0 ? available : providers;
 }
 
-export function selectProvider(mode: RotationMode): Provider | null {
-  const providers = getEnabledProviders();
+export async function selectProvider(mode: RotationMode): Promise<Provider | null> {
+  const providers = await getEnabledProviders();
   if (providers.length === 0) return null;
 
   const available = filterAvailable(providers);
@@ -53,8 +53,8 @@ function selectByPriority(providers: Provider[]): Provider {
   return topTier[Math.floor(Math.random() * topTier.length)];
 }
 
-export function getProviderOrder(mode: RotationMode): Provider[] {
-  const providers = getEnabledProviders();
+export async function getProviderOrder(mode: RotationMode): Promise<Provider[]> {
+  const providers = await getEnabledProviders();
   if (providers.length === 0) return [];
 
   switch (mode) {
@@ -67,12 +67,12 @@ export function getProviderOrder(mode: RotationMode): Provider[] {
   }
 }
 
-export function getNextProvider(
+export async function getNextProvider(
   mode: RotationMode,
   failedProviderId: string,
   triedIds: Set<string>
-): Provider | null {
-  const order = getProviderOrder(mode);
+): Promise<Provider | null> {
+  const order = await getProviderOrder(mode);
   
   for (const provider of order) {
     if (!triedIds.has(provider.id) && provider.enabled && provider.id !== failedProviderId && !isRateLimited(provider)) {

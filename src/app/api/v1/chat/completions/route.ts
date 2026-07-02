@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Verify API key
-  if (!verifyApiKey(request)) {
+  if (!await verifyApiKey(request)) {
     return withCors(
       NextResponse.json(
         { error: { message: 'Invalid API key', type: 'auth_error', code: 'invalid_api_key' } },
@@ -83,8 +83,8 @@ export async function POST(request: NextRequest) {
   }
 
   const isStreaming = body.stream === true;
-  const config = getConfig();
-  const enabledProviders = getEnabledProviders();
+  const config = await getConfig();
+  const enabledProviders = await getEnabledProviders();
   
   if (enabledProviders.length === 0) {
     return withCors(
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
   }
 
   const triedIds = new Set<string>();
-  let currentProvider = selectProvider(config.mode);
+  let currentProvider = await selectProvider(config.mode);
   let lastError: any = null;
 
   for (let attempt = 0; attempt < config.maxRetries && currentProvider; attempt++) {
@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
 
       // Parse rate limit headers from provider response (for both success and 429)
       const rl = parseRateLimitHeaders(upstreamResponse.headers);
-      updateProviderRateLimit(
+      await updateProviderRateLimit(
         currentProvider.id,
         rl.remaining,
         rl.reset,
@@ -137,8 +137,8 @@ export async function POST(request: NextRequest) {
       if (upstreamResponse.ok) {
         // Streaming response
         if (isStreaming && upstreamResponse.body) {
-          updateProviderStats(currentProvider.id, true, latencyMs);
-          addLog({
+          await updateProviderStats(currentProvider.id, true, latencyMs);
+          await addLog({
             providerId: currentProvider.id,
             providerName: currentProvider.name,
             model: body.model,
@@ -164,8 +164,8 @@ export async function POST(request: NextRequest) {
 
         // Non-streaming response
         const data = await upstreamResponse.json();
-        updateProviderStats(currentProvider.id, true, latencyMs);
-        addLog({
+        await updateProviderStats(currentProvider.id, true, latencyMs);
+        await addLog({
           providerId: currentProvider.id,
           providerName: currentProvider.name,
           model: body.model,
@@ -188,8 +188,8 @@ export async function POST(request: NextRequest) {
       // Handle 429 with retry-after
       if (statusCode === 429) {
         const retryAfter = upstreamResponse.headers.get('retry-after');
-        updateProviderStats(currentProvider.id, false, latencyMs);
-        addLog({
+        await updateProviderStats(currentProvider.id, false, latencyMs);
+        await addLog({
           providerId: currentProvider.id,
           providerName: currentProvider.name,
           model: body.model,
@@ -213,7 +213,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Get next provider
-        const next = getNextProvider(config.mode, currentProvider.id, triedIds);
+        const next = await getNextProvider(config.mode, currentProvider.id, triedIds);
         if (!next) break;
         currentProvider = next;
         continue;
@@ -223,8 +223,8 @@ export async function POST(request: NextRequest) {
       let errorBody: any;
       try { errorBody = JSON.parse(errorText); } catch { errorBody = { message: errorText }; }
 
-      updateProviderStats(currentProvider.id, false, latencyMs);
-      addLog({
+      await updateProviderStats(currentProvider.id, false, latencyMs);
+      await addLog({
         providerId: currentProvider.id,
         providerName: currentProvider.name,
         model: body.model,
@@ -245,8 +245,8 @@ export async function POST(request: NextRequest) {
       const latencyMs = Date.now() - attemptStart;
       const isTimeout = error.name === 'AbortError';
       
-      updateProviderStats(currentProvider.id, false, latencyMs);
-      addLog({
+      await updateProviderStats(currentProvider.id, false, latencyMs);
+      await addLog({
         providerId: currentProvider.id,
         providerName: currentProvider.name,
         model: body.model,
@@ -259,7 +259,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get next provider for retry
-    const next = getNextProvider(config.mode, currentProvider.id, triedIds);
+    const next = await getNextProvider(config.mode, currentProvider.id, triedIds);
     if (!next) break;
     currentProvider = next;
   }

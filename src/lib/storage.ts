@@ -1,33 +1,70 @@
 import { Provider, AppConfig, RequestLog, RateLimitEntry } from './types';
+import { supabase } from './supabase';
 import { randomUUID } from 'crypto';
 
-// In-memory storage for Vercel serverless (resets on cold start)
-// For production, use Vercel KV, Postgres, or a database
-
-let providers: Provider[] = [];
-let logs: RequestLog[] = [];
-let config: AppConfig = {
-  mode: 'failover',
-  razoterApiKey: process.env.RAZOTER_API_KEY || 'razoter-default-key-change-me',
-  maxRetries: 3,
-  timeoutMs: 30000,
-};
+// In-memory round-robin index (not persisted)
 let roundRobinIndex = 0;
 
-// Rate limiting per IP
+// Rate limiting per IP (in-memory, resets on cold start - acceptable for serverless)
 const rateLimitStore = new Map<string, RateLimitEntry>();
 
-const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX || '60'); // requests per window
-const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000'); // 1 minute
+const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX || '60');
+const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000');
 
-// ─── Rate Limiting ───────────────────────────────────────
+// ─── Mapping helpers (camelCase ↔ snake_case) ────────────
+
+function dbToProvider(row: any): Provider {
+  return {
+    id: row.id,
+    name: row.name,
+    baseUrl: row.base_url,
+    apiKey: row.api_key,
+    model: row.model,
+    priority: row.priority,
+    enabled: row.enabled,
+    createdAt: row.created_at,
+    lastUsed: row.last_used ?? undefined,
+    requestCount: row.request_count ?? 0,
+    errorCount: row.error_count ?? 0,
+    avgLatency: row.avg_latency ?? 0,
+    healthStatus: row.health_status ?? 'unknown',
+    rateLimitRemaining: row.rate_limit_remaining ?? undefined,
+    rateLimitReset: row.rate_limit_reset ?? undefined,
+    rateLimitTotal: row.rate_limit_total ?? undefined,
+  };
+}
+
+function dbToConfig(row: any): AppConfig {
+  return {
+    mode: row.mode ?? 'failover',
+    razoterApiKey: row.razoter_api_key ?? (process.env.RAZOTER_API_KEY || 'razoter-default-key-change-me'),
+    maxRetries: row.max_retries ?? 3,
+    timeoutMs: row.timeout_ms ?? 30000,
+  };
+}
+
+function dbToLog(row: any): RequestLog {
+  return {
+    id: row.id,
+    timestamp: row.timestamp,
+    providerId: row.provider_id,
+    providerName: row.provider_name,
+    model: row.model,
+    status: row.status,
+    statusCode: row.status_code ?? undefined,
+    latencyMs: row.latency_ms,
+    errorMessage: row.error_message ?? undefined,
+    tokensUsed: row.tokens_used ?? undefined,
+  };
+}
+
+// ─── Rate Limiting (in-memory) ─────────────────────────
 
 export function checkRateLimit(ip: string): { allowed: boolean; limit: number; remaining: number; resetAt: number } {
   const now = Date.now();
   const entry = rateLimitStore.get(ip);
 
   if (!entry || now > entry.resetAt) {
-    // New window
     const resetAt = now + RATE_LIMIT_WINDOW_MS;
     rateLimitStore.set(ip, { count: 1, resetAt });
     return { allowed: true, limit: RATE_LIMIT_MAX, remaining: RATE_LIMIT_MAX - 1, resetAt };
@@ -43,91 +80,227 @@ export function checkRateLimit(ip: string): { allowed: boolean; limit: number; r
 
 // ─── Providers ────────────────────────────────────────────
 
-export function getProviders(): Provider[] {
-  return providers;
-}
+export async function getProviders(): Promise<Provider[]> {
+  const { data, error } = await supabase
+    .from('providers')
+    .select('*')
+    .order('priority', { ascending: true });
 
-export function getProvider(id: string): Provider | undefined {
-  return providers.find(p => p.id === id);
-}
-
-export function addProvider(data: Omit<Provider, 'id' | 'createdAt' | 'requestCount' | 'errorCount' | 'avgLatency' | 'healthStatus'>): Provider {
-  const provider: Provider = {
-    ...data,
-    id: randomUUID(),
-    createdAt: new Date().toISOString(),
-    requestCount: 0,
-    errorCount: 0,
-    avgLatency: 0,
-    healthStatus: 'unknown',
-  };
-  providers.push(provider);
-  return provider;
-}
-
-export function updateProvider(id: string, data: Partial<Provider>): Provider | null {
-  const idx = providers.findIndex(p => p.id === id);
-  if (idx === -1) return null;
-  providers[idx] = { ...providers[idx], ...data, id };
-  return providers[idx];
-}
-
-export function deleteProvider(id: string): boolean {
-  const idx = providers.findIndex(p => p.id === id);
-  if (idx === -1) return false;
-  providers.splice(idx, 1);
-  return true;
-}
-
-export function getEnabledProviders(): Provider[] {
-  return providers.filter(p => p.enabled);
-}
-
-export function updateProviderStats(providerId: string, success: boolean, latencyMs: number) {
-  const provider = providers.find(p => p.id === providerId);
-  if (!provider) return;
-  
-  provider.requestCount++;
-  provider.lastUsed = new Date().toISOString();
-  
-  if (!success) {
-    provider.errorCount++;
+  if (error) {
+    console.error('Supabase getProviders error:', error);
+    return [];
   }
-  
-  // Rolling average latency
-  provider.avgLatency = Math.round(
-    (provider.avgLatency * (provider.requestCount - 1) + latencyMs) / provider.requestCount
-  );
-  
-  // Health status based on error rate
-  const errorRate = provider.errorCount / provider.requestCount;
-  if (errorRate < 0.1) provider.healthStatus = 'healthy';
-  else if (errorRate < 0.3) provider.healthStatus = 'degraded';
-  else provider.healthStatus = 'down';
+  return (data ?? []).map(dbToProvider);
 }
 
-export function updateProviderRateLimit(
+export async function getProvider(id: string): Promise<Provider | undefined> {
+  const { data, error } = await supabase
+    .from('providers')
+    .select('*')
+    .eq('id', id)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Supabase getProvider error:', error);
+    return undefined;
+  }
+  return data ? dbToProvider(data) : undefined;
+}
+
+export async function addProvider(data: Omit<Provider, 'id' | 'createdAt' | 'requestCount' | 'errorCount' | 'avgLatency' | 'healthStatus'>): Promise<Provider> {
+  const id = randomUUID();
+  const now = new Date().toISOString();
+
+  const insertRow = {
+    id,
+    name: data.name,
+    base_url: data.baseUrl,
+    api_key: data.apiKey,
+    model: data.model,
+    priority: data.priority,
+    enabled: data.enabled,
+    created_at: now,
+    request_count: 0,
+    error_count: 0,
+    avg_latency: 0,
+    health_status: 'unknown',
+  };
+
+  const { data: inserted, error } = await supabase
+    .from('providers')
+    .insert(insertRow)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Supabase addProvider error:', error);
+    throw new Error(`Failed to add provider: ${error.message}`);
+  }
+  return dbToProvider(inserted);
+}
+
+export async function updateProvider(id: string, data: Partial<Provider>): Promise<Provider | null> {
+  // Build update object, only setting fields that are provided
+  const updateObj: Record<string, any> = {};
+  if (data.name !== undefined) updateObj.name = data.name;
+  if (data.baseUrl !== undefined) updateObj.base_url = data.baseUrl;
+  if (data.apiKey !== undefined) updateObj.api_key = data.apiKey;
+  if (data.model !== undefined) updateObj.model = data.model;
+  if (data.priority !== undefined) updateObj.priority = data.priority;
+  if (data.enabled !== undefined) updateObj.enabled = data.enabled;
+  if (data.lastUsed !== undefined) updateObj.last_used = data.lastUsed;
+  if (data.requestCount !== undefined) updateObj.request_count = data.requestCount;
+  if (data.errorCount !== undefined) updateObj.error_count = data.errorCount;
+  if (data.avgLatency !== undefined) updateObj.avg_latency = data.avgLatency;
+  if (data.healthStatus !== undefined) updateObj.health_status = data.healthStatus;
+  if (data.rateLimitRemaining !== undefined) updateObj.rate_limit_remaining = data.rateLimitRemaining;
+  if (data.rateLimitReset !== undefined) updateObj.rate_limit_reset = data.rateLimitReset;
+  if (data.rateLimitTotal !== undefined) updateObj.rate_limit_total = data.rateLimitTotal;
+
+  const { data: updated, error } = await supabase
+    .from('providers')
+    .update(updateObj)
+    .eq('id', id)
+    .select()
+    .maybeSingle();
+
+  if (error) {
+    console.error('Supabase updateProvider error:', error);
+    return null;
+  }
+  return updated ? dbToProvider(updated) : null;
+}
+
+export async function deleteProvider(id: string): Promise<boolean> {
+  const { error, count } = await supabase
+    .from('providers')
+    .delete({ count: 'exact' })
+    .eq('id', id);
+
+  if (error) {
+    console.error('Supabase deleteProvider error:', error);
+    return false;
+  }
+  return (count ?? 0) > 0;
+}
+
+export async function getEnabledProviders(): Promise<Provider[]> {
+  const { data, error } = await supabase
+    .from('providers')
+    .select('*')
+    .eq('enabled', true)
+    .order('priority', { ascending: true });
+
+  if (error) {
+    console.error('Supabase getEnabledProviders error:', error);
+    return [];
+  }
+  return (data ?? []).map(dbToProvider);
+}
+
+export async function updateProviderStats(providerId: string, success: boolean, latencyMs: number): Promise<void> {
+  // Fetch current stats
+  const provider = await getProvider(providerId);
+  if (!provider) return;
+
+  const newRequestCount = provider.requestCount + 1;
+  const newErrorCount = provider.errorCount + (success ? 0 : 1);
+  const newAvgLatency = Math.round(
+    (provider.avgLatency * provider.requestCount + latencyMs) / newRequestCount
+  );
+
+  const errorRate = newErrorCount / newRequestCount;
+  let healthStatus: string;
+  if (errorRate < 0.1) healthStatus = 'healthy';
+  else if (errorRate < 0.3) healthStatus = 'degraded';
+  else healthStatus = 'down';
+
+  const { error } = await supabase
+    .from('providers')
+    .update({
+      request_count: newRequestCount,
+      error_count: newErrorCount,
+      avg_latency: newAvgLatency,
+      health_status: healthStatus,
+      last_used: new Date().toISOString(),
+    })
+    .eq('id', providerId);
+
+  if (error) {
+    console.error('Supabase updateProviderStats error:', error);
+  }
+}
+
+export async function updateProviderRateLimit(
   providerId: string,
   remaining: number | undefined,
   reset: number | undefined,
   total: number | undefined
-) {
-  const provider = providers.find(p => p.id === providerId);
-  if (!provider) return;
-  if (remaining !== undefined) provider.rateLimitRemaining = remaining;
-  if (reset !== undefined) provider.rateLimitReset = reset;
-  if (total !== undefined) provider.rateLimitTotal = total;
+): Promise<void> {
+  const updateObj: Record<string, any> = {};
+  if (remaining !== undefined) updateObj.rate_limit_remaining = remaining;
+  if (reset !== undefined) updateObj.rate_limit_reset = reset;
+  if (total !== undefined) updateObj.rate_limit_total = total;
+
+  if (Object.keys(updateObj).length === 0) return;
+
+  const { error } = await supabase
+    .from('providers')
+    .update(updateObj)
+    .eq('id', providerId);
+
+  if (error) {
+    console.error('Supabase updateProviderRateLimit error:', error);
+  }
 }
 
 // ─── Config ───────────────────────────────────────────────
 
-export function getConfig(): AppConfig {
-  return config;
+export async function getConfig(): Promise<AppConfig> {
+  const { data, error } = await supabase
+    .from('app_config')
+    .select('*')
+    .eq('id', 1)
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) {
+    console.error('Supabase getConfig error:', error);
+    // Return defaults if config row doesn't exist yet
+    return {
+      mode: 'failover',
+      razoterApiKey: process.env.RAZOTER_API_KEY || 'razoter-default-key-change-me',
+      maxRetries: 3,
+      timeoutMs: 30000,
+    };
+  }
+  return dbToConfig(data);
 }
 
-export function updateConfig(data: Partial<AppConfig>): AppConfig {
-  config = { ...config, ...data };
-  return config;
+export async function updateConfig(data: Partial<AppConfig>): Promise<AppConfig> {
+  const updateObj: Record<string, any> = {};
+  if (data.mode !== undefined) updateObj.mode = data.mode;
+  if (data.razoterApiKey !== undefined) updateObj.razoter_api_key = data.razoterApiKey;
+  if (data.maxRetries !== undefined) updateObj.max_retries = data.maxRetries;
+  if (data.timeoutMs !== undefined) updateObj.timeout_ms = data.timeoutMs;
+  updateObj.updated_at = new Date().toISOString();
+
+  const { data: updated, error } = await supabase
+    .from('app_config')
+    .update(updateObj)
+    .eq('id', 1)
+    .select()
+    .maybeSingle();
+
+  if (error) {
+    console.error('Supabase updateConfig error:', error);
+    // Fall back to current config with requested updates applied
+    const current = await getConfig();
+    return { ...current, ...data };
+  }
+
+  return updated ? dbToConfig(updated) : await getConfig();
 }
 
 export function getRoundRobinIndex(): number {
@@ -141,26 +314,70 @@ export function incrementRoundRobinIndex(max: number): number {
 
 // ─── Logs ─────────────────────────────────────────────────
 
-export function addLog(log: Omit<RequestLog, 'id' | 'timestamp'>): RequestLog {
-  const entry: RequestLog = {
-    ...log,
-    id: randomUUID(),
-    timestamp: new Date().toISOString(),
+export async function addLog(log: Omit<RequestLog, 'id' | 'timestamp'>): Promise<RequestLog> {
+  const id = randomUUID();
+  const timestamp = new Date().toISOString();
+
+  const insertRow = {
+    id,
+    timestamp,
+    provider_id: log.providerId,
+    provider_name: log.providerName,
+    model: log.model,
+    status: log.status,
+    status_code: log.statusCode ?? null,
+    latency_ms: log.latencyMs,
+    error_message: log.errorMessage ?? null,
+    tokens_used: log.tokensUsed ?? null,
   };
-  logs.unshift(entry);
-  // Keep only last 500 logs in memory
-  if (logs.length > 500) logs = logs.slice(0, 500);
-  return entry;
+
+  const { data, error } = await supabase
+    .from('request_logs')
+    .insert(insertRow)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Supabase addLog error:', error);
+    // Return the log object even if DB insert fails
+    return { ...log, id, timestamp };
+  }
+  return dbToLog(data);
 }
 
-export function getLogs(limit = 50, offset = 0): RequestLog[] {
-  return logs.slice(offset, offset + limit);
+export async function getLogs(limit = 50, offset = 0): Promise<RequestLog[]> {
+  const { data, error } = await supabase
+    .from('request_logs')
+    .select('*')
+    .order('timestamp', { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  if (error) {
+    console.error('Supabase getLogs error:', error);
+    return [];
+  }
+  return (data ?? []).map(dbToLog);
 }
 
-export function clearLogs() {
-  logs = [];
+export async function clearLogs(): Promise<void> {
+  const { error } = await supabase
+    .from('request_logs')
+    .delete()
+    .neq('id', '00000000-0000-0000-0000-000000000000'); // delete all rows
+
+  if (error) {
+    console.error('Supabase clearLogs error:', error);
+  }
 }
 
-export function getLogsCount(): number {
-  return logs.length;
+export async function getLogsCount(): Promise<number> {
+  const { count, error } = await supabase
+    .from('request_logs')
+    .select('*', { count: 'exact', head: true });
+
+  if (error) {
+    console.error('Supabase getLogsCount error:', error);
+    return 0;
+  }
+  return count ?? 0;
 }

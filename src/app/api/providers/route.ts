@@ -8,11 +8,11 @@ export async function OPTIONS() {
 }
 
 export async function GET(request: NextRequest) {
-  if (!verifyApiKey(request)) {
+  if (!await verifyApiKey(request)) {
     return withCors(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
   }
 
-  const providers = getProviders();
+  const providers = await getProviders();
   // Mask API keys in response
   const masked = providers.map(p => ({
     ...p,
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!verifyApiKey(request)) {
+  if (!await verifyApiKey(request)) {
     return withCors(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
   }
 
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const provider = addProvider({
+    const provider = await addProvider({
       name,
       baseUrl: baseUrl.replace(/\/$/, ''),
       apiKey,
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  if (!verifyApiKey(request)) {
+  if (!await verifyApiKey(request)) {
     return withCors(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
   }
 
@@ -72,7 +72,7 @@ export async function PUT(request: NextRequest) {
       updates.baseUrl = updates.baseUrl.replace(/\/$/, '');
     }
 
-    const updated = updateProvider(id, updates);
+    const updated = await updateProvider(id, updates);
     if (!updated) {
       return withCors(NextResponse.json({ error: 'Provider not found' }, { status: 404 }));
     }
@@ -84,7 +84,7 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  if (!verifyApiKey(request)) {
+  if (!await verifyApiKey(request)) {
     return withCors(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
   }
 
@@ -93,7 +93,7 @@ export async function DELETE(request: NextRequest) {
     return withCors(NextResponse.json({ error: 'Missing provider id' }, { status: 400 }));
   }
 
-  const deleted = deleteProvider(id);
+  const deleted = await deleteProvider(id);
   if (!deleted) {
     return withCors(NextResponse.json({ error: 'Provider not found' }, { status: 404 }));
   }
