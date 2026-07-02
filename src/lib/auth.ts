@@ -114,14 +114,30 @@ export async function getUserById(id: string): Promise<{ id: string; username: s
 // ─── API Key auth (kept for proxy endpoint) ───────────
 
 export async function verifyApiKey(request: NextRequest): Promise<boolean> {
-  const config = await getConfig();
   const authHeader = request.headers.get('authorization');
 
   if (!authHeader) return false;
 
-  // Support both "Bearer sk-xxx" and direct key
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-  return token === config.razoterApiKey;
+
+  // Check against the main config key first
+  const config = await getConfig();
+  if (token === config.razoterApiKey) return true;
+
+  // Check against api_keys table
+  try {
+    const { data } = await supabase
+      .from('api_keys')
+      .select('id')
+      .eq('key', token)
+      .limit(1)
+      .maybeSingle();
+    if (data) return true;
+  } catch {
+    // Ignore DB errors, fall through to false
+  }
+
+  return false;
 }
 
 export function getApiKeyFromRequest(request: NextRequest): string | null {

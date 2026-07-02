@@ -1,4 +1,4 @@
-import { Provider, AppConfig, RequestLog, RateLimitEntry } from './types';
+import { Provider, AppConfig, RequestLog, RateLimitEntry, ApiKey, Combo } from './types';
 import { supabase } from './supabase';
 import { randomUUID } from 'crypto';
 
@@ -390,4 +390,151 @@ export async function getLogsCount(): Promise<number> {
     return 0;
   }
   return count ?? 0;
+}
+
+// ─── API Keys ────────────────────────────────────────────
+
+export async function getApiKeys(): Promise<ApiKey[]> {
+  const { data, error } = await supabase
+    .from('api_keys')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Supabase getApiKeys error:', error);
+    return [];
+  }
+  return (data ?? []).map(row => ({
+    id: row.id,
+    name: row.name,
+    key: row.key,
+    createdAt: row.created_at,
+    lastUsedAt: row.last_used_at ?? null,
+  }));
+}
+
+export async function addApiKey(name: string, key: string): Promise<ApiKey> {
+  const id = randomUUID();
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from('api_keys')
+    .insert({ id, name, key, created_at: now })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Supabase addApiKey error:', error);
+    throw new Error(`Failed to add API key: ${error.message}`);
+  }
+
+  return { id: data.id, name: data.name, key: data.key, createdAt: data.created_at, lastUsedAt: null };
+}
+
+export async function deleteApiKey(id: string): Promise<boolean> {
+  const { error, count } = await supabase
+    .from('api_keys')
+    .delete({ count: 'exact' })
+    .eq('id', id);
+
+  if (error) {
+    console.error('Supabase deleteApiKey error:', error);
+    return false;
+  }
+  return (count ?? 0) > 0;
+}
+
+// ─── Combos ──────────────────────────────────────────────
+
+export async function getCombos(): Promise<Combo[]> {
+  const { data, error } = await supabase
+    .from('combos')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Supabase getCombos error:', error);
+    return [];
+  }
+  return (data ?? []).map(row => ({
+    id: row.id,
+    name: row.name,
+    items: row.items ?? [],
+    enabled: row.enabled ?? true,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function addCombo(name: string, items: Combo['items']): Promise<Combo> {
+  const id = randomUUID();
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from('combos')
+    .insert({ id, name, items, enabled: true, created_at: now })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Supabase addCombo error:', error);
+    throw new Error(`Failed to add combo: ${error.message}`);
+  }
+
+  return { id: data.id, name: data.name, items: data.items ?? [], enabled: data.enabled, createdAt: data.created_at };
+}
+
+export async function updateCombo(id: string, updates: Partial<Combo>): Promise<Combo | null> {
+  const updateObj: Record<string, any> = {};
+  if (updates.name !== undefined) updateObj.name = updates.name;
+  if (updates.items !== undefined) updateObj.items = updates.items;
+  if (updates.enabled !== undefined) updateObj.enabled = updates.enabled;
+
+  const { data, error } = await supabase
+    .from('combos')
+    .update(updateObj)
+    .eq('id', id)
+    .select()
+    .maybeSingle();
+
+  if (error) {
+    console.error('Supabase updateCombo error:', error);
+    return null;
+  }
+  if (!data) return null;
+
+  return { id: data.id, name: data.name, items: data.items ?? [], enabled: data.enabled, createdAt: data.created_at };
+}
+
+export async function deleteCombo(id: string): Promise<boolean> {
+  const { error, count } = await supabase
+    .from('combos')
+    .delete({ count: 'exact' })
+    .eq('id', id);
+
+  if (error) {
+    console.error('Supabase deleteCombo error:', error);
+    return false;
+  }
+  return (count ?? 0) > 0;
+}
+
+// ─── Combo resolution ────────────────────────────────────
+
+export async function resolveComboModel(modelName: string): Promise<{ providerId: string; model: string } | null> {
+  const { data, error } = await supabase
+    .from('combos')
+    .select('items')
+    .eq('name', modelName)
+    .eq('enabled', true)
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data || !data.items || data.items.length === 0) {
+    return null;
+  }
+
+  // Pick a random item from the combo
+  const items = data.items as Combo['items'];
+  const picked = items[Math.floor(Math.random() * items.length)];
+  return { providerId: picked.providerId, model: picked.model };
 }

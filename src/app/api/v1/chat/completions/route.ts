@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyApiKey } from '@/lib/auth';
 import { selectProvider, getNextProvider, pickModel } from '@/lib/rotation';
-import { getConfig, addLog, updateProviderStats, updateProviderRateLimit, getEnabledProviders, checkRateLimit } from '@/lib/storage';
+import { getConfig, addLog, updateProviderStats, updateProviderRateLimit, getEnabledProviders, checkRateLimit, resolveComboModel, getProvider } from '@/lib/storage';
 import { withCors, handleCorsPreflight, corsHeaders } from '@/lib/cors';
 
 export async function OPTIONS() {
@@ -80,6 +80,69 @@ export async function POST(request: NextRequest) {
   const requestedModel = body.model || '';
   const isStreaming = body.stream === true;
   const config = await getConfig();
+
+  // ─── Combo resolution ────────────────────────────────
+  // If the requested model matches a combo name, resolve it
+  // to a specific provider+model first.
+  let comboResolved = false;
+  if (requestedModel) {
+    const comboResult = await resolveComboModel(requestedModel);
+    if (comboResult) {
+      const comboProvider = await getProvider(comboResult.providerId);
+      if (comboProvider && comboProvider.enabled) {
+        // Directly use this provider+model, skip normal rotation
+        body.model = comboResult.model;
+        comboResolved = true;
+        
+        // Log and forward to the resolved provider
+        const startTime = Date.now();
+        try {
+          const upstreamUrl = `${comboProvider.baseUrl.replace(/\/+$/, '')}/chat/completions`;
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs);
+
+          const upstreamResponse = await fetch(upstreamUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${comboProvider.apiKey}`,
+            },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeoutId);
+          const latencyMs = Date.now() - startTime;
+
+          if (upstreamResponse.ok) {
+            if (isStreaming && upstreamResponse.body) {
+              await updateProviderStats(comboProvider.id, true, latencyMs);
+              await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'success', statusCode: 200, latencyMs });
+              return new NextResponse(upstreamResponse.body, {
+                status: 200,
+                headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', ...corsHeaders() },
+              });
+            }
+            const data = await upstreamResponse.json();
+            await updateProviderStats(comboProvider.id, true, latencyMs);
+            await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'success', statusCode: 200, latencyMs, tokensUsed: data.usage?.total_tokens });
+            return withCors(NextResponse.json(data, { status: 200 }));
+          }
+
+          // If the resolved provider fails, fall through to normal rotation
+          const errText = await upstreamResponse.text();
+          await updateProviderStats(comboProvider.id, false, latencyMs);
+          await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'error', statusCode: upstreamResponse.status, latencyMs, errorMessage: `HTTP ${upstreamResponse.status}` });
+        } catch (err: any) {
+          const latencyMs = Date.now() - startTime;
+          await updateProviderStats(comboProvider.id, false, latencyMs);
+          await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'error', latencyMs, errorMessage: err.message });
+        }
+        // Fall through to normal rotation if combo resolved provider failed
+      }
+    }
+  }
+
   const enabledProviders = await getEnabledProviders();
   
   if (enabledProviders.length === 0) {

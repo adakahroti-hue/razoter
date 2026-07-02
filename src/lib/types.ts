@@ -5,8 +5,8 @@ export interface Provider {
   name: string;
   baseUrl: string;
   apiKey: string;
-  models: string[];           // Array of model IDs this provider supports
-  selectedModels: string[];   // Which models the user wants to use (subset of models)
+  models: string[];
+  selectedModels: string[];
   priority: number;
   enabled: boolean;
   healthStatus: 'healthy' | 'degraded' | 'down' | 'unknown';
@@ -18,6 +18,32 @@ export interface Provider {
   rateLimitRemaining: number | null;
   rateLimitReset: number | null;
   rateLimitTotal: number | null;
+  createdAt: string;
+}
+
+// ─── API Key types ──────────────────────────────────
+
+export interface ApiKey {
+  id: string;
+  name: string;
+  key: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+// ─── Combo types ────────────────────────────────────
+
+export interface ComboItem {
+  providerId: string;
+  providerName: string;
+  model: string;
+}
+
+export interface Combo {
+  id: string;
+  name: string;
+  items: ComboItem[];
+  enabled: boolean;
   createdAt: string;
 }
 
