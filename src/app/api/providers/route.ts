@@ -85,6 +85,12 @@ export async function PUT(request: NextRequest) {
       updates.baseUrl = updates.baseUrl.replace(/\/+$/, '');
     }
 
+    // Skip apiKey update if it's a masked value (e.g. "sk-abc12...xyz9")
+    // Masked keys contain "..." and are only for display, not for storage
+    if (updates.apiKey && updates.apiKey.includes('...')) {
+      delete updates.apiKey;
+    }
+
     const updated = await updateProvider(id, updates);
     if (!updated) {
       return withCors(NextResponse.json({ error: 'Provider not found' }, { status: 404 }));

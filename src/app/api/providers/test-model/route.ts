@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyDashboardAuth } from '@/lib/auth';
+import { getProvider } from '@/lib/storage';
 import { withCors, handleCorsPreflight } from '@/lib/cors';
 
 export async function OPTIONS() {
@@ -19,15 +20,28 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { baseUrl, apiKey, model } = body;
+    const { baseUrl, apiKey, model, providerId } = body;
 
-    if (!baseUrl || !apiKey || !model) {
+    if (!baseUrl || !model) {
       return withCors(
         NextResponse.json(
-          { error: 'Missing required fields: baseUrl, apiKey, model' },
+          { error: 'Missing required fields: baseUrl, model' },
           { status: 400 }
         )
       );
+    }
+
+    // Resolve API key
+    let resolvedApiKey = apiKey;
+    if (!resolvedApiKey && providerId) {
+      const provider = await getProvider(providerId);
+      if (!provider) {
+        return withCors(NextResponse.json({ error: 'Provider not found' }, { status: 404 }));
+      }
+      resolvedApiKey = provider.apiKey;
+    }
+    if (!resolvedApiKey) {
+      return withCors(NextResponse.json({ error: 'No API key provided or stored' }, { status: 400 }));
     }
 
     const cleanUrl = baseUrl.replace(/\/+$/, '');
@@ -37,7 +51,7 @@ export async function POST(request: NextRequest) {
       const res = await fetch(`${cleanUrl}/chat/completions`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${apiKey}`,
+          'Authorization': `Bearer ${resolvedApiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

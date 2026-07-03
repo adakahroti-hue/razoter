@@ -239,12 +239,21 @@ export default function Dashboard() {
   // ─── Provider actions ────────────────────────────
 
   async function handleTestConnection() {
-    if (!providerForm.baseUrl || !providerForm.apiKey) return;
+    if (!providerForm.baseUrl) return;
+    // When editing without new key, use stored key by sending providerId
+    const testBody: Record<string, unknown> = { baseUrl: providerForm.baseUrl };
+    if (providerForm.apiKey) {
+      testBody.apiKey = providerForm.apiKey;
+    } else if (editingProvider) {
+      testBody.providerId = editingProvider.id;
+    } else {
+      return; // New provider needs a key
+    }
     setTestingConnection(true); setTestResult(null); setDiscoveredModels([]); setSelectedModels([]);
     try {
       const res = await api('/api/providers/test', {
         method: 'POST',
-        body: JSON.stringify({ baseUrl: providerForm.baseUrl, apiKey: providerForm.apiKey }),
+        body: JSON.stringify(testBody),
       });
       const data = await res.json();
       setTestResult(data);
@@ -264,14 +273,17 @@ export default function Dashboard() {
   }
 
   async function handleSaveProvider() {
-    if (!providerForm.name || !providerForm.baseUrl || !providerForm.apiKey) return;
+    if (!providerForm.name || !providerForm.baseUrl) return;
+    if (!editingProvider && !providerForm.apiKey) return; // New provider needs key
     if (discoveredModels.length === 0) { alert('Test connection dulu untuk discover models!'); return; }
     if (selectedModels.length === 0) { alert('Pilih minimal 1 model!'); return; }
     try {
-      const body = { name: providerForm.name, baseUrl: providerForm.baseUrl, apiKey: providerForm.apiKey, models: discoveredModels, selectedModels, priority: 10, enabled: true };
+      const body: Record<string, unknown> = { name: providerForm.name, baseUrl: providerForm.baseUrl, models: discoveredModels, selectedModels, priority: 10, enabled: true };
+      // Only include apiKey if user entered a new one
+      if (providerForm.apiKey) body.apiKey = providerForm.apiKey;
       const res = editingProvider
         ? await api('/api/providers', { method: 'PUT', body: JSON.stringify({ id: editingProvider.id, ...body }) })
-        : await api('/api/providers', { method: 'POST', body: JSON.stringify(body) });
+        : await api('/api/providers', { method: 'POST', body: JSON.stringify({ ...body, apiKey: providerForm.apiKey }) });
       if (res.ok) { setShowProviderModal(false); resetProviderForm(); fetchData(); }
       else { const err = await res.json(); alert(err.error || 'Failed'); }
     } catch { alert('Network error'); }
@@ -288,7 +300,7 @@ export default function Dashboard() {
 
   function openEditModal(provider: Provider) {
     setEditingProvider(provider);
-    setProviderForm({ name: provider.name, baseUrl: provider.baseUrl, apiKey: provider.apiKey });
+    setProviderForm({ name: provider.name, baseUrl: provider.baseUrl, apiKey: '' });
     setDiscoveredModels(provider.models);
     setSelectedModels(provider.selectedModels);
     setTestResult(null);
@@ -786,7 +798,7 @@ export default function Dashboard() {
               <div className="space-y-3">
                 <div><label className="text-sm text-slate-600">Nama Provider</label><input type="text" className="input mt-1" placeholder="e.g. OpenRouter, Together AI" value={providerForm.name} onChange={e => setProviderForm(f => ({ ...f, name: e.target.value }))} /></div>
                 <div><label className="text-sm text-slate-600">Base URL</label><input type="text" className="input mt-1" placeholder="https://openrouter.ai/api/v1" value={providerForm.baseUrl} onChange={e => setProviderForm(f => ({ ...f, baseUrl: e.target.value }))} /></div>
-                <div><label className="text-sm text-slate-600">API Key</label><input type="password" className="input mt-1" placeholder="sk-..." value={providerForm.apiKey} onChange={e => setProviderForm(f => ({ ...f, apiKey: e.target.value }))} /></div>
+                <div><label className="text-sm text-slate-600">API Key</label><input type="password" className="input mt-1" placeholder={editingProvider ? 'Enter new key to update (leave blank to keep current)' : 'sk-...'} value={providerForm.apiKey} onChange={e => setProviderForm(f => ({ ...f, apiKey: e.target.value }))} /></div>
               </div>
               <div className="border-t border-slate-200 pt-4">
                 <button onClick={handleTestConnection} disabled={testingConnection || !providerForm.baseUrl || !providerForm.apiKey} className="btn btn-primary w-full">
