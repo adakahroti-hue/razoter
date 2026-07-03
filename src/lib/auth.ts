@@ -113,25 +113,21 @@ export async function getUserById(id: string): Promise<{ id: string; username: s
 
 // ─── API Key auth (kept for proxy endpoint) ───────────
 
-export async function verifyApiKey(request: NextRequest): Promise<boolean> {
+export async function verifyApiKey(request: NextRequest): Promise<{ ok: boolean; debug?: string }> {
   const authHeader = request.headers.get('authorization');
 
-  if (!authHeader) {
-    console.error('[verifyApiKey] No authorization header');
-    return false;
-  }
+  if (!authHeader) return { ok: false, debug: 'no_auth_header' };
 
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-  console.error('[verifyApiKey] Token prefix:', token.slice(0, 10), 'length:', token.length);
+  const parts: string[] = [`token_prefix=${token.slice(0, 8)}`, `token_len=${token.length}`];
 
   // Check against the main config key first
   try {
     const config = await getConfig();
-    console.error('[verifyApiKey] Config key prefix:', config.razoterApiKey?.slice(0, 10), 'length:', config.razoterApiKey?.length);
-    console.error('[verifyApiKey] Config match:', token === config.razoterApiKey);
-    if (token === config.razoterApiKey) return true;
+    parts.push(`config_prefix=${config.razoterApiKey?.slice(0, 8) || 'null'}`, `config_len=${config.razoterApiKey?.length || 0}`);
+    if (token === config.razoterApiKey) return { ok: true };
   } catch (e: unknown) {
-    console.error('[verifyApiKey] getConfig error:', (e as Error).message);
+    parts.push(`config_error=${(e as Error).message}`);
   }
 
   // Check against api_keys table
@@ -142,14 +138,14 @@ export async function verifyApiKey(request: NextRequest): Promise<boolean> {
       .eq('key', token)
       .limit(1)
       .maybeSingle();
-    console.error('[verifyApiKey] api_keys lookup:', data ? 'FOUND' : 'NOT FOUND', error?.message || '');
-    if (data) return true;
+    if (error) parts.push(`db_error=${error.message}`);
+    if (data) return { ok: true };
+    parts.push(`db_found=false`);
   } catch (e: unknown) {
-    console.error('[verifyApiKey] api_keys query error:', (e as Error).message);
+    parts.push(`db_exception=${(e as Error).message}`);
   }
 
-  console.error('[verifyApiKey] All checks failed, returning false');
-  return false;
+  return { ok: false, debug: parts.join(' | ') };
 }
 
 export function getApiKeyFromRequest(request: NextRequest): string | null {
@@ -185,7 +181,8 @@ export async function verifyDashboardAuth(request: NextRequest): Promise<boolean
   if (jwtResult) return true;
 
   // Fall back to API key
-  return verifyApiKey(request);
+  const result = await verifyApiKey(request);
+  return result.ok;
 }
 
 // ─── Default admin creation ───────────────────────────
