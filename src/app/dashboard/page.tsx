@@ -156,6 +156,10 @@ export default function Dashboard() {
   const [comboForm, setComboForm] = useState({ name: '', strategy: 'failover-priority' as ComboStrategy });
   const [comboItems, setComboItems] = useState<ComboItem[]>([]);
 
+  // Model testing
+  const [modelTestResults, setModelTestResults] = useState<Record<string, { status: 'idle' | 'testing' | 'ok' | 'fail'; latencyMs?: number; error?: string }>>({});
+  const [testingAllModels, setTestingAllModels] = useState<string | null>(null); // providerId when testing all
+
   // Quota form
   const [showQuotaModal, setShowQuotaModal] = useState(false);
   const [quotaForm, setQuotaForm] = useState({ providerId: '', monthlyLimit: 0, resetDay: 1 });
@@ -353,6 +357,16 @@ export default function Dashboard() {
     setComboItems(prev => prev.filter((_, i) => i !== index));
   }
 
+  function moveComboItem(index: number, direction: 'up' | 'down') {
+    setComboItems(prev => {
+      const newIndex = direction === 'up' ? index - 1 : index + 1;
+      if (newIndex < 0 || newIndex >= prev.length) return prev;
+      const updated = [...prev];
+      [updated[index], updated[newIndex]] = [updated[newIndex], updated[index]];
+      return updated;
+    });
+  }
+
   async function handleSaveCombo() {
     if (!comboForm.name.trim()) { alert('Nama combo wajib diisi!'); return; }
     if (comboItems.length === 0) { alert('Tambah minimal 1 model!'); return; }
@@ -386,6 +400,36 @@ export default function Dashboard() {
   }
 
   // ─── Quota actions ───────────────────────────────
+
+  async function handleTestSingleModel(provider: Provider, model: string) {
+    const key = `${provider.id}:${model}`;
+    setModelTestResults(prev => ({ ...prev, [key]: { status: 'testing' } }));
+    try {
+      const res = await api('/api/providers/test-model', {
+        method: 'POST',
+        body: JSON.stringify({ baseUrl: provider.baseUrl, apiKey: provider.apiKey, model }),
+      });
+      const data = await res.json();
+      setModelTestResults(prev => ({
+        ...prev,
+        [key]: data.success
+          ? { status: 'ok', latencyMs: data.latencyMs }
+          : { status: 'fail', error: data.error, latencyMs: data.latencyMs },
+      }));
+    } catch {
+      setModelTestResults(prev => ({ ...prev, [key]: { status: 'fail', error: 'Network error' } }));
+    }
+  }
+
+  async function handleTestAllModels(provider: Provider) {
+    setTestingAllModels(provider.id);
+    setModelTestResults({});
+    const models = provider.selectedModels.length > 0 ? provider.selectedModels : provider.models;
+    for (const model of models) {
+      await handleTestSingleModel(provider, model);
+    }
+    setTestingAllModels(null);
+  }
 
   function openQuotaModal() {
     setQuotaForm({ providerId: '', monthlyLimit: 0, resetDay: 1 });
@@ -447,7 +491,7 @@ export default function Dashboard() {
   function formatTime(ts: string) { return new Date(ts).toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
   function formatLatency(ms: number) { return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`; }
 
-  const BASE_URL = 'https://razoter.vercel.app/v1';
+  const BASE_URL = 'https://razoter.vercel.app/api/v1';
 
   // ─── Login screen ────────────────────────────────
 
@@ -523,7 +567,24 @@ export default function Dashboard() {
                         </div>
                         <div className="text-xs text-slate-400 mt-1 font-mono">{p.baseUrl}</div>
                         <div className="flex flex-wrap gap-1 mt-2">
-                          {p.selectedModels.map(m => <span key={m} className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-600 text-xs font-mono">{m}</span>)}
+                          {(p.selectedModels.length > 0 ? p.selectedModels : p.models).map(m => {
+                            const key = `${p.id}:${m}`;
+                            const result = modelTestResults[key];
+                            const statusIcon = result?.status === 'testing' ? '⏳' : result?.status === 'ok' ? '✅' : result?.status === 'fail' ? '❌' : null;
+                            return (
+                              <span key={m} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono ${result?.status === 'ok' ? 'bg-emerald-50 text-emerald-700' : result?.status === 'fail' ? 'bg-red-50 text-red-700' : 'bg-indigo-50 text-indigo-600'}`}>
+                                {statusIcon && <span className="text-xs">{statusIcon}</span>}
+                                {m}
+                                {result?.status === 'ok' && result.latencyMs && <span className="text-xs opacity-70">{formatLatency(result.latencyMs)}</span>}
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleTestSingleModel(p, m); }}
+                                  disabled={result?.status === 'testing'}
+                                  className="ml-1 opacity-0 group-hover:opacity-100 hover:opacity-100 text-slate-400 hover:text-indigo-600 transition-opacity"
+                                  title="Test model ini"
+                                >🔍</button>
+                              </span>
+                            );
+                          })}
                           {p.selectedModels.length < p.models.length && <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-400 text-xs">+{p.models.length - p.selectedModels.length} more</span>}
                         </div>
                         <div className="flex gap-4 mt-2 text-xs text-slate-500">
@@ -531,10 +592,19 @@ export default function Dashboard() {
                           {p.rateLimitRemaining !== null && <span>🚦 {p.rateLimitRemaining}/{p.rateLimitTotal}</span>}
                         </div>
                       </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => handleToggleProvider(p)} className={`text-xs px-2 py-1 rounded ${p.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{p.enabled ? 'ON' : 'OFF'}</button>
-                        <button onClick={() => openEditModal(p)} className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200">Edit</button>
-                        <button onClick={() => handleDeleteProvider(p.id)} className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100">Hapus</button>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex gap-2">
+                          <button onClick={() => handleToggleProvider(p)} className={`text-xs px-2 py-1 rounded ${p.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{p.enabled ? 'ON' : 'OFF'}</button>
+                          <button onClick={() => openEditModal(p)} className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200">Edit</button>
+                          <button onClick={() => handleDeleteProvider(p.id)} className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100">Hapus</button>
+                        </div>
+                        <button
+                          onClick={() => handleTestAllModels(p)}
+                          disabled={testingAllModels === p.id}
+                          className="text-xs px-3 py-1.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors"
+                        >
+                          {testingAllModels === p.id ? '⏳ Testing...' : '🧪 Cek Semua Model'}
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -835,6 +905,20 @@ export default function Dashboard() {
                     const availableModels = provider ? provider.selectedModels : [];
                     return (
                       <div key={i} className="flex gap-2 items-end">
+                        <div className="flex flex-col gap-1">
+                          <button
+                            onClick={() => moveComboItem(i, 'up')}
+                            disabled={i === 0}
+                            className="text-xs px-1.5 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed"
+                            title="Pindah ke atas (prioritas lebih tinggi)"
+                          >▲</button>
+                          <button
+                            onClick={() => moveComboItem(i, 'down')}
+                            disabled={i === comboItems.length - 1}
+                            className="text-xs px-1.5 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed"
+                            title="Pindah ke bawah (prioritas lebih rendah)"
+                          >▼</button>
+                        </div>
                         <div className="flex-1">
                           <select className="input" value={item.providerId} onChange={e => updateComboItem(i, 'providerId', e.target.value)}>
                             <option value="">Pilih Provider...</option>
@@ -847,6 +931,7 @@ export default function Dashboard() {
                             {availableModels.map(m => <option key={m} value={m}>{m}</option>)}
                           </select>
                         </div>
+                        <span className="text-xs text-slate-400 font-mono w-6 text-center">#{i + 1}</span>
                         <button onClick={() => removeComboItem(i)} className="text-xs px-2 py-2 rounded bg-red-50 text-red-600 hover:bg-red-100">✕</button>
                       </div>
                     );
