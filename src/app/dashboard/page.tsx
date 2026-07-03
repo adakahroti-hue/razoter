@@ -135,7 +135,7 @@ export default function Dashboard() {
   const [combos, setCombos] = useState<Combo[]>([]);
   const [quotas, setQuotas] = useState<Quota[]>([]);
 
-  const [activeTab, setActiveTab] = useState<'providers' | 'combos' | 'logs' | 'settings' | 'quotas'>('providers');
+  const [activeTab, setActiveTab] = useState<'providers' | 'combos' | 'settings' | 'logs' | 'quotas'>('providers');
   const [showProviderModal, setShowProviderModal] = useState(false);
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
 
@@ -467,10 +467,6 @@ export default function Dashboard() {
     try { await api('/api/config', { method: 'PUT', body: JSON.stringify({ mode }) }); fetchData(); } catch {}
   }
 
-  async function handleHealthCheck() {
-    try { await api('/api/health'); fetchData(); } catch {}
-  }
-
   async function handleClearLogs() {
     if (!confirm('Hapus semua logs?')) return;
     try { await api('/api/logs', { method: 'DELETE' }); fetchData(); } catch {}
@@ -519,7 +515,6 @@ export default function Dashboard() {
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3"><h1 className="text-xl font-bold text-slate-900">Razoter</h1><span className="text-xs text-slate-400">v2.2</span></div>
           <div className="flex items-center gap-4">
-            <button onClick={handleHealthCheck} className="btn btn-secondary text-sm">🏥 Health Check</button>
             <button onClick={handleLogout} className="text-sm text-slate-500 hover:text-red-600">Logout</button>
           </div>
         </div>
@@ -538,7 +533,7 @@ export default function Dashboard() {
 
         {/* Tabs */}
         <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
-          {(['providers', 'combos', 'quotas', 'logs', 'settings'] as const).map(tab => (
+          {(['providers', 'combos', 'settings', 'logs', 'quotas'] as const).map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === tab ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
               {tab === 'providers' ? '🔌 Providers' : tab === 'combos' ? '🧩 Combos' : tab === 'quotas' ? '📊 Quotas' : tab === 'logs' ? '📋 Logs' : '⚙️ Settings'}
             </button>
