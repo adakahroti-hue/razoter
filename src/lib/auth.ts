@@ -113,39 +113,35 @@ export async function getUserById(id: string): Promise<{ id: string; username: s
 
 // ─── API Key auth (kept for proxy endpoint) ───────────
 
-export async function verifyApiKey(request: NextRequest): Promise<{ ok: boolean; debug?: string }> {
+export async function verifyApiKey(request: NextRequest): Promise<boolean> {
   const authHeader = request.headers.get('authorization');
 
-  if (!authHeader) return { ok: false, debug: 'no_auth_header' };
+  if (!authHeader) return false;
 
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-  const parts: string[] = [`token_prefix=${token.slice(0, 8)}`, `token_len=${token.length}`];
 
   // Check against the main config key first
   try {
     const config = await getConfig();
-    parts.push(`config_prefix=${config.razoterApiKey?.slice(0, 8) || 'null'}`, `config_len=${config.razoterApiKey?.length || 0}`);
-    if (token === config.razoterApiKey) return { ok: true };
-  } catch (e: unknown) {
-    parts.push(`config_error=${(e as Error).message}`);
+    if (token === config.razoterApiKey) return true;
+  } catch {
+    // Config load failed, continue to DB check
   }
 
   // Check against api_keys table
   try {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('api_keys')
       .select('id')
       .eq('key', token)
       .limit(1)
       .maybeSingle();
-    if (error) parts.push(`db_error=${error.message}`);
-    if (data) return { ok: true };
-    parts.push(`db_found=false`);
-  } catch (e: unknown) {
-    parts.push(`db_exception=${(e as Error).message}`);
+    if (data) return true;
+  } catch {
+    // DB error, fall through
   }
 
-  return { ok: false, debug: parts.join(' | ') };
+  return false;
 }
 
 export function getApiKeyFromRequest(request: NextRequest): string | null {
@@ -181,8 +177,7 @@ export async function verifyDashboardAuth(request: NextRequest): Promise<boolean
   if (jwtResult) return true;
 
   // Fall back to API key
-  const result = await verifyApiKey(request);
-  return result.ok;
+  return verifyApiKey(request);
 }
 
 // ─── Default admin creation ───────────────────────────

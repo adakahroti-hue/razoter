@@ -47,11 +47,10 @@ export async function POST(request: NextRequest) {
   }
 
   // Verify API key
-  const authResult = await verifyApiKey(request);
-  if (!authResult.ok) {
+  if (!await verifyApiKey(request)) {
     return withCors(
       NextResponse.json(
-        { error: { message: 'Invalid API key', type: 'auth_error', code: 'invalid_api_key', _debug: authResult.debug } },
+        { error: { message: 'Invalid API key', type: 'auth_error', code: 'invalid_api_key' } },
         { status: 401 }
       )
     );
