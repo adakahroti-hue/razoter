@@ -135,7 +135,7 @@ export default function Dashboard() {
   const [combos, setCombos] = useState<Combo[]>([]);
   const [quotas, setQuotas] = useState<Quota[]>([]);
 
-  const [activeTab, setActiveTab] = useState<'providers' | 'combos' | 'settings' | 'logs' | 'quotas'>('providers');
+  const [activeTab, setActiveTab] = useState<'providers' | 'combos' | 'logs' | 'quotas'>('providers');
   const [showProviderModal, setShowProviderModal] = useState(false);
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
 
@@ -474,11 +474,6 @@ export default function Dashboard() {
 
   // ─── UI helpers ──────────────────────────────────
 
-  function healthBadge(status: string) {
-    const colors: Record<string, string> = { healthy: 'bg-emerald-100 text-emerald-700', degraded: 'bg-amber-100 text-amber-700', down: 'bg-red-100 text-red-700', unknown: 'bg-slate-100 text-slate-500' };
-    return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colors[status] || colors.unknown}`}>{status}</span>;
-  }
-
   function statusBadge(status: string) {
     const colors: Record<string, string> = { success: 'bg-emerald-100 text-emerald-700', error: 'bg-red-100 text-red-700', timeout: 'bg-amber-100 text-amber-700', retry: 'bg-blue-100 text-blue-700' };
     return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colors[status] || 'bg-slate-100 text-slate-500'}`}>{status}</span>;
@@ -521,21 +516,63 @@ export default function Dashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-6 space-y-6">
-        {/* Stats */}
-        {stats && (
-          <div className="grid grid-cols-4 gap-4">
-            <div className="card text-center"><div className="text-2xl font-bold text-slate-900">{stats.totalRequests}</div><div className="text-xs text-slate-500">Total Requests</div></div>
-            <div className="card text-center"><div className="text-2xl font-bold text-emerald-600">{stats.successRate}%</div><div className="text-xs text-slate-500">Success Rate</div></div>
-            <div className="card text-center"><div className="text-2xl font-bold text-slate-900">{formatLatency(stats.avgLatency)}</div><div className="text-xs text-slate-500">Avg Latency</div></div>
-            <div className="card text-center"><div className="text-2xl font-bold text-slate-900">{providers.length}</div><div className="text-xs text-slate-500">Providers</div></div>
+        {/* Settings (was Stats) */}
+        <div className="grid grid-cols-2 gap-4">
+          {/* Base URL */}
+          <div className="card">
+            <h3 className="font-semibold text-slate-900 mb-3">📡 Base URL</h3>
+            <p className="text-sm text-slate-500 mb-3">Pakai URL ini sebagai base URL di platform tujuan (Cursor, Open WebUI, dll).</p>
+            <div className="flex items-center gap-2 bg-slate-50 rounded-lg p-3">
+              <code className="text-sm text-slate-700 font-mono flex-1">{BASE_URL}</code>
+              <CopyButton text={BASE_URL} />
+            </div>
           </div>
-        )}
+
+          {/* API Keys */}
+          <div className="card">
+            <h3 className="font-semibold text-slate-900 mb-3">🔑 API Keys</h3>
+            <div className="flex gap-2 mb-3">
+              <input type="text" className="input flex-1" placeholder="Nama key (e.g. Cursor, Open WebUI)" value={newKeyName} onChange={e => setNewKeyName(e.target.value)} />
+              <button onClick={handleGenerateApiKey} className="btn btn-primary whitespace-nowrap">🎲 Generate</button>
+            </div>
+
+            {generatedKey && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-3">
+                <div className="text-sm font-medium text-emerald-800 mb-1">✅ Key baru!</div>
+                <div className="flex items-center gap-2">
+                  <code className="text-xs text-emerald-700 font-mono flex-1 break-all">{generatedKey}</code>
+                  <CopyButton text={generatedKey} />
+                </div>
+                <div className="text-xs text-emerald-600 mt-1">⚠️ Copy sekarang! Tidak akan ditampilkan lagi.</div>
+              </div>
+            )}
+
+            {apiKeys.length > 0 && (
+              <div className="space-y-1">
+                {apiKeys.map(k => (
+                  <div key={k.id} className="flex items-center gap-2 bg-slate-50 rounded-lg p-2">
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium text-slate-700 text-sm">{k.name}</span>
+                      <code className="text-xs text-slate-500 font-mono ml-2">{k.key.slice(0, 8)}...{k.key.slice(-4)}</code>
+                    </div>
+                    <CopyButton text={k.key} />
+                    <button onClick={() => handleDeleteApiKey(k.id)} className="text-xs px-1.5 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-100">🗑️</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {apiKeys.length === 0 && !generatedKey && (
+              <div className="text-center py-3 text-slate-400 text-sm">Belum ada API key</div>
+            )}
+          </div>
+        </div>
 
         {/* Tabs */}
         <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
-          {(['providers', 'combos', 'settings', 'logs', 'quotas'] as const).map(tab => (
+          {(['providers', 'combos', 'logs', 'quotas'] as const).map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === tab ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-              {tab === 'providers' ? '🔌 Providers' : tab === 'combos' ? '🧩 Combos' : tab === 'quotas' ? '📊 Quotas' : tab === 'logs' ? '📋 Logs' : '⚙️ Settings'}
+              {tab === 'providers' ? '🔌 Providers' : tab === 'combos' ? '🧩 Combos' : tab === 'quotas' ? '📊 Quotas' : '📋 Logs'}
             </button>
           ))}
         </div>
@@ -557,7 +594,6 @@ export default function Dashboard() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <h3 className="font-semibold text-slate-900">{p.name}</h3>
-                          {healthBadge(p.healthStatus)}
                           {!p.enabled && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-200 text-slate-500">disabled</span>}
                         </div>
                         <div className="text-xs text-slate-400 mt-1 font-mono">{p.baseUrl}</div>
@@ -736,62 +772,6 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ─── Settings Tab ───────────────────────── */}
-        {activeTab === 'settings' && (
-          <div className="space-y-6">
-            {/* Base URL */}
-            <div className="card">
-              <h3 className="font-semibold text-slate-900 mb-3">📡 Base URL</h3>
-              <p className="text-sm text-slate-500 mb-3">Pakai URL ini sebagai base URL di platform tujuan (Cursor, Open WebUI, dll).</p>
-              <div className="flex items-center gap-2 bg-slate-50 rounded-lg p-3">
-                <code className="text-sm text-slate-700 font-mono flex-1">{BASE_URL}</code>
-                <CopyButton text={BASE_URL} />
-              </div>
-            </div>
-
-            {/* API Keys List */}
-            <div className="card">
-              <h3 className="font-semibold text-slate-900 mb-3">🔑 API Keys</h3>
-              <p className="text-sm text-slate-500 mb-4">Generate API key untuk menghubungkan Razoter ke platform tujuan.</p>
-              
-              <div className="flex gap-2 mb-4">
-                <input type="text" className="input flex-1" placeholder="Nama key (e.g. Cursor, Open WebUI)" value={newKeyName} onChange={e => setNewKeyName(e.target.value)} />
-                <button onClick={handleGenerateApiKey} className="btn btn-primary whitespace-nowrap">🎲 Generate</button>
-              </div>
-
-              {generatedKey && (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-4">
-                  <div className="text-sm font-medium text-emerald-800 mb-2">✅ Key baru berhasil di-generate!</div>
-                  <div className="flex items-center gap-2">
-                    <code className="text-sm text-emerald-700 font-mono flex-1 break-all">{generatedKey}</code>
-                    <CopyButton text={generatedKey} />
-                  </div>
-                  <div className="text-xs text-emerald-600 mt-2">⚠️ Copy sekarang! Tidak akan ditampilkan lagi setelah refresh.</div>
-                </div>
-              )}
-
-              {apiKeys.length > 0 && (
-                <div className="space-y-2">
-                  <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">Key yang sudah dibuat:</div>
-                  {apiKeys.map(k => (
-                    <div key={k.id} className="flex items-center gap-3 bg-slate-50 rounded-lg p-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-slate-700 text-sm">{k.name}</div>
-                        <code className="text-xs text-slate-500 font-mono">{k.key.slice(0, 8)}...{k.key.slice(-4)}</code>
-                      </div>
-                      <CopyButton text={k.key} />
-                      <button onClick={() => handleDeleteApiKey(k.id)} className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100">🗑️</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {apiKeys.length === 0 && !generatedKey && (
-                <div className="text-center py-4 text-slate-400 text-sm">Belum ada API key</div>
-              )}
-            </div>
-          </div>
-        )}
       </main>
 
       {/* ─── Add/Edit Provider Modal ────────────── */}
