@@ -795,22 +795,6 @@ export default function Dashboard() {
                 <div className="text-center py-4 text-slate-400 text-sm">Belum ada API key</div>
               )}
             </div>
-
-            {/* Rotation Mode */}
-            <div className="card">
-              <h3 className="font-semibold text-slate-900 mb-3">🔄 Rotation Mode</h3>
-              <div className="grid grid-cols-3 gap-3">
-                {[
-                  { mode: 'failover', label: 'Failover', desc: 'Gagal → switch ke provider lain', icon: '🔄' },
-                  { mode: 'round-robin', label: 'Round Robin', desc: 'Rotasi merata antar provider', icon: '⚡' },
-                  { mode: 'priority', label: 'Priority', desc: 'Prioritas lebih tinggi dipilih duluan', icon: '📊' },
-                ].map(m => (
-                  <button key={m.mode} onClick={() => handleChangeMode(m.mode)} className={`p-4 rounded-lg border-2 text-left transition-colors ${config?.mode === m.mode ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'}`}>
-                    <div className="text-lg mb-1">{m.icon}</div><div className="font-medium text-slate-900">{m.label}</div><div className="text-xs text-slate-500 mt-1">{m.desc}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
         )}
       </main>
