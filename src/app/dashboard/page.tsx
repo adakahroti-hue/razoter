@@ -798,10 +798,10 @@ export default function Dashboard() {
               <div className="space-y-3">
                 <div><label className="text-sm text-slate-600">Nama Provider</label><input type="text" className="input mt-1" placeholder="e.g. OpenRouter, Together AI" value={providerForm.name} onChange={e => setProviderForm(f => ({ ...f, name: e.target.value }))} /></div>
                 <div><label className="text-sm text-slate-600">Base URL</label><input type="text" className="input mt-1" placeholder="https://openrouter.ai/api/v1" value={providerForm.baseUrl} onChange={e => setProviderForm(f => ({ ...f, baseUrl: e.target.value }))} /></div>
-                <div><label className="text-sm text-slate-600">API Key</label><input type="password" className="input mt-1" placeholder={editingProvider ? 'Enter new key to update (leave blank to keep current)' : 'sk-...'} value={providerForm.apiKey} onChange={e => setProviderForm(f => ({ ...f, apiKey: e.target.value }))} /></div>
+                <div><label className="text-sm text-slate-600">API Key</label><input type="password" className="input mt-1" placeholder={editingProvider ? 'Enter new key to update (leave blank to keep current)' : 'sk-...'} value={providerForm.apiKey} onChange={e => setProviderForm(f => ({ ...f, apiKey: e.target.value }))} />{editingProvider && <p className="text-xs text-slate-500 mt-1">Current key: <code className="bg-slate-100 px-1 rounded">{editingProvider.apiKey}</code></p>}</div>
               </div>
               <div className="border-t border-slate-200 pt-4">
-                <button onClick={handleTestConnection} disabled={testingConnection || !providerForm.baseUrl || !providerForm.apiKey} className="btn btn-primary w-full">
+                <button onClick={handleTestConnection} disabled={testingConnection || !providerForm.baseUrl || (!providerForm.apiKey && !editingProvider)} className="btn btn-primary w-full">
                   {testingConnection ? <span className="flex items-center justify-center gap-2"><span className="pulse-dot">⏳</span> Testing...</span> : '🔌 Test Connection & Discover Models'}
                 </button>
                 {testResult && (
