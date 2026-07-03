@@ -419,7 +419,7 @@ export default function Dashboard() {
     try {
       const res = await api('/api/providers/test-model', {
         method: 'POST',
-        body: JSON.stringify({ baseUrl: provider.baseUrl, apiKey: provider.apiKey, model }),
+        body: JSON.stringify({ baseUrl: provider.baseUrl, providerId: provider.id, model }),
       });
       const data = await res.json();
       setModelTestResults(prev => ({
