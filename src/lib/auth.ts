@@ -116,27 +116,39 @@ export async function getUserById(id: string): Promise<{ id: string; username: s
 export async function verifyApiKey(request: NextRequest): Promise<boolean> {
   const authHeader = request.headers.get('authorization');
 
-  if (!authHeader) return false;
+  if (!authHeader) {
+    console.error('[verifyApiKey] No authorization header');
+    return false;
+  }
 
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  console.error('[verifyApiKey] Token prefix:', token.slice(0, 10), 'length:', token.length);
 
   // Check against the main config key first
-  const config = await getConfig();
-  if (token === config.razoterApiKey) return true;
+  try {
+    const config = await getConfig();
+    console.error('[verifyApiKey] Config key prefix:', config.razoterApiKey?.slice(0, 10), 'length:', config.razoterApiKey?.length);
+    console.error('[verifyApiKey] Config match:', token === config.razoterApiKey);
+    if (token === config.razoterApiKey) return true;
+  } catch (e: unknown) {
+    console.error('[verifyApiKey] getConfig error:', (e as Error).message);
+  }
 
   // Check against api_keys table
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('api_keys')
       .select('id')
       .eq('key', token)
       .limit(1)
       .maybeSingle();
+    console.error('[verifyApiKey] api_keys lookup:', data ? 'FOUND' : 'NOT FOUND', error?.message || '');
     if (data) return true;
-  } catch {
-    // Ignore DB errors, fall through to false
+  } catch (e: unknown) {
+    console.error('[verifyApiKey] api_keys query error:', (e as Error).message);
   }
 
+  console.error('[verifyApiKey] All checks failed, returning false');
   return false;
 }
 
