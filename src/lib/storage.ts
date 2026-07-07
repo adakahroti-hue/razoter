@@ -361,6 +361,30 @@ export async function addLog(log: Omit<RequestLog, 'id' | 'createdAt'>): Promise
     console.error('Supabase addLog error:', error);
     return { ...log, id, createdAt: timestamp };
   }
+
+  // Auto-delete oldest logs if total exceeds 15
+  try {
+    const { count } = await supabase
+      .from('request_logs')
+      .select('*', { count: 'exact', head: true });
+    if (count && count > 15) {
+      // Get IDs of logs beyond the latest 15
+      const { data: oldLogs } = await supabase
+        .from('request_logs')
+        .select('id')
+        .order('timestamp', { ascending: false })
+        .range(15, count - 1);
+      if (oldLogs && oldLogs.length > 0) {
+        await supabase
+          .from('request_logs')
+          .delete()
+          .in('id', oldLogs.map((l: any) => l.id));
+      }
+    }
+  } catch (cleanupErr) {
+    console.error('Log auto-cleanup error:', cleanupErr);
+  }
+
   return dbToLog(data);
 }
 

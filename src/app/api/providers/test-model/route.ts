@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyDashboardAuth } from '@/lib/auth';
 import { getProvider } from '@/lib/storage';
 import { withCors, handleCorsPreflight } from '@/lib/cors';
+import { getValidAccessToken, CODEX_BASE_URL } from '@/lib/chatgpt-auth';
 
 export async function OPTIONS() {
   return handleCorsPreflight();
@@ -9,9 +10,8 @@ export async function OPTIONS() {
 
 /**
  * POST /api/providers/test-model
- * Test a single model by sending a minimal chat completion request.
- * Body: { baseUrl, apiKey, model }
- * Returns: { success, latencyMs, error? }
+ * Test a single model by sending a minimal request.
+ * Supports both standard OpenAI and ChatGPT Plus (Codex) providers.
  */
 export async function POST(request: NextRequest) {
   if (!await verifyDashboardAuth(request)) {
@@ -22,31 +22,128 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { baseUrl, apiKey, model, providerId } = body;
 
-    if (!baseUrl || !model) {
+    if (!model) {
       return withCors(
-        NextResponse.json(
-          { error: 'Missing required fields: baseUrl, model' },
-          { status: 400 }
-        )
+        NextResponse.json({ error: 'Missing required field: model' }, { status: 400 })
       );
     }
 
-    // Resolve API key
+    // Resolve provider info
     let resolvedApiKey = apiKey;
-    if (!resolvedApiKey && providerId) {
+    let resolvedBaseUrl = baseUrl;
+    let isChatgptPlus = false;
+    let refreshToken: string | undefined;
+    let expiresAt: string | undefined;
+
+    if (providerId) {
       const provider = await getProvider(providerId);
       if (!provider) {
         return withCors(NextResponse.json({ error: 'Provider not found' }, { status: 404 }));
       }
-      resolvedApiKey = provider.apiKey;
-    }
-    if (!resolvedApiKey) {
-      return withCors(NextResponse.json({ error: 'No API key provided or stored' }, { status: 400 }));
+      resolvedApiKey = resolvedApiKey || provider.apiKey;
+      resolvedBaseUrl = resolvedBaseUrl || provider.baseUrl;
+      isChatgptPlus = provider.authType === 'chatgpt_plus';
+      refreshToken = provider.chatgptRefreshToken;
+      expiresAt = provider.chatgptExpiresAt;
     }
 
-    const cleanUrl = baseUrl.replace(/\/+$/, '');
+    if (!resolvedBaseUrl) {
+      return withCors(NextResponse.json({ error: 'No base URL provided' }, { status: 400 }));
+    }
+
+    // Auto-refresh ChatGPT Plus token if needed
+    if (isChatgptPlus && refreshToken && expiresAt) {
+      try {
+        const refreshed = await getValidAccessToken(resolvedApiKey, refreshToken, expiresAt);
+        resolvedApiKey = refreshed.accessToken;
+        // Update tokens in background
+        if (refreshed.refreshed) {
+          import('@/lib/storage').then(({ updateProvider }) =>
+            updateProvider(providerId!, {
+              apiKey: refreshed.accessToken,
+              chatgptRefreshToken: refreshed.refreshToken,
+              chatgptExpiresAt: refreshed.expiresAt,
+            } as any)
+          ).catch(() => {});
+        }
+      } catch (refreshErr: any) {
+        return withCors(NextResponse.json({
+          success: false,
+          model,
+          latencyMs: 0,
+          error: `Token refresh failed: ${refreshErr.message}`,
+        }));
+      }
+    }
+
     const startTime = Date.now();
 
+    if (isChatgptPlus) {
+      // ChatGPT Plus uses /responses API (stream-only)
+      try {
+        const resp = await fetch(`${CODEX_BASE_URL}/responses`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${resolvedApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            input: [{ role: 'user', content: 'hi' }],
+            store: false,
+            stream: true,
+          }),
+          signal: AbortSignal.timeout(30000),
+        });
+
+        const latencyMs = Date.now() - startTime;
+
+        if (!resp.ok) {
+          const errText = await resp.text();
+          return withCors(NextResponse.json({
+            success: false,
+            model,
+            latencyMs,
+            error: `HTTP ${resp.status}: ${errText.slice(0, 200)}`,
+            statusCode: resp.status,
+          }));
+        }
+
+        // Verify we got valid streaming data
+        const reader = resp.body?.getReader();
+        if (reader) {
+          const decoder = new TextDecoder();
+          const { value } = await reader.read();
+          reader.cancel();
+          const chunk = decoder.decode(value);
+          if (chunk.includes('response.output_text') || chunk.includes('response.created')) {
+            return withCors(NextResponse.json({ success: true, model, latencyMs }));
+          }
+        }
+
+        return withCors(NextResponse.json({
+          success: false,
+          model,
+          latencyMs,
+          error: 'Unexpected response format',
+        }));
+      } catch (fetchError: any) {
+        const latencyMs = Date.now() - startTime;
+        const isTimeout = fetchError.name === 'AbortError' || fetchError.name === 'TimeoutError';
+        return withCors(NextResponse.json({
+          success: false,
+          model,
+          latencyMs,
+          error: isTimeout ? 'Request timed out (30s)' : fetchError.message,
+        }));
+      }
+    }
+
+    // Standard OpenAI-compatible provider
+    const cleanUrl = (resolvedBaseUrl || '').replace(/\/+$/, '');
+    if (!cleanUrl) {
+      return withCors(NextResponse.json({ error: 'No base URL provided' }, { status: 400 }));
+    }
     try {
       const res = await fetch(`${cleanUrl}/chat/completions`, {
         method: 'POST',
@@ -75,36 +172,20 @@ export async function POST(request: NextRequest) {
         }
 
         return withCors(
-          NextResponse.json({
-            success: false,
-            model,
-            latencyMs,
-            error: errorMsg,
-            statusCode: res.status,
-          })
+          NextResponse.json({ success: false, model, latencyMs, error: errorMsg, statusCode: res.status })
         );
       }
 
-      const data = await res.json();
-      return withCors(
-        NextResponse.json({
-          success: true,
-          model,
-          latencyMs,
-        })
-      );
+      return withCors(NextResponse.json({ success: true, model, latencyMs }));
     } catch (fetchError: any) {
       const latencyMs = Date.now() - startTime;
       const isTimeout = fetchError.name === 'AbortError' || fetchError.name === 'TimeoutError';
-
-      return withCors(
-        NextResponse.json({
-          success: false,
-          model,
-          latencyMs,
-          error: isTimeout ? 'Request timed out (30s)' : fetchError.message,
-        })
-      );
+      return withCors(NextResponse.json({
+        success: false,
+        model,
+        latencyMs,
+        error: isTimeout ? 'Request timed out (30s)' : fetchError.message,
+      }));
     }
   } catch {
     return withCors(NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }));

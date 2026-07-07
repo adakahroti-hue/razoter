@@ -4,6 +4,7 @@ import { selectProvider, getNextProvider, pickModel } from '@/lib/rotation';
 import { getConfig, addLog, updateProviderStats, updateProviderRateLimit, getEnabledProviders, checkRateLimit, resolveComboModel, getProvider, checkQuotaLimit, incrementQuotaUsage } from '@/lib/storage';
 import { withCors, handleCorsPreflight, corsHeaders } from '@/lib/cors';
 import { getValidAccessToken } from '@/lib/chatgpt-auth';
+import { handleChatgptPlusRequest } from '@/lib/chatgpt-proxy';
 
 export async function OPTIONS() {
   return handleCorsPreflight();
@@ -198,16 +199,33 @@ export async function POST(request: NextRequest) {
     const selectedModel = pickModel(currentProvider, requestedModel);
 
     try {
-      const upstreamUrl = `${currentProvider.baseUrl.replace(/\/+$/, '')}/chat/completions`;
+      // ChatGPT Plus uses /responses API with translator
+      const isChatgptPlus = currentProvider.authType === 'chatgpt_plus';
 
-      // Auto-refresh ChatGPT Plus token if needed
-      const { header: authHeader, refreshed, newTokens } = await resolveAccessToken(currentProvider);
-      if (refreshed && newTokens) {
-        // Update stored tokens in background (don't block)
-        import('@/lib/storage').then(({ updateProvider }) =>
-          updateProvider(currentProvider!.id, newTokens as any)
-        ).catch(() => {});
+      if (isChatgptPlus) {
+        const { header: authHeader, refreshed, newTokens } = await resolveAccessToken(currentProvider);
+        if (refreshed && newTokens) {
+          import('@/lib/storage').then(({ updateProvider }) =>
+            updateProvider(currentProvider!.id, newTokens as any)
+          ).catch(() => {});
+        }
+        const accessToken = authHeader.replace('Bearer ', '');
+        const { response: cgptResp, tokensUsed } = await handleChatgptPlusRequest(
+          accessToken, body, selectedModel || requestedModel, isStreaming
+        );
+        // Log success
+        const latencyMs = Date.now() - startTime;
+        import('@/lib/storage').then(({ addLog, updateProviderStats, incrementQuotaUsage }) => {
+          addLog({ providerId: currentProvider!.id, providerName: currentProvider!.name, model: selectedModel || requestedModel, status: 'success', latencyMs, tokensUsed });
+          updateProviderStats(currentProvider!.id, true, latencyMs);
+          incrementQuotaUsage(currentProvider!.id, tokensUsed || 0).catch(() => {});
+        }).catch(() => {});
+        return cgptResp;
       }
+
+      // Standard OpenAI-compatible provider
+      const upstreamUrl = `${currentProvider.baseUrl.replace(/\/+$/, '')}/chat/completions`;
+      const { header: authHeader } = await resolveAccessToken(currentProvider);
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs);
