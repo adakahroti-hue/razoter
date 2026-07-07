@@ -180,8 +180,10 @@ export async function POST(request: NextRequest) {
           }
 
           const errText = await upstreamResponse.text();
+          let parsedError = errText;
+          try { parsedError = JSON.parse(errText)?.error?.message || errText; } catch {}
           await updateProviderStats(comboProvider.id, false, latencyMs);
-          await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'error', statusCode: upstreamResponse.status, latencyMs, errorMessage: `HTTP ${upstreamResponse.status}` });
+          await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'error', statusCode: upstreamResponse.status, latencyMs, errorMessage: parsedError });
         } catch (err: any) {
           const latencyMs = Date.now() - comboStart;
           await updateProviderStats(comboProvider.id, false, latencyMs);
@@ -189,9 +191,31 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-  }
 
-  const enabledProviders = await getEnabledProviders();
+    // Combo model was requested but not found or provider disabled — block fallback
+    if (requestedModel) {
+      const comboCheck = await resolveComboModel(requestedModel);
+      if (comboCheck) {
+        // Model exists in combo but provider is disabled/unreachable
+        return withCors(
+          NextResponse.json(
+            { error: { message: `Combo model '${requestedModel}' resolved but provider is disabled or unreachable.`, type: 'server_error' } },
+            { status: 502 }
+          )
+        );
+      }
+      // Model not found in any combo — return clear error
+      return withCors(
+        NextResponse.json(
+          { error: { message: `Model '${requestedModel}' not found in any provider. Add it to a combo or provider.`, type: 'invalid_request_error' } },
+          { status: 404 }
+        )
+      );
+    }
+
+
+    // Only fall through to provider rotation if NO combo model was requested
+    const enabledProviders = await getEnabledProviders();
 
   if (enabledProviders.length === 0) {
     return withCors(
