@@ -124,6 +124,28 @@ export async function POST(request: NextRequest) {
 
         const comboStart = Date.now();
         try {
+          // ChatGPT Plus uses /responses API
+          if (comboProvider.authType === 'chatgpt_plus') {
+            const { header: comboAuth, refreshed, newTokens } = await resolveAccessToken(comboProvider);
+            if (refreshed && newTokens) {
+              import('@/lib/storage').then(({ updateProvider }) =>
+                updateProvider(comboProvider!.id, newTokens as any)
+              ).catch(() => {});
+            }
+            const accessToken = comboAuth.replace('Bearer ', '');
+            const { response: cgptResp, tokensUsed } = await handleChatgptPlusRequest(
+              accessToken, body, comboResult.model, isStreaming
+            );
+            const latencyMs = Date.now() - comboStart;
+            import('@/lib/storage').then(({ addLog, updateProviderStats, incrementQuotaUsage }) => {
+              addLog({ providerId: comboProvider!.id, providerName: comboProvider!.name, model: comboResult.model, status: 'success', latencyMs, tokensUsed });
+              updateProviderStats(comboProvider!.id, true, latencyMs);
+              incrementQuotaUsage(comboProvider!.id, tokensUsed || 0).catch(() => {});
+            }).catch(() => {});
+            return cgptResp;
+          }
+
+          // Standard provider
           const upstreamUrl = `${comboProvider.baseUrl.replace(/\/+$/, '')}/chat/completions`;
           const { header: comboAuth } = await resolveAccessToken(comboProvider);
           const controller = new AbortController();
