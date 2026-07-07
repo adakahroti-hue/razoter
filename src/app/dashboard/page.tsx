@@ -141,6 +141,7 @@ export default function Dashboard() {
 
   // Provider form
   const [providerForm, setProviderForm] = useState({ name: '', baseUrl: '', apiKey: '' });
+  const [providerType, setProviderType] = useState<'custom' | 'chatgpt_plus' | null>(null);
   const [discoveredModels, setDiscoveredModels] = useState<string[]>([]);
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
   const [testingConnection, setTestingConnection] = useState(false);
@@ -163,6 +164,12 @@ export default function Dashboard() {
   // Quota form
   const [showQuotaModal, setShowQuotaModal] = useState(false);
   const [quotaForm, setQuotaForm] = useState({ providerId: '', monthlyLimit: 0, resetDay: 1 });
+
+  // ChatGPT Plus login flow
+  const [chatgptStep, setChatgptStep] = useState<'idle' | 'code' | 'waiting' | 'done' | 'error'>('idle');
+  const [chatgptUserCode, setChatgptUserCode] = useState('');
+  const [chatgptDeviceId, setChatgptDeviceId] = useState('');
+  const [chatgptError, setChatgptError] = useState('');
 
   // ─── API helper ──────────────────────────────────
 
@@ -310,6 +317,57 @@ export default function Dashboard() {
   function resetProviderForm() {
     setProviderForm({ name: '', baseUrl: '', apiKey: '' });
     setDiscoveredModels([]); setSelectedModels([]); setTestResult(null); setEditingProvider(null);
+    setProviderType(null);
+    setChatgptStep('idle'); setChatgptUserCode(''); setChatgptDeviceId(''); setChatgptError('');
+  }
+
+  // ─── ChatGPT Plus login flow ─────────────────────
+
+  async function handleChatgptStart() {
+    setChatgptStep('waiting');
+    setChatgptError('');
+    try {
+      const res = await api('/api/auth/chatgpt/start', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) { setChatgptStep('error'); setChatgptError(data.error || 'Failed to start login'); return; }
+      setChatgptUserCode(data.user_code);
+      setChatgptDeviceId(data.device_auth_id);
+      setChatgptStep('code');
+      // Auto-poll every 5 seconds
+      startChatgptPoll(data.device_auth_id, data.user_code);
+    } catch (err: any) {
+      setChatgptStep('error');
+      setChatgptError(err.message || 'Network error');
+    }
+  }
+
+  function startChatgptPoll(deviceAuthId: string, userCode: string) {
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await api('/api/auth/chatgpt/poll', {
+          method: 'POST',
+          body: JSON.stringify({ device_auth_id: deviceAuthId, user_code: userCode }),
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+          clearInterval(pollInterval);
+          setChatgptStep('done');
+          setShowProviderModal(false);
+          resetProviderForm();
+          fetchData();
+        } else if (data.status === 'pending') {
+          // Still waiting, continue polling
+        } else {
+          clearInterval(pollInterval);
+          setChatgptStep('error');
+          setChatgptError(data.error || 'Login failed');
+        }
+      } catch {
+        // Network error during poll, keep trying
+      }
+    }, 5000);
+    // Clear after 10 minutes
+    setTimeout(() => clearInterval(pollInterval), 600000);
   }
 
   // ─── API Key actions ─────────────────────────────
@@ -795,6 +853,104 @@ export default function Dashboard() {
                 <h3 className="text-lg font-semibold text-slate-900">{editingProvider ? 'Edit Provider' : 'Tambah Provider'}</h3>
                 <button onClick={() => { setShowProviderModal(false); resetProviderForm(); }} className="text-slate-400 hover:text-slate-600">✕</button>
               </div>
+
+              {/* Provider Type Selector (only for new providers) */}
+              {!editingProvider && !providerType && (
+                <div className="space-y-3">
+                  <p className="text-sm text-slate-600">Pilih jenis provider:</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => { setProviderType('custom'); setProviderForm(f => ({ ...f, baseUrl: '' })); }}
+                      className="p-4 rounded-xl border-2 border-slate-200 hover:border-indigo-400 text-left transition-colors"
+                    >
+                      <div className="text-2xl mb-2">🔌</div>
+                      <div className="font-semibold text-slate-900">Custom</div>
+                      <div className="text-xs text-slate-500 mt-1">OpenRouter, Together AI, atau provider OpenAI-compatible lainnya</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setProviderType('chatgpt_plus'); handleChatgptStart(); }}
+                      className="p-4 rounded-xl border-2 border-slate-200 hover:border-emerald-400 text-left transition-colors"
+                    >
+                      <div className="text-2xl mb-2">✨</div>
+                      <div className="font-semibold text-slate-900">ChatGPT Plus</div>
+                      <div className="text-xs text-slate-500 mt-1">Login pakai akun ChatGPT Plus. Tanpa API key.</div>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ChatGPT Plus Login Flow */}
+              {!editingProvider && providerType === 'chatgpt_plus' && (
+                <div className="space-y-4">
+                  {chatgptStep === 'waiting' && (
+                    <div className="text-center py-8">
+                      <div className="pulse-dot text-4xl mb-3">⏳</div>
+                      <p className="text-slate-600">Meminta kode login dari OpenAI...</p>
+                    </div>
+                  )}
+                  {chatgptStep === 'code' && (
+                    <div className="space-y-4">
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                        <p className="text-sm font-medium text-blue-800 mb-3">Ikuti langkah berikut:</p>
+                        <div className="space-y-3">
+                          <div className="flex gap-3 items-start">
+                            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-200 text-blue-800 flex items-center justify-center text-xs font-bold">1</span>
+                            <div>
+                              <p className="text-sm text-blue-900">Buka link ini di browser:</p>
+                              <a href="https://auth.openai.com/codex/device" target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 underline font-mono">https://auth.openai.com/codex/device</a>
+                            </div>
+                          </div>
+                          <div className="flex gap-3 items-start">
+                            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-200 text-blue-800 flex items-center justify-center text-xs font-bold">2</span>
+                            <div>
+                              <p className="text-sm text-blue-900">Masukkan kode ini:</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <code className="bg-blue-100 px-4 py-2 rounded-lg text-xl font-bold text-blue-800 tracking-wider">{chatgptUserCode}</code>
+                                <CopyButton text={chatgptUserCode} />
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex gap-3 items-start">
+                            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-200 text-blue-800 flex items-center justify-center text-xs font-bold">3</span>
+                            <div>
+                              <p className="text-sm text-blue-900">Login pakai akun <strong>ChatGPT Plus</strong> kamu</p>
+                              <p className="text-xs text-blue-600 mt-1">Provider akan otomatis dibuat setelah login berhasil</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-center gap-2 text-sm text-slate-500">
+                        <span className="pulse-dot">⏳</span>
+                        <span>Menunggu login...</span>
+                      </div>
+                    </div>
+                  )}
+                  {chatgptStep === 'done' && (
+                    <div className="text-center py-8">
+                      <div className="text-4xl mb-3">✅</div>
+                      <p className="text-emerald-700 font-medium">Berhasil terhubung!</p>
+                      <p className="text-sm text-slate-500 mt-1">Provider ChatGPT Plus sudah ditambahkan</p>
+                    </div>
+                  )}
+                  {chatgptStep === 'error' && (
+                    <div className="space-y-3">
+                      <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
+                        <p className="text-red-700 font-medium">❌ {chatgptError || 'Login gagal'}</p>
+                      </div>
+                      <button onClick={() => { setChatgptStep('idle'); setProviderType(null); }} className="btn btn-secondary w-full">Coba Lagi</button>
+                    </div>
+                  )}
+                  {chatgptStep !== 'done' && chatgptStep !== 'waiting' && (
+                    <button onClick={() => { setShowProviderModal(false); resetProviderForm(); }} className="btn btn-secondary w-full">Batal</button>
+                  )}
+                </div>
+              )}
+
+              {/* Custom Provider Form */}
+              {(editingProvider || providerType === 'custom') && (
+                <>
               <div className="space-y-3">
                 <div><label className="text-sm text-slate-600">Nama Provider</label><input type="text" className="input mt-1" placeholder="e.g. OpenRouter, Together AI" value={providerForm.name} onChange={e => setProviderForm(f => ({ ...f, name: e.target.value }))} /></div>
                 <div><label className="text-sm text-slate-600">Base URL</label><input type="text" className="input mt-1" placeholder="https://openrouter.ai/api/v1" value={providerForm.baseUrl} onChange={e => setProviderForm(f => ({ ...f, baseUrl: e.target.value }))} /></div>
@@ -833,6 +989,8 @@ export default function Dashboard() {
                 <button onClick={() => { setShowProviderModal(false); resetProviderForm(); }} className="btn btn-secondary flex-1">Batal</button>
                 <button onClick={handleSaveProvider} disabled={discoveredModels.length === 0 || selectedModels.length === 0} className="btn btn-primary flex-1">{editingProvider ? '💾 Update' : '+ Tambah'}</button>
               </div>
+                </>
+              )}
             </div>
           </div>
         </div>
