@@ -18,10 +18,15 @@ export async function handleChatgptPlusRequest(
   const codexUrl = 'https://chatgpt.com/backend-api/codex/responses';
 
   // Translate messages → input
-  const input = (body.messages || []).map((m: any) => ({
-    role: m.role,
-    content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-  }));
+  // Codex only supports: assistant, system, developer, user
+  // Filter out unsupported roles (tool, function, etc.)
+  const allowedRoles = new Set(['assistant', 'system', 'developer', 'user']);
+  const input = (body.messages || [])
+    .filter((m: any) => allowedRoles.has(m.role))
+    .map((m: any) => ({
+      role: m.role,
+      content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+    }));
 
   const codexBody: any = {
     model,
