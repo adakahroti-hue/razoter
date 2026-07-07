@@ -3,6 +3,7 @@ import { verifyApiKey } from '@/lib/auth';
 import { selectProvider, getNextProvider, pickModel } from '@/lib/rotation';
 import { getConfig, addLog, updateProviderStats, updateProviderRateLimit, getEnabledProviders, checkRateLimit, resolveComboModel, getProvider, checkQuotaLimit, incrementQuotaUsage } from '@/lib/storage';
 import { withCors, handleCorsPreflight, corsHeaders } from '@/lib/cors';
+import { getValidAccessToken } from '@/lib/chatgpt-auth';
 
 export async function OPTIONS() {
   return handleCorsPreflight();
@@ -25,6 +26,35 @@ function parseRateLimitHeaders(headers: Headers) {
     reset: reset ? parseInt(reset) : undefined,
     total: limit ? parseInt(limit) : undefined,
   };
+}
+
+/** Resolve a valid access token for a provider, refreshing if needed. */
+async function resolveAccessToken(provider: any): Promise<{ header: string; refreshed: boolean; newTokens?: any }> {
+  if (provider.authType === 'chatgpt_plus' && provider.chatgptRefreshToken && provider.chatgptExpiresAt) {
+    try {
+      const r = await getValidAccessToken(
+        provider.apiKey,
+        provider.chatgptRefreshToken,
+        provider.chatgptExpiresAt,
+      );
+      return {
+        header: `Bearer ${r.accessToken}`,
+        refreshed: r.refreshed,
+        newTokens: r.refreshed ? { apiKey: r.accessToken, chatgptRefreshToken: r.refreshToken, chatgptExpiresAt: r.expiresAt } : undefined,
+      };
+    } catch (refreshErr: any) {
+      // Fall through with stale token
+      await addLog({
+        providerId: provider.id,
+        providerName: provider.name,
+        model: '',
+        status: 'error',
+        latencyMs: 0,
+        errorMessage: `Token refresh failed: ${refreshErr.message}`,
+      });
+    }
+  }
+  return { header: `Bearer ${provider.apiKey}`, refreshed: false };
 }
 
 export async function POST(request: NextRequest) {
@@ -82,22 +112,19 @@ export async function POST(request: NextRequest) {
   const config = await getConfig();
 
   // ─── Combo resolution ────────────────────────────────
-  // If the requested model matches a combo name, resolve it
-  // to a specific provider+model first.
   let comboResolved = false;
   if (requestedModel) {
     const comboResult = await resolveComboModel(requestedModel);
     if (comboResult) {
       const comboProvider = await getProvider(comboResult.providerId);
       if (comboProvider && comboProvider.enabled) {
-        // Directly use this provider+model, skip normal rotation
         body.model = comboResult.model;
         comboResolved = true;
-        
-        // Log and forward to the resolved provider
-        const startTime = Date.now();
+
+        const comboStart = Date.now();
         try {
           const upstreamUrl = `${comboProvider.baseUrl.replace(/\/+$/, '')}/chat/completions`;
+          const { header: comboAuth } = await resolveAccessToken(comboProvider);
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs);
 
@@ -105,14 +132,14 @@ export async function POST(request: NextRequest) {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${comboProvider.apiKey}`,
+              'Authorization': comboAuth,
             },
             body: JSON.stringify(body),
             signal: controller.signal,
           });
 
           clearTimeout(timeoutId);
-          const latencyMs = Date.now() - startTime;
+          const latencyMs = Date.now() - comboStart;
 
           if (upstreamResponse.ok) {
             if (isStreaming && upstreamResponse.body) {
@@ -129,22 +156,20 @@ export async function POST(request: NextRequest) {
             return withCors(NextResponse.json(data, { status: 200 }));
           }
 
-          // If the resolved provider fails, fall through to normal rotation
           const errText = await upstreamResponse.text();
           await updateProviderStats(comboProvider.id, false, latencyMs);
           await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'error', statusCode: upstreamResponse.status, latencyMs, errorMessage: `HTTP ${upstreamResponse.status}` });
         } catch (err: any) {
-          const latencyMs = Date.now() - startTime;
+          const latencyMs = Date.now() - comboStart;
           await updateProviderStats(comboProvider.id, false, latencyMs);
           await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'error', latencyMs, errorMessage: err.message });
         }
-        // Fall through to normal rotation if combo resolved provider failed
       }
     }
   }
 
   const enabledProviders = await getEnabledProviders();
-  
+
   if (enabledProviders.length === 0) {
     return withCors(
       NextResponse.json(
@@ -165,18 +190,25 @@ export async function POST(request: NextRequest) {
     // Check quota limit before trying this provider
     const withinQuota = await checkQuotaLimit(currentProvider.id);
     if (!withinQuota) {
-      // Skip this provider, try next
       const next = await getNextProvider(config.mode, currentProvider.id, triedIds);
       if (next) { currentProvider = next; attempt--; continue; }
       break;
     }
 
-    // Pick the best model from this provider's selected models
     const selectedModel = pickModel(currentProvider, requestedModel);
 
     try {
       const upstreamUrl = `${currentProvider.baseUrl.replace(/\/+$/, '')}/chat/completions`;
-      
+
+      // Auto-refresh ChatGPT Plus token if needed
+      const { header: authHeader, refreshed, newTokens } = await resolveAccessToken(currentProvider);
+      if (refreshed && newTokens) {
+        // Update stored tokens in background (don't block)
+        import('@/lib/storage').then(({ updateProvider }) =>
+          updateProvider(currentProvider!.id, newTokens as any)
+        ).catch(() => {});
+      }
+
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs);
 
@@ -184,7 +216,7 @@ export async function POST(request: NextRequest) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentProvider.apiKey}`,
+          'Authorization': authHeader,
         },
         body: JSON.stringify({
           ...body,
@@ -245,7 +277,6 @@ export async function POST(request: NextRequest) {
           tokensUsed: data.usage?.total_tokens,
         });
 
-        // Track token usage for quota
         if (data.usage?.total_tokens) {
           await incrementQuotaUsage(currentProvider.id, data.usage.total_tokens);
         }
@@ -258,7 +289,7 @@ export async function POST(request: NextRequest) {
       }
 
       const statusCode = upstreamResponse.status;
-      
+
       if (statusCode === 429) {
         const retryAfter = upstreamResponse.headers.get('retry-after');
         await updateProviderStats(currentProvider.id, false, latencyMs);
@@ -272,7 +303,7 @@ export async function POST(request: NextRequest) {
           errorMessage: `Rate limited. Retry-After: ${retryAfter || 'unknown'}`,
         });
         lastError = { message: `Rate limited (429) from ${currentProvider.name}` };
-        
+
         if (isStreaming && attempt === config.maxRetries - 1) {
           const sseData = `data: ${JSON.stringify({ error: { message: lastError.message, type: 'rate_limit_error' } })}\ndata: [DONE]\n\n`;
           return new NextResponse(sseData, {
@@ -311,7 +342,7 @@ export async function POST(request: NextRequest) {
     } catch (error: any) {
       const latencyMs = Date.now() - attemptStart;
       const isTimeout = error.name === 'AbortError';
-      
+
       await updateProviderStats(currentProvider.id, false, latencyMs);
       await addLog({
         providerId: currentProvider.id,

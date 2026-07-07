@@ -19,6 +19,9 @@ function dbToProvider(row: any): Provider {
     name: row.name,
     baseUrl: row.base_url,
     apiKey: row.api_key,
+    authType: row.auth_type ?? 'api_key',
+    chatgptRefreshToken: row.chatgpt_refresh_token ?? undefined,
+    chatgptExpiresAt: row.chatgpt_expires_at ?? undefined,
     models: row.models ?? (row.model ? [row.model] : []),
     selectedModels: row.selected_models ?? (row.model ? [row.model] : []),
     priority: row.priority,
@@ -127,6 +130,9 @@ export async function addProvider(data: {
     name: data.name,
     base_url: data.baseUrl,
     api_key: data.apiKey,
+    auth_type: (data as any).authType ?? 'api_key',
+    chatgpt_refresh_token: (data as any).chatgptRefreshToken ?? null,
+    chatgpt_expires_at: (data as any).chatgptExpiresAt ?? null,
     models: data.models,
     selected_models: data.selectedModels,
     model: data.selectedModels[0] || data.models[0] || '', // backward compat
@@ -157,6 +163,9 @@ export async function updateProvider(id: string, data: Partial<Provider>): Promi
   if (data.name !== undefined) updateObj.name = data.name;
   if (data.baseUrl !== undefined) updateObj.base_url = data.baseUrl;
   if (data.apiKey !== undefined) updateObj.api_key = data.apiKey;
+  if ((data as any).authType !== undefined) updateObj.auth_type = (data as any).authType;
+  if ((data as any).chatgptRefreshToken !== undefined) updateObj.chatgpt_refresh_token = (data as any).chatgptRefreshToken;
+  if ((data as any).chatgptExpiresAt !== undefined) updateObj.chatgpt_expires_at = (data as any).chatgptExpiresAt;
   if (data.models !== undefined) updateObj.models = data.models;
   if (data.selectedModels !== undefined) {
     updateObj.selected_models = data.selectedModels;

@@ -5,6 +5,9 @@ export interface Provider {
   name: string;
   baseUrl: string;
   apiKey: string;
+  authType?: 'api_key' | 'chatgpt_plus';  // default: api_key
+  chatgptRefreshToken?: string;            // encrypted, only for chatgpt_plus
+  chatgptExpiresAt?: string;               // ISO timestamp
   models: string[];
   selectedModels: string[];
   priority: number;
