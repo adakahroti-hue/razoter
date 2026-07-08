@@ -735,14 +735,14 @@ export default function Dashboard() {
                             const result = modelTestResults[key];
                             const statusIcon = result?.status === 'testing' ? '⏳' : result?.status === 'ok' ? '✅' : result?.status === 'fail' ? '❌' : null;
                             return (
-                              <span key={m} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono ${result?.status === 'ok' ? 'bg-emerald-50 text-emerald-700' : result?.status === 'fail' ? 'bg-red-50 text-red-700' : 'bg-indigo-50 text-indigo-600'}`}>
+                              <span key={m} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono ${result?.status === 'ok' ? 'bg-emerald-50 text-emerald-700' : result?.status === 'fail' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-600'}`}>
                                 {statusIcon && <span className="text-xs">{statusIcon}</span>}
                                 {m}
                                 {result?.status === 'ok' && result.latencyMs && <span className="text-xs opacity-70">{formatLatency(result.latencyMs)}</span>}
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleTestSingleModel(p, m); }}
                                   disabled={result?.status === 'testing'}
-                                  className="ml-1 opacity-0 group-hover:opacity-100 hover:opacity-100 text-slate-400 hover:text-indigo-600 transition-opacity"
+                                  className="ml-1 opacity-0 group-hover:opacity-100 hover:opacity-100 text-slate-400 hover:text-green-600 transition-opacity"
                                   title="Test model ini"
                                 >🔍</button>
                               </span>
@@ -795,7 +795,7 @@ export default function Dashboard() {
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="font-semibold text-slate-900 font-mono">{c.name}</h3>
                           {!c.enabled && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-200 text-slate-500">disabled</span>}
-                          <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-600 text-xs">{c.items.length} models</span>
+                          <span className="px-2 py-0.5 rounded bg-green-50 text-green-600 text-xs">{c.items.length} models</span>
                           <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-600 text-xs">{c.strategy === 'round-robin' ? '🔄 Round Robin' : '🔀 Failover Priority'}</span>
                         </div>
                         <div className="flex flex-wrap gap-2 mt-2">
@@ -844,7 +844,7 @@ export default function Dashboard() {
                         <div>
                           <div className="flex items-center gap-2">
                             <h3 className="font-semibold text-slate-900">{q.providerName}</h3>
-                            {q.apiKeyName && <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-600 text-xs font-mono">{q.apiKeyName}</span>}
+                            {q.apiKeyName && <span className="px-2 py-0.5 rounded bg-green-50 text-green-600 text-xs font-mono">{q.apiKeyName}</span>}
                             {isOver && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">LIMIT EXCEEDED</span>}
                           </div>
                           <div className="text-xs text-slate-500 mt-1">Reset tanggal {q.resetDay} setiap bulan</div>
@@ -995,7 +995,7 @@ export default function Dashboard() {
                     <button
                       type="button"
                       onClick={() => { setProviderType('custom'); setProviderForm(f => ({ ...f, baseUrl: '' })); }}
-                      className="p-4 rounded-xl border-2 border-slate-200 hover:border-indigo-400 text-left transition-colors"
+                      className="p-4 rounded-xl border-2 border-slate-200 hover:border-green-400 text-left transition-colors"
                     >
                       <div className="text-2xl mb-2">🔌</div>
                       <div className="font-semibold text-slate-900">Custom</div>
@@ -1118,7 +1118,7 @@ export default function Dashboard() {
                       );
                     })}
                   </div>
-                  <button type="button" onClick={() => setProviderFormKeys(prev => [...prev, { name: `Key ${prev.length + 1}`, key: '' }])} className="mt-2 text-sm font-medium text-indigo-600 hover:text-indigo-800">+ Tambah Key</button>
+                  <button type="button" onClick={() => setProviderFormKeys(prev => [...prev, { name: `Key ${prev.length + 1}`, key: '' }])} className="mt-2 text-sm font-medium text-green-600 hover:text-green-800">+ Tambah Key</button>
                 </div>
               </div>
               <div className="border-t border-slate-200 pt-4">
@@ -1136,14 +1136,14 @@ export default function Dashboard() {
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-sm font-medium text-slate-700">Pilih Model ({selectedModels.length}/{discoveredModels.length})</label>
                     <div className="flex gap-2">
-                      <button onClick={() => setSelectedModels([...discoveredModels])} className="text-xs text-indigo-600 hover:text-indigo-800">Pilih Semua</button>
+                      <button onClick={() => setSelectedModels([...discoveredModels])} className="text-xs text-green-600 hover:text-green-800">Pilih Semua</button>
                       <button onClick={() => setSelectedModels([])} className="text-xs text-slate-500 hover:text-slate-700">Hapus Semua</button>
                     </div>
                   </div>
                   <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
                     {discoveredModels.map(model => (
                       <label key={model} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-50 cursor-pointer">
-                        <input type="checkbox" checked={selectedModels.includes(model)} onChange={() => toggleModel(model)} className="rounded border-slate-300 text-indigo-600" />
+                        <input type="checkbox" checked={selectedModels.includes(model)} onChange={() => toggleModel(model)} className="rounded border-slate-300 text-green-600" />
                         <span className="text-sm font-mono text-slate-700">{model}</span>
                       </label>
                     ))}
@@ -1179,11 +1179,11 @@ export default function Dashboard() {
               <div>
                 <label className="text-sm text-slate-600">Strategy</label>
                 <div className="grid grid-cols-2 gap-2 mt-2">
-                  <button type="button" onClick={() => setComboForm(f => ({ ...f, strategy: 'failover-priority' }))} className={`p-3 rounded-lg border-2 text-left text-sm transition-colors ${comboForm.strategy === 'failover-priority' ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                  <button type="button" onClick={() => setComboForm(f => ({ ...f, strategy: 'failover-priority' }))} className={`p-3 rounded-lg border-2 text-left text-sm transition-colors ${comboForm.strategy === 'failover-priority' ? 'border-green-500 bg-green-50' : 'border-slate-200 hover:border-slate-300'}`}>
                     <div className="font-medium text-slate-900">🔀 Failover Priority</div>
                     <div className="text-xs text-slate-500 mt-1">Pilih random dari list. Gagal → coba lain.</div>
                   </button>
-                  <button type="button" onClick={() => setComboForm(f => ({ ...f, strategy: 'round-robin' }))} className={`p-3 rounded-lg border-2 text-left text-sm transition-colors ${comboForm.strategy === 'round-robin' ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                  <button type="button" onClick={() => setComboForm(f => ({ ...f, strategy: 'round-robin' }))} className={`p-3 rounded-lg border-2 text-left text-sm transition-colors ${comboForm.strategy === 'round-robin' ? 'border-green-500 bg-green-50' : 'border-slate-200 hover:border-slate-300'}`}>
                     <div className="font-medium text-slate-900">🔄 Round Robin</div>
                     <div className="text-xs text-slate-500 mt-1">Rotasi berurutan, merata ke semua model.</div>
                   </button>
@@ -1192,7 +1192,7 @@ export default function Dashboard() {
               <div className="border-t border-slate-200 pt-4">
                 <div className="flex items-center justify-between mb-3">
                   <label className="text-sm font-medium text-slate-700">Provider + Model ({comboItems.length})</label>
-                  <button onClick={addComboItem} className="text-xs text-indigo-600 hover:text-indigo-800">+ Tambah Item</button>
+                  <button onClick={addComboItem} className="text-xs text-green-600 hover:text-green-800">+ Tambah Item</button>
                 </div>
                 <div className="space-y-3">
                   {comboItems.map((item, i) => {

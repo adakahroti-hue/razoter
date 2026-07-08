@@ -46,10 +46,10 @@ function pickRandomApiKey(provider: any): { key: string; name: string } {
 /** Resolve a valid access token for a provider, refreshing if needed. */
 async function resolveAccessToken(provider: any): Promise<{ header: string; refreshed: boolean; newTokens?: any; apiKeyName: string }> {
   if (provider.authType === 'chatgpt_plus' && provider.chatgptRefreshToken && provider.chatgptExpiresAt) {
+    const ak = pickRandomApiKey(provider);
     try {
-      const { key: pickedKey, name: pickedName } = pickRandomApiKey(provider);
       const r = await getValidAccessToken(
-        pickedKey,
+        ak.key,
         provider.chatgptRefreshToken,
         provider.chatgptExpiresAt,
       );
@@ -57,7 +57,7 @@ async function resolveAccessToken(provider: any): Promise<{ header: string; refr
         header: `Bearer ${r.accessToken}`,
         refreshed: r.refreshed,
         newTokens: r.refreshed ? { apiKey: r.accessToken, chatgptRefreshToken: r.refreshToken, chatgptExpiresAt: r.expiresAt } : undefined,
-        apiKeyName: pickedName,
+        apiKeyName: ak.name,
       };
     } catch (refreshErr: any) {
       // Fall through with stale token
@@ -68,11 +68,12 @@ async function resolveAccessToken(provider: any): Promise<{ header: string; refr
         status: 'error',
         latencyMs: 0,
         errorMessage: `Token refresh failed: ${refreshErr.message}`,
+        apiKeyName: ak.name,
       });
     }
   }
-  const { key: pickedKey, name: pickedName } = pickRandomApiKey(provider);
-  return { header: `Bearer ${pickedKey}`, refreshed: false, apiKeyName: pickedName };
+  const fallback = pickRandomApiKey(provider);
+  return { header: `Bearer ${fallback.key}`, refreshed: false, apiKeyName: fallback.name };
 }
 
 export async function POST(request: NextRequest) {
@@ -146,6 +147,7 @@ export async function POST(request: NextRequest) {
 
       body.model = comboResult.model;
 
+      let comboKeyName = 'Default';
       const comboStart = Date.now();
       try {
         if (comboProvider.authType === 'chatgpt_plus') {
@@ -161,7 +163,7 @@ export async function POST(request: NextRequest) {
           );
           const latencyMs = Date.now() - comboStart;
           import('@/lib/storage').then(({ addLog, updateProviderStats, incrementQuotaUsage }) => {
-            addLog({ providerId: comboProvider!.id, providerName: comboProvider!.name, model: comboResult.model, status: 'success', latencyMs, tokensUsed });
+            addLog({ providerId: comboProvider!.id, providerName: comboProvider!.name, model: comboResult.model, status: 'success', latencyMs, tokensUsed, apiKeyName: comboKeyName });
             updateProviderStats(comboProvider!.id, true, latencyMs);
             incrementQuotaUsage(comboProvider!.id, tokensUsed || 0, comboKeyName).catch(() => {});
           }).catch(() => {});
@@ -169,7 +171,7 @@ export async function POST(request: NextRequest) {
         }
 
         const upstreamUrl = `${comboProvider.baseUrl.replace(/\/+$/, '')}/chat/completions`;
-        const { header: comboAuth } = await resolveAccessToken(comboProvider);
+        const { header: comboAuth, apiKeyName: comboKeyName } = await resolveAccessToken(comboProvider);
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs);
 
@@ -186,7 +188,7 @@ export async function POST(request: NextRequest) {
         if (upstreamResponse.ok) {
           if (isStreaming && upstreamResponse.body) {
             await updateProviderStats(comboProvider.id, true, latencyMs);
-            await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'success', statusCode: 200, latencyMs });
+            await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'success', statusCode: 200, latencyMs, apiKeyName: comboKeyName });
             return new NextResponse(upstreamResponse.body, {
               status: 200,
               headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', ...corsHeaders() },
@@ -194,7 +196,7 @@ export async function POST(request: NextRequest) {
           }
           const data = await upstreamResponse.json();
           await updateProviderStats(comboProvider.id, true, latencyMs);
-          await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'success', statusCode: 200, latencyMs, tokensUsed: data.usage?.total_tokens });
+          await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'success', statusCode: 200, latencyMs, tokensUsed: data.usage?.total_tokens, apiKeyName: comboKeyName });
           return withCors(NextResponse.json(data, { status: 200 }));
         }
 
@@ -202,11 +204,11 @@ export async function POST(request: NextRequest) {
         let parsedError = errText;
         try { parsedError = JSON.parse(errText)?.error?.message || errText; } catch {}
         await updateProviderStats(comboProvider.id, false, latencyMs);
-        await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'retry', statusCode: upstreamResponse.status, latencyMs, errorMessage: parsedError + '. Combo failover -> next item.' });
+        await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'retry', statusCode: upstreamResponse.status, latencyMs, errorMessage: parsedError + '. Combo failover -> next item.', apiKeyName: comboKeyName });
       } catch (err: any) {
         const latencyMs = Date.now() - comboStart;
         await updateProviderStats(comboProvider.id, false, latencyMs);
-        await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'retry', latencyMs, errorMessage: err.message + '. Combo failover -> next item.' });
+        await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'retry', latencyMs, errorMessage: err.message + '. Combo failover -> next item.', apiKeyName: comboKeyName });
       }
 
       comboTriedIndices.push(comboResult.itemIndex);
@@ -248,6 +250,7 @@ export async function POST(request: NextRequest) {
     }
 
     const selectedModel = pickModel(currentProvider, requestedModel);
+    let lastAkName: string | undefined;
 
     try {
       // ChatGPT Plus uses /responses API with translator
@@ -255,6 +258,7 @@ export async function POST(request: NextRequest) {
 
       if (isChatgptPlus) {
         const { header: authHeader, refreshed, newTokens, apiKeyName: akName } = await resolveAccessToken(currentProvider);
+        lastAkName = akName;
         if (refreshed && newTokens) {
           import('@/lib/storage').then(({ updateProvider }) =>
             updateProvider(currentProvider!.id, newTokens as any)
@@ -267,7 +271,7 @@ export async function POST(request: NextRequest) {
         // Log success
         const latencyMs = Date.now() - startTime;
         import('@/lib/storage').then(({ addLog, updateProviderStats, incrementQuotaUsage }) => {
-          addLog({ providerId: currentProvider!.id, providerName: currentProvider!.name, model: selectedModel || requestedModel, status: 'success', latencyMs, tokensUsed });
+          addLog({ providerId: currentProvider!.id, providerName: currentProvider!.name, model: selectedModel || requestedModel, status: 'success', latencyMs, tokensUsed, apiKeyName: akName });
           updateProviderStats(currentProvider!.id, true, latencyMs);
           incrementQuotaUsage(currentProvider!.id, tokensUsed || 0, akName).catch(() => {});
         }).catch(() => {});
@@ -277,6 +281,7 @@ export async function POST(request: NextRequest) {
       // Standard OpenAI-compatible provider
       const upstreamUrl = `${currentProvider.baseUrl.replace(/\/+$/, '')}/chat/completions`;
       const { header: authHeader, apiKeyName: stdAkName } = await resolveAccessToken(currentProvider);
+      lastAkName = stdAkName;
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs);
@@ -316,6 +321,7 @@ export async function POST(request: NextRequest) {
             status: 'success',
             statusCode: 200,
             latencyMs,
+            apiKeyName: stdAkName,
           });
 
           const response = new NextResponse(upstreamResponse.body, {
@@ -344,6 +350,7 @@ export async function POST(request: NextRequest) {
           statusCode: 200,
           latencyMs,
           tokensUsed: data.usage?.total_tokens,
+          apiKeyName: stdAkName,
         });
 
         if (data.usage?.total_tokens) {
@@ -370,6 +377,7 @@ export async function POST(request: NextRequest) {
           statusCode,
           latencyMs,
           errorMessage: `Rate limited. Retry-After: ${retryAfter || 'unknown'}`,
+          apiKeyName: stdAkName,
         });
         lastError = { message: `Rate limited (429) from ${currentProvider.name}` };
 
@@ -400,6 +408,7 @@ export async function POST(request: NextRequest) {
         statusCode,
         latencyMs,
         errorMessage: errorBody?.error?.message || errorBody?.message || `HTTP ${statusCode}`,
+        apiKeyName: stdAkName,
       });
 
       if (statusCode >= 400 && statusCode < 500) {
@@ -420,6 +429,7 @@ export async function POST(request: NextRequest) {
         status: isTimeout ? 'timeout' : 'error',
         latencyMs,
         errorMessage: isTimeout ? 'Request timed out' : error.message,
+        apiKeyName: lastAkName,
       });
 
       lastError = { message: isTimeout ? 'Request timed out' : error.message };

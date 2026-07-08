@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
     let refreshToken: string | undefined;
     let expiresAt: string | undefined;
     let providerName = 'Test';
+    let testAkName: string | undefined;
 
     if (providerId) {
       const provider = await getProvider(providerId);
@@ -47,6 +48,7 @@ export async function POST(request: NextRequest) {
       refreshToken = provider.chatgptRefreshToken;
       expiresAt = provider.chatgptExpiresAt;
       providerName = provider.name;
+      testAkName = Array.isArray(provider.apiKeys) && provider.apiKeys.length > 0 ? provider.apiKeys[0].name : 'Default';
     }
 
     if (!resolvedBaseUrl) {
@@ -70,7 +72,7 @@ export async function POST(request: NextRequest) {
         }
       } catch (refreshErr: any) {
         // Fire-and-forget log
-        addLog({ providerId: providerId || '', providerName, model, status: 'error', latencyMs: 0, errorMessage: `Token refresh failed: ${refreshErr.message}` }).catch(() => {});
+        addLog({ providerId: providerId || '', providerName, model, status: 'error', latencyMs: 0, errorMessage: `Token refresh failed: ${refreshErr.message}`, apiKeyName: testAkName }).catch(() => {});
         return withCors(NextResponse.json({
           success: false,
           model,
@@ -104,7 +106,7 @@ export async function POST(request: NextRequest) {
 
         if (!resp.ok) {
           const errText = await resp.text();
-          addLog({ providerId: providerId || '', providerName, model, status: 'error', latencyMs, errorMessage: `HTTP ${resp.status}: ${errText.slice(0, 200)}` }).catch(() => {});
+          addLog({ providerId: providerId || '', providerName, model, status: 'error', latencyMs, errorMessage: `HTTP ${resp.status}: ${errText.slice(0, 200)}`, apiKeyName: testAkName }).catch(() => {});
           return withCors(NextResponse.json({
             success: false,
             model,
