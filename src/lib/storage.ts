@@ -617,6 +617,7 @@ export async function getQuotas(): Promise<Quota[]> {
     providerId: row.provider_id,
     providerName: row.provider_name,
     model: row.model ?? '',
+    apiKeyName: row.api_key_name ?? '',
     monthlyLimit: row.monthly_limit ?? 0,
     currentUsage: row.current_usage ?? 0,
     resetDay: row.reset_day ?? 1,
@@ -624,13 +625,13 @@ export async function getQuotas(): Promise<Quota[]> {
   }));
 }
 
-export async function addQuota(providerId: string, providerName: string, model: string, monthlyLimit: number, resetDay: number): Promise<Quota> {
+export async function addQuota(providerId: string, providerName: string, model: string, monthlyLimit: number, resetDay: number, apiKeyName: string = ''): Promise<Quota> {
   const id = randomUUID();
   const now = new Date().toISOString();
 
   const { data, error } = await supabase
     .from('quotas')
-    .insert({ id, provider_id: providerId, provider_name: providerName, model: model || '', monthly_limit: monthlyLimit, current_usage: 0, reset_day: resetDay, created_at: now })
+    .insert({ id, provider_id: providerId, provider_name: providerName, model: model || '', monthly_limit: monthlyLimit, current_usage: 0, reset_day: resetDay, api_key_name: apiKeyName, created_at: now })
     .select()
     .single();
 
@@ -639,7 +640,7 @@ export async function addQuota(providerId: string, providerName: string, model: 
     throw new Error(`Failed to add quota: ${error.message}`);
   }
 
-  return { id: data.id, providerId: data.provider_id, providerName: data.provider_name, model: data.model ?? '', monthlyLimit: data.monthly_limit, currentUsage: data.current_usage, resetDay: data.reset_day, createdAt: data.created_at };
+  return { id: data.id, providerId: data.provider_id, providerName: data.provider_name, model: data.model ?? '', apiKeyName: data.api_key_name ?? '', monthlyLimit: data.monthly_limit, currentUsage: data.current_usage, resetDay: data.reset_day, createdAt: data.created_at };
 }
 
 export async function updateQuota(id: string, updates: Partial<Quota>): Promise<Quota | null> {
@@ -660,7 +661,7 @@ export async function updateQuota(id: string, updates: Partial<Quota>): Promise<
   }
   if (!data) return null;
 
-  return { id: data.id, providerId: data.provider_id, providerName: data.provider_name, model: data.model ?? '', monthlyLimit: data.monthly_limit, currentUsage: data.current_usage, resetDay: data.reset_day, createdAt: data.created_at };
+  return { id: data.id, providerId: data.provider_id, providerName: data.provider_name, model: data.model ?? '', apiKeyName: data.api_key_name ?? '', monthlyLimit: data.monthly_limit, currentUsage: data.current_usage, resetDay: data.reset_day, createdAt: data.created_at };
 }
 
 export async function deleteQuota(id: string): Promise<boolean> {
@@ -676,14 +677,20 @@ export async function deleteQuota(id: string): Promise<boolean> {
   return (count ?? 0) > 0;
 }
 
-export async function incrementQuotaUsage(providerId: string, tokens: number): Promise<void> {
-  // Get current quota for this provider
-  const { data } = await supabase
+export async function incrementQuotaUsage(providerId: string, tokens: number, apiKeyName?: string): Promise<void> {
+  // Get current quota for this provider, optionally filtering by api_key_name
+  const query = supabase
     .from('quotas')
-    .select('id, current_usage')
-    .eq('provider_id', providerId)
-    .limit(1)
-    .maybeSingle();
+    .select('id, current_usage');
+
+  let queryBuilder;
+  if (apiKeyName) {
+    queryBuilder = query.eq('api_key_name', apiKeyName).limit(1);
+  } else {
+    queryBuilder = query.eq('provider_id', providerId).limit(1);
+  }
+
+  const { data } = await queryBuilder.maybeSingle();
 
   if (data) {
     await supabase
@@ -693,14 +700,20 @@ export async function incrementQuotaUsage(providerId: string, tokens: number): P
   }
 }
 
-export async function checkQuotaLimit(providerId: string): Promise<boolean> {
+export async function checkQuotaLimit(providerId: string, apiKeyName?: string): Promise<boolean> {
   // Returns true if provider is within quota (or no quota set)
-  const { data } = await supabase
+  const query = supabase
     .from('quotas')
-    .select('monthly_limit, current_usage')
-    .eq('provider_id', providerId)
-    .limit(1)
-    .maybeSingle();
+    .select('monthly_limit, current_usage');
+
+  let queryBuilder;
+  if (apiKeyName) {
+    queryBuilder = query.eq('api_key_name', apiKeyName).limit(1);
+  } else {
+    queryBuilder = query.eq('provider_id', providerId).limit(1);
+  }
+
+  const { data } = await queryBuilder.maybeSingle();
 
   if (!data || !data.monthly_limit || data.monthly_limit === 0) return true; // no limit
   return (data.current_usage ?? 0) < data.monthly_limit;

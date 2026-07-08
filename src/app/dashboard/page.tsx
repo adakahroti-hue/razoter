@@ -681,58 +681,6 @@ export default function Dashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
-        {/* Settings (was Stats) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Base URL */}
-          <div className="card">
-            <h3 className="font-semibold text-slate-900 mb-3">📡 Base URL</h3>
-            <p className="text-sm text-slate-500 mb-3">Pakai URL ini sebagai base URL di platform tujuan (Cursor, Open WebUI, dll).</p>
-            <div className="flex items-center gap-2 bg-slate-50 rounded-lg p-3">
-              <code className="text-sm text-slate-700 font-mono flex-1">{BASE_URL}</code>
-              <CopyButton text={BASE_URL} />
-            </div>
-          </div>
-
-          {/* API Keys */}
-          <div className="card">
-            <h3 className="font-semibold text-slate-900 mb-3">🔑 API Keys</h3>
-            <div className="flex gap-2 mb-3">
-              <input type="text" className="input flex-1" placeholder="Nama key (e.g. Cursor, Open WebUI)" value={newKeyName} onChange={e => setNewKeyName(e.target.value)} />
-              <button onClick={handleGenerateApiKey} className="btn btn-primary whitespace-nowrap">🎲 Generate</button>
-            </div>
-
-            {generatedKey && (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-3">
-                <div className="text-sm font-medium text-emerald-800 mb-1">✅ Key baru!</div>
-                <div className="flex items-center gap-2">
-                  <code className="text-xs text-emerald-700 font-mono flex-1 break-all">{generatedKey}</code>
-                  <CopyButton text={generatedKey} />
-                </div>
-                <div className="text-xs text-emerald-600 mt-1">⚠️ Copy sekarang! Tidak akan ditampilkan lagi.</div>
-              </div>
-            )}
-
-            {apiKeys.length > 0 && (
-              <div className="space-y-1">
-                {apiKeys.map(k => (
-                  <div key={k.id} className="flex items-center gap-2 bg-slate-50 rounded-lg p-2">
-                    <div className="flex-1 min-w-0">
-                      <span className="font-medium text-slate-700 text-sm">{k.name}</span>
-                      <code className="text-xs text-slate-500 font-mono ml-2">{k.key.slice(0, 8)}...{k.key.slice(-4)}</code>
-                    </div>
-                    <CopyButton text={k.key} />
-                    <button onClick={() => handleDeleteApiKey(k.id)} className="text-xs px-1.5 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-100">🗑️</button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {apiKeys.length === 0 && !generatedKey && (
-              <div className="text-center py-3 text-slate-400 text-sm">Belum ada API key</div>
-            )}
-          </div>
-        </div>
-
         {/* Tabs */}
         <div className="flex gap-1 bg-slate-100 rounded-lg p-1 overflow-x-auto flex-nowrap">
           {(['providers', 'combos', 'logs', 'quotas'] as const).map(tab => (
@@ -798,10 +746,7 @@ export default function Dashboard() {
                           })}
                           {p.selectedModels.length < p.models.length && <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-400 text-xs">+{p.models.length - p.selectedModels.length} more</span>}
                         </div>
-                        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-xs text-slate-500">
-                          <span>📊 {p.totalRequests} req</span><span>✅ {p.successCount} ok</span><span>❌ {p.errorCount} err</span><span>⚡ {formatLatency(p.avgLatencyMs)} avg</span>
-                          <span className="hidden sm:inline">{p.rateLimitRemaining !== null && <span>🚦 {p.rateLimitRemaining}/{p.rateLimitTotal}</span>}</span>
-                        </div>
+
                       </div>
                       <div className="flex flex-row sm:flex-col gap-2 sm:items-end">
                         <div className="flex gap-2">
@@ -978,6 +923,52 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+        {/* Settings (moved to bottom) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="card">
+            <h3 className="font-semibold text-slate-900 mb-3">📡 Base URL</h3>
+            <p className="text-sm text-slate-500 mb-3">Pakai URL ini sebagai base URL di platform tujuan (Cursor, Open WebUI, dll).</p>
+            <div className="flex items-center gap-2 bg-slate-50 rounded-lg p-3">
+              <code className="text-sm text-slate-700 font-mono flex-1">{BASE_URL}</code>
+              <CopyButton text={BASE_URL} />
+            </div>
+          </div>
+          <div className="card">
+            <h3 className="font-semibold text-slate-900 mb-3">🔑 API Keys</h3>
+            <div className="flex gap-2 mb-3">
+              <input type="text" className="input flex-1" placeholder="Nama key (e.g. Cursor, Open WebUI)" value={newKeyName} onChange={e => setNewKeyName(e.target.value)} />
+              <button onClick={handleGenerateApiKey} className="btn btn-primary whitespace-nowrap">🎲 Generate</button>
+            </div>
+            {generatedKey && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-3">
+                <div className="text-sm font-medium text-emerald-800 mb-1">✅ Key baru!</div>
+                <div className="flex items-center gap-2">
+                  <code className="text-xs text-emerald-700 font-mono flex-1 break-all">{generatedKey}</code>
+                  <CopyButton text={generatedKey} />
+                </div>
+                <div className="text-xs text-emerald-600 mt-1">⚠️ Copy sekarang! Tidak akan ditampilkan lagi.</div>
+              </div>
+            )}
+            {apiKeys.length > 0 && (
+              <div className="space-y-1">
+                {apiKeys.map(k => (
+                  <div key={k.id} className="flex items-center gap-2 bg-slate-50 rounded-lg p-2">
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium text-slate-700 text-sm">{k.name}</span>
+                      <code className="text-xs text-slate-500 font-mono ml-2">{k.key.slice(0, 8)}...{k.key.slice(-4)}</code>
+                    </div>
+                    <CopyButton text={k.key} />
+                    <button onClick={() => handleDeleteApiKey(k.id)} className="text-xs px-1.5 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-100">🗑️</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {apiKeys.length === 0 && !generatedKey && (
+              <div className="text-center py-3 text-slate-400 text-sm">Belum ada API key</div>
+            )}
+          </div>
+        </div>
 
       </main>
 

@@ -31,23 +31,25 @@ function parseRateLimitHeaders(headers: Headers) {
 
 
 /** Pick a random enabled API key from provider's apiKeys array. Falls back to provider.apiKey. */
-function pickRandomApiKey(provider: any): string {
+function pickRandomApiKey(provider: any): { key: string; name: string } {
   const keys = provider.apiKeys;
   if (Array.isArray(keys) && keys.length > 0) {
     const enabled = keys.filter((k: any) => k.enabled !== false);
     if (enabled.length > 0) {
-      return enabled[Math.floor(Math.random() * enabled.length)].key;
+      const pick = enabled[Math.floor(Math.random() * enabled.length)];
+      return { key: pick.key, name: pick.name };
     }
   }
-  return provider.apiKey;
+  return { key: provider.apiKey, name: 'Default' };
 }
 
 /** Resolve a valid access token for a provider, refreshing if needed. */
-async function resolveAccessToken(provider: any): Promise<{ header: string; refreshed: boolean; newTokens?: any }> {
+async function resolveAccessToken(provider: any): Promise<{ header: string; refreshed: boolean; newTokens?: any; apiKeyName: string }> {
   if (provider.authType === 'chatgpt_plus' && provider.chatgptRefreshToken && provider.chatgptExpiresAt) {
     try {
+      const { key: pickedKey, name: pickedName } = pickRandomApiKey(provider);
       const r = await getValidAccessToken(
-        pickRandomApiKey(provider),
+        pickedKey,
         provider.chatgptRefreshToken,
         provider.chatgptExpiresAt,
       );
@@ -55,6 +57,7 @@ async function resolveAccessToken(provider: any): Promise<{ header: string; refr
         header: `Bearer ${r.accessToken}`,
         refreshed: r.refreshed,
         newTokens: r.refreshed ? { apiKey: r.accessToken, chatgptRefreshToken: r.refreshToken, chatgptExpiresAt: r.expiresAt } : undefined,
+        apiKeyName: pickedName,
       };
     } catch (refreshErr: any) {
       // Fall through with stale token
@@ -68,7 +71,8 @@ async function resolveAccessToken(provider: any): Promise<{ header: string; refr
       });
     }
   }
-  return { header: `Bearer ${provider.apiKey}`, refreshed: false };
+  const { key: pickedKey, name: pickedName } = pickRandomApiKey(provider);
+  return { header: `Bearer ${pickedKey}`, refreshed: false, apiKeyName: pickedName };
 }
 
 export async function POST(request: NextRequest) {

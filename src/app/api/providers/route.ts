@@ -64,10 +64,13 @@ export async function POST(request: NextRequest) {
       enabled: enabled ?? true,
     });
 
-    // Auto-create quota entry for each selected model
-    for (const model of selected) {
+    // Auto-create quota entry for each API key (not per model)
+    const apiKeysList = apiKeys && Array.isArray(apiKeys) && apiKeys.length > 0
+      ? apiKeys
+      : [{ name: 'Default', key: provider.apiKey, enabled: true }];
+    for (const ak of apiKeysList) {
       try {
-        await addQuota(provider.id, name, model, 0, 1);
+        await addQuota(provider.id, name, '', 0, 1, ak.name);
       } catch {}
     }
 
