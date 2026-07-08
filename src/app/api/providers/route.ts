@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
       ? selectedModels
       : models; // default: all models selected
 
-    const provider = await addProvider({ ...apiKeys ? { apiKeys } : {},
+    const provider = await addProvider({ ...apiKeys ? { apiKeys } : {}, ...apiKeyStrategy ? { apiKeyStrategy } : {},
       name,
       baseUrl: baseUrl.replace(/\/+$/, ''),
       apiKey,

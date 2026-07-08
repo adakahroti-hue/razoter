@@ -168,6 +168,7 @@ export async function updateProvider(id: string, data: Partial<Provider>): Promi
   if (data.name !== undefined) updateObj.name = data.name;
   if (data.baseUrl !== undefined) updateObj.base_url = data.baseUrl;
   if (data.apiKey !== undefined) updateObj.api_key = data.apiKey;
+  if ((data as any).apiKeys !== undefined) updateObj.api_keys = (data as any).apiKeys;
   if ((data as any).authType !== undefined) updateObj.auth_type = (data as any).authType;
   if ((data as any).chatgptRefreshToken !== undefined) updateObj.chatgpt_refresh_token = (data as any).chatgptRefreshToken;
   if ((data as any).chatgptExpiresAt !== undefined) updateObj.chatgpt_expires_at = (data as any).chatgptExpiresAt;
