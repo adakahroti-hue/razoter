@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { name, baseUrl, apiKey, models, selectedModels, priority, enabled, apiKeys } = body;
+    const { name, baseUrl, apiKey, models, selectedModels, priority, enabled, apiKeys, apiKeyStrategy } = body;
 
     if (!name || !baseUrl || !apiKey) {
       return withCors(

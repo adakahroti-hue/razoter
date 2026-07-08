@@ -30,12 +30,26 @@ function parseRateLimitHeaders(headers: Headers) {
 }
 
 
-/** Pick a random enabled API key from provider's apiKeys array. Falls back to provider.apiKey. */
-function pickRandomApiKey(provider: any): { key: string; name: string } {
+/** Pick an API key based on provider's apiKeyStrategy setting. */
+function pickApiKey(provider: any): { key: string; name: string } {
   const keys = provider.apiKeys;
+  const strategy = provider.apiKeyStrategy || 'random';
   if (Array.isArray(keys) && keys.length > 0) {
     const enabled = keys.filter((k: any) => k.enabled !== false);
     if (enabled.length > 0) {
+      if (strategy === 'failover-priority') {
+        // Always pick the first enabled key (priority order)
+        return { key: enabled[0].key, name: enabled[0].name };
+      }
+      if (strategy === 'round-robin') {
+        // Use per-provider round-robin index
+        const providerRoundRobinKey = `apikey_rr_${provider.id}`;
+        const idx = apiKeyRoundRobinIndex.get(providerRoundRobinKey) ?? 0;
+        const pick = enabled[idx % enabled.length];
+        apiKeyRoundRobinIndex.set(providerRoundRobinKey, idx + 1);
+        return { key: pick.key, name: pick.name };
+      }
+      // Default: random
       const pick = enabled[Math.floor(Math.random() * enabled.length)];
       return { key: pick.key, name: pick.name };
     }
@@ -43,10 +57,13 @@ function pickRandomApiKey(provider: any): { key: string; name: string } {
   return { key: provider.apiKey, name: 'Default' };
 }
 
+// In-memory round-robin index for API key selection (not persisted)
+const apiKeyRoundRobinIndex = new Map<string, number>();
+
 /** Resolve a valid access token for a provider, refreshing if needed. */
 async function resolveAccessToken(provider: any): Promise<{ header: string; refreshed: boolean; newTokens?: any; apiKeyName: string }> {
   if (provider.authType === 'chatgpt_plus' && provider.chatgptRefreshToken && provider.chatgptExpiresAt) {
-    const ak = pickRandomApiKey(provider);
+    const ak = pickApiKey(provider);
     try {
       const r = await getValidAccessToken(
         ak.key,
@@ -72,7 +89,7 @@ async function resolveAccessToken(provider: any): Promise<{ header: string; refr
       });
     }
   }
-  const fallback = pickRandomApiKey(provider);
+  const fallback = pickApiKey(provider);
   return { header: `Bearer ${fallback.key}`, refreshed: false, apiKeyName: fallback.name };
 }
 

@@ -690,7 +690,7 @@ export default function Dashboard() {
           {(['providers', 'combos', 'logs', 'quotas'] as const).map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 min-w-[3rem] px-2 sm:px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${activeTab === tab ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
               <span className="sm:hidden">{tab === 'providers' ? '🔌' : tab === 'combos' ? '🧩' : tab === 'quotas' ? '📊' : '📋'}</span>
-              <span className="hidden sm:inline">{tab === 'providers' ? '🔌 Providers' : tab === 'combos' ? '🧩 Combos' : tab === 'quotas' ? '📊 Quotas' : '📋 Logs'}</span>
+              <span className="hidden sm:inline">{tab === 'providers' ? '🔌 Providers' : tab === 'combos' ? '🧩 Kombo' : tab === 'quotas' ? '📊 Quotas' : '📋 Logs'}</span>
             </button>
           ))}
         </div>
@@ -771,6 +771,52 @@ export default function Dashboard() {
                 ))}
               </div>
             )}
+
+            {/* Base URL & API Keys — inside providers tab */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+              <div className="card">
+                <h3 className="font-semibold text-slate-900 mb-3">📡 Base URL</h3>
+                <p className="text-sm text-slate-500 mb-3">Pakai URL ini sebagai base URL di platform tujuan (Cursor, Open WebUI, dll).</p>
+                <div className="flex items-center gap-2 bg-slate-50 rounded-lg p-3">
+                  <code className="text-sm text-slate-700 font-mono flex-1">{BASE_URL}</code>
+                  <CopyButton text={BASE_URL} />
+                </div>
+              </div>
+              <div className="card">
+                <h3 className="font-semibold text-slate-900 mb-3">🔑 API Keys</h3>
+                <div className="flex gap-2 mb-3">
+                  <input type="text" className="input flex-1" placeholder="Nama key (e.g. Cursor, Open WebUI)" value={newKeyName} onChange={e => setNewKeyName(e.target.value)} />
+                  <button onClick={handleGenerateApiKey} className="btn btn-primary whitespace-nowrap">🎲 Generate</button>
+                </div>
+                {generatedKey && (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-3">
+                    <div className="text-sm font-medium text-emerald-800 mb-1">✅ Key baru!</div>
+                    <div className="flex items-center gap-2">
+                      <code className="text-xs text-emerald-700 font-mono flex-1 break-all">{generatedKey}</code>
+                      <CopyButton text={generatedKey} />
+                    </div>
+                    <div className="text-xs text-emerald-600 mt-1">⚠️ Copy sekarang! Tidak akan ditampilkan lagi.</div>
+                  </div>
+                )}
+                {apiKeys.length > 0 && (
+                  <div className="space-y-1">
+                    {apiKeys.map(k => (
+                      <div key={k.id} className="flex items-center gap-2 bg-slate-50 rounded-lg p-2">
+                        <div className="flex-1 min-w-0">
+                          <span className="font-medium text-slate-700 text-sm">{k.name}</span>
+                          <code className="text-xs text-slate-500 font-mono ml-2">{k.key.slice(0, 8)}...{k.key.slice(-4)}</code>
+                        </div>
+                        <CopyButton text={k.key} />
+                        <button onClick={() => handleDeleteApiKey(k.id)} className="text-xs px-1.5 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-100">🗑️</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {apiKeys.length === 0 && !generatedKey && (
+                  <div className="text-center py-3 text-slate-400 text-sm">Belum ada API key</div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -882,7 +928,7 @@ export default function Dashboard() {
               {/* Desktop table view */}
               <table className="w-full text-sm hidden sm:table">
                 <thead><tr className="bg-slate-50 text-left">
-                  <th className="px-4 py-2 text-slate-500 font-medium">Time</th><th className="px-4 py-2 text-slate-500 font-medium">Provider</th><th className="px-4 py-2 text-slate-500 font-medium">Model</th><th className="px-4 py-2 text-slate-500 font-medium">Status</th><th className="px-4 py-2 text-slate-500 font-medium">Keterangan</th><th className="px-4 py-2 text-slate-500 font-medium">Latency</th><th className="px-4 py-2 text-slate-500 font-medium">API Key</th>
+                  <th className="px-4 py-2 text-slate-500 font-medium">Time</th><th className="px-4 py-2 text-slate-500 font-medium">Provider</th><th className="px-4 py-2 text-slate-500 font-medium">API Key</th><th className="px-4 py-2 text-slate-500 font-medium">Model</th><th className="px-4 py-2 text-slate-500 font-medium">Status</th><th className="px-4 py-2 text-slate-500 font-medium">Keterangan</th><th className="px-4 py-2 text-slate-500 font-medium">Latency</th>
                 </tr></thead>
                 <tbody>
                   {logs.length === 0 ? <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">Belum ada logs</td></tr> :
@@ -890,11 +936,11 @@ export default function Dashboard() {
                       <tr key={log.id} className={`border-t border-slate-100 ${log.errorMessage ? 'cursor-pointer hover:bg-red-50 transition-colors' : ''}`} onClick={log.errorMessage ? () => setSelectedLogError(log) : undefined}>
                         <td className="px-4 py-2 text-slate-500 font-mono text-xs">{formatTime(log.createdAt)}</td>
                         <td className="px-4 py-2 text-slate-700">{log.providerName}</td>
+                        <td className="px-4 py-2 text-slate-500 text-xs font-mono">{log.apiKeyName || '-'}</td>
                         <td className="px-4 py-2 text-slate-500 font-mono text-xs">{log.model}</td>
                         <td className="px-4 py-2"><div className="flex items-center gap-1">{statusBadge(log.status)}{log.errorMessage && <span title="View error details">🔴</span>}</div></td>
                         <td className="px-4 py-2 text-xs text-red-600 max-w-[200px] truncate">{log.errorMessage ? log.errorMessage.length > 50 ? log.errorMessage.slice(0, 50) + '...' : log.errorMessage : <span className="text-slate-300">-</span>}</td>
                         <td className="px-4 py-2 text-slate-500">{formatLatency(log.latencyMs)}</td>
-                        <td className="px-4 py-2 text-slate-500 text-xs font-mono">{log.apiKeyName || '-'}</td>
                       </tr>
                     ))
                   }
@@ -928,51 +974,6 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Settings (moved to bottom) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="card">
-            <h3 className="font-semibold text-slate-900 mb-3">📡 Base URL</h3>
-            <p className="text-sm text-slate-500 mb-3">Pakai URL ini sebagai base URL di platform tujuan (Cursor, Open WebUI, dll).</p>
-            <div className="flex items-center gap-2 bg-slate-50 rounded-lg p-3">
-              <code className="text-sm text-slate-700 font-mono flex-1">{BASE_URL}</code>
-              <CopyButton text={BASE_URL} />
-            </div>
-          </div>
-          <div className="card">
-            <h3 className="font-semibold text-slate-900 mb-3">🔑 API Keys</h3>
-            <div className="flex gap-2 mb-3">
-              <input type="text" className="input flex-1" placeholder="Nama key (e.g. Cursor, Open WebUI)" value={newKeyName} onChange={e => setNewKeyName(e.target.value)} />
-              <button onClick={handleGenerateApiKey} className="btn btn-primary whitespace-nowrap">🎲 Generate</button>
-            </div>
-            {generatedKey && (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-3">
-                <div className="text-sm font-medium text-emerald-800 mb-1">✅ Key baru!</div>
-                <div className="flex items-center gap-2">
-                  <code className="text-xs text-emerald-700 font-mono flex-1 break-all">{generatedKey}</code>
-                  <CopyButton text={generatedKey} />
-                </div>
-                <div className="text-xs text-emerald-600 mt-1">⚠️ Copy sekarang! Tidak akan ditampilkan lagi.</div>
-              </div>
-            )}
-            {apiKeys.length > 0 && (
-              <div className="space-y-1">
-                {apiKeys.map(k => (
-                  <div key={k.id} className="flex items-center gap-2 bg-slate-50 rounded-lg p-2">
-                    <div className="flex-1 min-w-0">
-                      <span className="font-medium text-slate-700 text-sm">{k.name}</span>
-                      <code className="text-xs text-slate-500 font-mono ml-2">{k.key.slice(0, 8)}...{k.key.slice(-4)}</code>
-                    </div>
-                    <CopyButton text={k.key} />
-                    <button onClick={() => handleDeleteApiKey(k.id)} className="text-xs px-1.5 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-100">🗑️</button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {apiKeys.length === 0 && !generatedKey && (
-              <div className="text-center py-3 text-slate-400 text-sm">Belum ada API key</div>
-            )}
-          </div>
-        </div>
 
       </main>
 

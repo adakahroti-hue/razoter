@@ -6,6 +6,7 @@ export interface Provider {
   baseUrl: string;
   apiKey: string;  // primary key (kept for backward compat)
   apiKeys: Array<{ name: string; key: string; enabled: boolean }>;  // multi-key support
+  apiKeyStrategy?: 'random' | 'failover-priority' | 'round-robin';  // key selection strategy
   authType?: 'api_key' | 'chatgpt_plus';  // default: api_key
   chatgptRefreshToken?: string;            // encrypted, only for chatgpt_plus
   chatgptExpiresAt?: string;               // ISO timestamp

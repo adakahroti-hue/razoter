@@ -6,7 +6,7 @@ import Script from "next/script";
 const inter = Inter({ subsets: ["latin"] });
 
 export const viewport: Viewport = {
-  themeColor: "#6366f1",
+  themeColor: "#16a34a",
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,

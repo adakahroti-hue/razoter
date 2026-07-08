@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#16a34a"/>
+      <stop offset="100%" stop-color="#15803d"/>
+    </linearGradient>
+  </defs>
+  <circle cx="96" cy="96" r="96" fill="url(#bg)"/>
+  <g transform="translate(96,96) rotate(-45) translate(-96,-96)">
+    <!-- Key head (circle) -->
+    <circle cx="72" cy="64" r="24" fill="none" stroke="white" stroke-width="7"/>
+    <circle cx="72" cy="64" r="10" fill="white" opacity="0.3"/>
+    <!-- Key shaft -->
+    <rect x="96" y="60.5" width="55" height="7" rx="2" fill="white"/>
+    <!-- Key teeth -->
+    <rect x="130" y="67.5" width="7" height="14" rx="2" fill="white"/>
+    <rect x="116" y="67.5" width="7" height="11" rx="2" fill="white"/>
+  </g>
+</svg>

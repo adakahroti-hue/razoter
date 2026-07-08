@@ -25,6 +25,7 @@ function dbToProvider(row: any): Provider {
     models: row.models ?? (row.model ? [row.model] : []),
     selectedModels: row.selected_models ?? (row.model ? [row.model] : []),
     apiKeys: Array.isArray(row.api_keys) && row.api_keys.length > 0 ? row.api_keys : [{ name: 'Default', key: row.api_key, enabled: true }],
+    apiKeyStrategy: row.api_key_strategy ?? 'random',
     priority: row.priority,
     enabled: row.enabled,
     healthStatus: row.health_status ?? 'unknown',
@@ -133,6 +134,7 @@ export async function addProvider(data: {
     base_url: data.baseUrl,
     api_key: data.apiKey,
     api_keys: Array.isArray((data as any).apiKeys) && (data as any).apiKeys.length > 0 ? (data as any).apiKeys : [{ name: 'Default', key: data.apiKey, enabled: true }],
+    api_key_strategy: (data as any).apiKeyStrategy ?? 'random',
     auth_type: (data as any).authType ?? 'api_key',
     chatgpt_refresh_token: (data as any).chatgptRefreshToken ?? null,
     chatgpt_expires_at: (data as any).chatgptExpiresAt ?? null,
@@ -177,6 +179,7 @@ export async function updateProvider(id: string, data: Partial<Provider>): Promi
   if (data.priority !== undefined) updateObj.priority = data.priority;
   if (data.enabled !== undefined) updateObj.enabled = data.enabled;
   if (data.healthStatus !== undefined) updateObj.health_status = data.healthStatus;
+  if ((data as any).apiKeyStrategy !== undefined) updateObj.api_key_strategy = (data as any).apiKeyStrategy;
   if (data.lastHealthCheck !== undefined) updateObj.last_health_check = data.lastHealthCheck;
   if (data.totalRequests !== undefined) updateObj.request_count = data.totalRequests;
   if (data.errorCount !== undefined) updateObj.error_count = data.errorCount;
@@ -580,19 +583,15 @@ export async function resolveComboModel(
 
   const items = data.items as Combo['items'];
   const strategy = (data.strategy as Combo['strategy']) ?? 'failover-priority';
-  const tried = new Set(triedIndices ?? []);
 
   if (strategy === 'round-robin') {
-    for (let i = 0; i < items.length; i++) {
-      if (!tried.has(i)) {
-        return { providerId: items[i].providerId, model: items[i].model, itemIndex: i };
-      }
-    }
     const idx = comboRoundRobinIndex.get(modelName) ?? 0;
     const nextIdx = idx % items.length;
     comboRoundRobinIndex.set(modelName, idx + 1);
     return { providerId: items[nextIdx].providerId, model: items[nextIdx].model, itemIndex: nextIdx };
   } else {
+    // failover-priority: try items in order, skip already-tried ones
+    const tried = new Set(triedIndices ?? []);
     for (let i = 0; i < items.length; i++) {
       if (!tried.has(i)) {
         return { providerId: items[i].providerId, model: items[i].model, itemIndex: i };
