@@ -601,18 +601,18 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200 px-6 py-4">
+      <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 sm:py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3"><h1 className="text-xl font-bold text-slate-900">Razoter</h1><span className="text-xs text-slate-400">v2.2</span></div>
+          <div className="flex items-center gap-3"><h1 className="text-lg sm:text-xl font-bold text-slate-900">Razoter</h1><span className="text-xs text-slate-400">v2.2</span></div>
           <div className="flex items-center gap-4">
             <button onClick={handleLogout} className="text-sm text-slate-500 hover:text-red-600">Logout</button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* Settings (was Stats) */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* Base URL */}
           <div className="card">
             <h3 className="font-semibold text-slate-900 mb-3">📡 Base URL</h3>
@@ -664,10 +664,11 @@ export default function Dashboard() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+        <div className="flex gap-1 bg-slate-100 rounded-lg p-1 overflow-x-auto flex-nowrap">
           {(['providers', 'combos', 'logs', 'quotas'] as const).map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === tab ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-              {tab === 'providers' ? '🔌 Providers' : tab === 'combos' ? '🧩 Combos' : tab === 'quotas' ? '📊 Quotas' : '📋 Logs'}
+            <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 min-w-[3rem] px-2 sm:px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${activeTab === tab ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+              <span className="sm:hidden">{tab === 'providers' ? '🔌' : tab === 'combos' ? '🧩' : tab === 'quotas' ? '📊' : '📋'}</span>
+              <span className="hidden sm:inline">{tab === 'providers' ? '🔌 Providers' : tab === 'combos' ? '🧩 Combos' : tab === 'quotas' ? '📊 Quotas' : '📋 Logs'}</span>
             </button>
           ))}
         </div>
@@ -677,7 +678,7 @@ export default function Dashboard() {
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-semibold text-slate-900">Providers</h2>
-              <button onClick={() => { resetProviderForm(); setShowProviderModal(true); }} className="btn btn-primary">+ Add Provider</button>
+              <button onClick={() => { resetProviderForm(); setShowProviderModal(true); }} className="btn btn-primary text-sm sm:text-base">+ Add Provider</button>
             </div>
             {providers.length === 0 ? (
               <div className="card text-center py-12 text-slate-400"><div className="text-4xl mb-2">🔌</div><p>Belum ada provider. Tambah provider pertama!</p></div>
@@ -685,13 +686,13 @@ export default function Dashboard() {
               <div className="space-y-3">
                 {providers.map(p => (
                   <div key={p.id} className="card">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <h3 className="font-semibold text-slate-900">{p.name}</h3>
                           {!p.enabled && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-200 text-slate-500">disabled</span>}
                         </div>
-                        <div className="text-xs text-slate-400 mt-1 font-mono">{p.baseUrl}</div>
+                        <div className="text-xs text-slate-400 mt-1 font-mono truncate">{p.baseUrl}</div>
                         <div className="flex flex-wrap gap-1 mt-2">
                           {(p.selectedModels.length > 0 ? p.selectedModels : p.models).map(m => {
                             const key = `${p.id}:${m}`;
@@ -713,12 +714,12 @@ export default function Dashboard() {
                           })}
                           {p.selectedModels.length < p.models.length && <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-400 text-xs">+{p.models.length - p.selectedModels.length} more</span>}
                         </div>
-                        <div className="flex gap-4 mt-2 text-xs text-slate-500">
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-xs text-slate-500">
                           <span>📊 {p.totalRequests} req</span><span>✅ {p.successCount} ok</span><span>❌ {p.errorCount} err</span><span>⚡ {formatLatency(p.avgLatencyMs)} avg</span>
-                          {p.rateLimitRemaining !== null && <span>🚦 {p.rateLimitRemaining}/{p.rateLimitTotal}</span>}
+                          <span className="hidden sm:inline">{p.rateLimitRemaining !== null && <span>🚦 {p.rateLimitRemaining}/{p.rateLimitTotal}</span>}</span>
                         </div>
                       </div>
-                      <div className="flex flex-col gap-2">
+                      <div className="flex flex-row sm:flex-col gap-2 sm:items-end">
                         <div className="flex gap-2">
                           <button onClick={() => handleToggleProvider(p)} className={`text-xs px-2 py-1 rounded ${p.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{p.enabled ? 'ON' : 'OFF'}</button>
                           <button onClick={() => openEditModal(p)} className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200">Edit</button>
@@ -748,7 +749,7 @@ export default function Dashboard() {
                 <h2 className="text-lg font-semibold text-slate-900">Combo Models</h2>
                 <p className="text-sm text-slate-500">Buat model virtual dari gabungan beberapa provider. Pakai nama combo sebagai model di request.</p>
               </div>
-              <button onClick={openComboModal} className="btn btn-primary">+ Buat Combo</button>
+              <button onClick={openComboModal} className="btn btn-primary text-sm sm:text-base">+ Buat Combo</button>
             </div>
             {combos.length === 0 ? (
               <div className="card text-center py-12 text-slate-400"><div className="text-4xl mb-2">🧩</div><p>Belum ada combo. Buat combo pertama!</p></div>
@@ -756,9 +757,9 @@ export default function Dashboard() {
               <div className="space-y-3">
                 {combos.map(c => (
                   <div key={c.id} className="card">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
                           <h3 className="font-semibold text-slate-900 font-mono">{c.name}</h3>
                           {!c.enabled && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-200 text-slate-500">disabled</span>}
                           <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-600 text-xs">{c.items.length} models</span>
@@ -774,7 +775,7 @@ export default function Dashboard() {
                           ))}
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex flex-row sm:flex-col gap-2 sm:items-end">
                         <button onClick={() => handleToggleCombo(c)} className={`text-xs px-2 py-1 rounded ${c.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{c.enabled ? 'ON' : 'OFF'}</button>
                         <button onClick={() => openEditComboModal(c)} className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200">Edit</button>
                         <button onClick={() => handleDeleteCombo(c.id)} className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100">Hapus</button>
@@ -845,7 +846,8 @@ export default function Dashboard() {
               <button onClick={handleClearLogs} className="btn btn-secondary text-sm">🗑️ Clear</button>
             </div>
             <div className="card overflow-hidden">
-              <table className="w-full text-sm">
+              {/* Desktop table view */}
+              <table className="w-full text-sm hidden sm:table">
                 <thead><tr className="bg-slate-50 text-left">
                   <th className="px-4 py-2 text-slate-500 font-medium">Time</th><th className="px-4 py-2 text-slate-500 font-medium">Provider</th><th className="px-4 py-2 text-slate-500 font-medium">Model</th><th className="px-4 py-2 text-slate-500 font-medium">Status</th><th className="px-4 py-2 text-slate-500 font-medium">Latency</th><th className="px-4 py-2 text-slate-500 font-medium">Tokens</th>
                 </tr></thead>
@@ -864,6 +866,27 @@ export default function Dashboard() {
                   }
                 </tbody>
               </table>
+              {/* Mobile card view */}
+              <div className="sm:hidden divide-y divide-slate-100">
+                {logs.length === 0 ? <div className="px-4 py-8 text-center text-slate-400">Belum ada logs</div> :
+                  logs.map(log => (
+                    <div key={log.id} className={`p-3 ${log.errorMessage ? 'cursor-pointer hover:bg-red-50 transition-colors' : ''}`} onClick={log.errorMessage ? () => setSelectedLogError(log) : undefined}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-slate-500 font-mono">{formatTime(log.createdAt)}</span>
+                        <span className="text-xs text-slate-700">{log.providerName}</span>
+                      </div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-slate-500 font-mono truncate max-w-[60%]">{log.model}</span>
+                        <div className="flex items-center gap-1">{statusBadge(log.status)}{log.errorMessage && <span title="View error details">🔴</span>}</div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-500">{formatLatency(log.latencyMs)}</span>
+                        <span className="text-xs text-slate-500">{log.tokensUsed ? formatTokens(log.tokensUsed) : '-'}</span>
+                      </div>
+                    </div>
+                  ))
+                }
+              </div>
             </div>
           </div>
         )}
@@ -872,8 +895,9 @@ export default function Dashboard() {
 
       {/* ─── Add/Edit Provider Modal ────────────── */}
       {showProviderModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 z-50 p-0 sm:p-4 flex flex-col sm:items-center sm:justify-center">
+          <div className="flex-1 sm:flex-none" onClick={() => { setShowProviderModal(false); resetProviderForm(); }} />
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-slate-900">{editingProvider ? 'Edit Provider' : 'Tambah Provider'}</h3>
@@ -1024,8 +1048,9 @@ export default function Dashboard() {
 
       {/* ─── Create/Edit Combo Modal ─────────────── */}
       {showComboModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 z-50 p-0 sm:p-4 flex flex-col sm:items-center sm:justify-center">
+          <div className="flex-1 sm:flex-none" onClick={() => { setShowComboModal(false); setEditingCombo(null); }} />
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-slate-900">{editingCombo ? 'Edit Combo' : 'Buat Combo Model'}</h3>
@@ -1105,8 +1130,9 @@ export default function Dashboard() {
 
       {/* ─── Add Quota Modal ─────────────────────── */}
       {showQuotaModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
+        <div className="fixed inset-0 bg-black/50 z-50 p-0 sm:p-4 flex flex-col sm:items-center sm:justify-center">
+          <div className="flex-1 sm:flex-none" onClick={() => setShowQuotaModal(false)} />
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full sm:max-w-sm">
             <div className="p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-slate-900">Tambah Quota</h3>
@@ -1152,8 +1178,9 @@ export default function Dashboard() {
 
       {/* ─── Error Detail Modal ─────────────────────── */}
       {selectedLogError && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedLogError(null)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/50 z-50 p-0 sm:p-4 flex flex-col sm:items-center sm:justify-center" onClick={() => setSelectedLogError(null)}>
+          <div className="flex-1 sm:flex-none" />
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full sm:max-w-lg max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-slate-900">🔴 Error Details</h3>
