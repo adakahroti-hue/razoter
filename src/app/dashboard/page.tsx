@@ -12,6 +12,7 @@ interface Provider {
   apiKeys: Array<{ name: string; key: string; enabled: boolean }>;
   models: string[];
   selectedModels: string[];
+  apiKeyStrategy?: 'random' | 'failover-priority' | 'round-robin';
   priority: number;
   enabled: boolean;
   healthStatus: string;
@@ -146,6 +147,7 @@ export default function Dashboard() {
   // Provider form
   const [providerForm, setProviderForm] = useState({ name: '', baseUrl: '', apiKey: '' });
   const [providerFormKeys, setProviderFormKeys] = useState<Array<{name: string, key: string}>>([{ name: 'Key 1', key: '' }]);
+  const [providerFormStrategy, setProviderFormStrategy] = useState<'random' | 'failover-priority' | 'round-robin'>('random');
   const [providerType, setProviderType] = useState<'custom' | 'chatgpt_plus' | null>(null);
   const [discoveredModels, setDiscoveredModels] = useState<string[]>([]);
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
@@ -371,6 +373,7 @@ export default function Dashboard() {
         }
       }
       if (apiKeysPayload.length > 0) body.apiKeys = apiKeysPayload;
+      body.apiKeyStrategy = providerFormStrategy;
       // Backward compat: first real key
       const firstRealKey = validNewKeys.length > 0 ? validNewKeys[0].key : (editingProvider?.apiKeys?.[0]?.key || '');
       if (firstRealKey) body.apiKey = firstRealKey;
@@ -404,6 +407,7 @@ export default function Dashboard() {
       ? provider.apiKeys.map(k => ({ name: k.name, key: '' }))
       : [{ name: 'Key 1', key: '' }];
     setProviderFormKeys(existingKeys);
+    setProviderFormStrategy(provider.apiKeyStrategy || 'random');
     setDiscoveredModels(provider.models);
     setSelectedModels(provider.selectedModels);
     setTestResult(null);
@@ -1120,6 +1124,27 @@ export default function Dashboard() {
                     })}
                   </div>
                   <button type="button" onClick={() => setProviderFormKeys(prev => [...prev, { name: `Key ${prev.length + 1}`, key: '' }])} className="mt-2 text-sm font-medium text-green-600 hover:text-green-800">+ Tambah Key</button>
+
+                  {/* API Key Strategy */}
+                  {providerFormKeys.length > 1 && (
+                    <div className="mt-3 pt-3 border-t border-slate-200">
+                      <label className="text-sm text-slate-600 mb-2 block">🔑 Strategi Pemilihan API Key</label>
+                      <div className="grid grid-cols-1 gap-2">
+                        <button type="button" onClick={() => setProviderFormStrategy('random')} className={`p-2 rounded-lg border-2 text-left text-sm transition-colors ${providerFormStrategy === 'random' ? 'border-green-500 bg-green-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                          <span className="font-medium text-slate-900">🎲 Random</span>
+                          <span className="block text-xs text-slate-500 mt-0.5">Pick random key setiap request</span>
+                        </button>
+                        <button type="button" onClick={() => setProviderFormStrategy('failover-priority')} className={`p-2 rounded-lg border-2 text-left text-sm transition-colors ${providerFormStrategy === 'failover-priority' ? 'border-green-500 bg-green-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                          <span className="font-medium text-slate-900">🔀 Failover Priority</span>
+                          <span className="block text-xs text-slate-500 mt-0.5">Pakai key pertama, jika gagal ke key berikutnya</span>
+                        </button>
+                        <button type="button" onClick={() => setProviderFormStrategy('round-robin')} className={`p-2 rounded-lg border-2 text-left text-sm transition-colors ${providerFormStrategy === 'round-robin' ? 'border-green-500 bg-green-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                          <span className="font-medium text-slate-900">🔄 Round Robin</span>
+                          <span className="block text-xs text-slate-500 mt-0.5">Rotasi berurutan ke semua key secara merata</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="border-t border-slate-200 pt-4">
