@@ -30,13 +30,19 @@ function parseRateLimitHeaders(headers: Headers) {
 }
 
 
-/** Pick an API key based on provider's apiKeyStrategy setting. */
-function pickApiKey(provider: any): { key: string; name: string } {
+/** Pick an API key based on provider's apiKeyStrategy setting.
+ *  triedKeyNames: names of keys already tried and failed (for failover-priority). */
+function pickApiKey(provider: any, triedKeyNames?: Set<string>): { key: string; name: string } {
   const keys = provider.apiKeys;
   const strategy = provider.apiKeyStrategy || 'random';
   if (Array.isArray(keys) && keys.length > 0) {
-    const enabled = keys.filter((k: any) => k.enabled !== false);
+    let enabled = keys.filter((k: any) => k.enabled !== false);
     if (enabled.length > 0) {
+      // For failover-priority, skip already-tried keys
+      if (strategy === 'failover-priority' && triedKeyNames && triedKeyNames.size > 0) {
+        const remaining = enabled.filter((k: any) => !triedKeyNames.has(k.name));
+        if (remaining.length > 0) enabled = remaining;
+      }
       if (strategy === 'failover-priority') {
         // Always pick the first enabled key (priority order)
         return { key: enabled[0].key, name: enabled[0].name };
@@ -60,10 +66,11 @@ function pickApiKey(provider: any): { key: string; name: string } {
 // In-memory round-robin index for API key selection (not persisted)
 const apiKeyRoundRobinIndex = new Map<string, number>();
 
-/** Resolve a valid access token for a provider, refreshing if needed. */
-async function resolveAccessToken(provider: any): Promise<{ header: string; refreshed: boolean; newTokens?: any; apiKeyName: string }> {
+/** Resolve a valid access token for a provider, refreshing if needed.
+ *  triedKeyNames: names of keys already tried (for failover-priority multi-key failover). */
+async function resolveAccessToken(provider: any, triedKeyNames?: Set<string>): Promise<{ header: string; refreshed: boolean; newTokens?: any; apiKeyName: string }> {
   if (provider.authType === 'chatgpt_plus' && provider.chatgptRefreshToken && provider.chatgptExpiresAt) {
-    const ak = pickApiKey(provider);
+    const ak = pickApiKey(provider, triedKeyNames);
     try {
       const r = await getValidAccessToken(
         ak.key,
@@ -89,7 +96,7 @@ async function resolveAccessToken(provider: any): Promise<{ header: string; refr
       });
     }
   }
-  const fallback = pickApiKey(provider);
+  const fallback = pickApiKey(provider, triedKeyNames);
   return { header: `Bearer ${fallback.key}`, refreshed: false, apiKeyName: fallback.name };
 }
 

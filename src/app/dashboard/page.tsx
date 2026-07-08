@@ -346,23 +346,21 @@ export default function Dashboard() {
     if (selectedModels.length === 0) { alert('Pilih minimal 1 model!'); return; }
     try {
       const body: Record<string, unknown> = { name: providerForm.name, baseUrl: providerForm.baseUrl, models: discoveredModels, selectedModels, priority: 10, enabled: true };
-      // Build apiKeys array: mix of existing (masked) + new keys
+      // Build apiKeys array: only include keys that are new or changed
       const apiKeysPayload: Array<{name: string, key: string, enabled: boolean}> = [];
       if (editingProvider && editingProvider.apiKeys && editingProvider.apiKeys.length > 0) {
-        // Keep existing keys that user didn't change (their key field will be masked '•••...')
+        // For existing keys: only include if user typed a new value
         for (let i = 0; i < editingProvider.apiKeys.length; i++) {
           const formKey = providerFormKeys[i];
-          if (formKey && formKey.key && !formKey.key.startsWith('•')) {
+          if (formKey && formKey.key && !formKey.key.startsWith('•') && !formKey.key.includes('...')) {
             // User provided a new key for this slot
             apiKeysPayload.push({ name: formKey.name || editingProvider.apiKeys[i].name, key: formKey.key, enabled: editingProvider.apiKeys[i].enabled });
-          } else {
-            // Keep original key
-            apiKeysPayload.push(editingProvider.apiKeys[i]);
           }
+          // If user didn't change the key, skip it — backend will keep existing keys
         }
         // Add any extra new keys beyond existing count
         for (let i = editingProvider.apiKeys.length; i < providerFormKeys.length; i++) {
-          if (providerFormKeys[i].key) {
+          if (providerFormKeys[i].key && !providerFormKeys[i].key.includes('...')) {
             apiKeysPayload.push({ name: providerFormKeys[i].name, key: providerFormKeys[i].key, enabled: true });
           }
         }
@@ -374,8 +372,8 @@ export default function Dashboard() {
       }
       if (apiKeysPayload.length > 0) body.apiKeys = apiKeysPayload;
       body.apiKeyStrategy = providerFormStrategy;
-      // Backward compat: first real key
-      const firstRealKey = validNewKeys.length > 0 ? validNewKeys[0].key : (editingProvider?.apiKeys?.[0]?.key || '');
+      // Backward compat: first real (non-masked) key
+      const firstRealKey = validNewKeys.length > 0 ? validNewKeys[0].key : '';
       if (firstRealKey) body.apiKey = firstRealKey;
       const res = editingProvider
         ? await api('/api/providers', { method: 'PUT', body: JSON.stringify({ id: editingProvider.id, ...body }) })

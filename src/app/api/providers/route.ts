@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyDashboardAuth } from '@/lib/auth';
-import { getProviders, addProvider, updateProvider, deleteProvider, addQuota } from '@/lib/storage';
+import { getProviders, getProvider, addProvider, updateProvider, deleteProvider, addQuota } from '@/lib/storage';
 import { withCors, handleCorsPreflight } from '@/lib/cors';
 
 export async function OPTIONS() {
@@ -16,7 +16,11 @@ export async function GET(request: NextRequest) {
   // Mask API keys in response
   const masked = providers.map(p => ({
     ...p,
-    apiKey: p.apiKey.slice(0, 8) + '...' + p.apiKey.slice(-4),
+    apiKey: p.apiKey ? p.apiKey.slice(0, 8) + '...' + p.apiKey.slice(-4) : '',
+    apiKeys: (p.apiKeys || []).map((ak: any) => ({
+      ...ak,
+      key: ak.key ? ak.key.slice(0, 8) + '...' + ak.key.slice(-4) : '',
+    })),
   }));
   
   return withCors(NextResponse.json(masked));
@@ -102,14 +106,32 @@ export async function PUT(request: NextRequest) {
       delete updates.apiKey;
     }
 
-    // Handle apiKeys (multi) - filter out masked keys
+    // Handle apiKeys (multi) - merge new keys with existing ones
     if (updates.apiKeys && Array.isArray(updates.apiKeys)) {
-      updates.apiKeys = updates.apiKeys.map((k: any) => {
-        if (k.key && k.key.includes('...')) {
-          return undefined; // skip masked keys
+      const newKeys = updates.apiKeys.filter((k: any) => k && k.key && !k.key.includes('...'));
+      if (newKeys.length > 0) {
+        // Fetch existing provider to merge keys
+        const existing = await getProvider(id);
+        if (existing && existing.apiKeys && existing.apiKeys.length > 0) {
+          // Merge: keep existing keys, add new ones (avoid duplicates by name)
+          const existingNames = new Set(existing.apiKeys.map((k: any) => k.name));
+          const merged = [...existing.apiKeys];
+          for (const nk of newKeys) {
+            if (!existingNames.has(nk.name)) {
+              merged.push({ name: nk.name, key: nk.key, enabled: nk.enabled ?? true });
+            } else {
+              // Update existing key with same name
+              const idx = merged.findIndex((k: any) => k.name === nk.name);
+              if (idx >= 0) merged[idx] = { name: nk.name, key: nk.key, enabled: nk.enabled ?? true };
+            }
+          }
+          updates.apiKeys = merged;
         }
-        return k;
-      }).filter(Boolean);
+        // If no existing keys, just use the new keys as-is
+      } else {
+        // All keys are masked = user didn't change any key. Don't overwrite.
+        delete updates.apiKeys;
+      }
     }
 
     const updated = await updateProvider(id, updates);
