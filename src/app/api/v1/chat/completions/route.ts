@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
       const comboStart = Date.now();
       try {
         if (comboProvider.authType === 'chatgpt_plus') {
-          const { header: comboAuth, refreshed, newTokens } = await resolveAccessToken(comboProvider);
+          const { header: comboAuth, refreshed, newTokens, apiKeyName: comboKeyName } = await resolveAccessToken(comboProvider);
           if (refreshed && newTokens) {
             import('@/lib/storage').then(({ updateProvider }) =>
               updateProvider(comboProvider!.id, newTokens as any)
@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
           import('@/lib/storage').then(({ addLog, updateProviderStats, incrementQuotaUsage }) => {
             addLog({ providerId: comboProvider!.id, providerName: comboProvider!.name, model: comboResult.model, status: 'success', latencyMs, tokensUsed });
             updateProviderStats(comboProvider!.id, true, latencyMs);
-            incrementQuotaUsage(comboProvider!.id, tokensUsed || 0).catch(() => {});
+            incrementQuotaUsage(comboProvider!.id, tokensUsed || 0, comboKeyName).catch(() => {});
           }).catch(() => {});
           return cgptResp;
         }
@@ -254,7 +254,7 @@ export async function POST(request: NextRequest) {
       const isChatgptPlus = currentProvider.authType === 'chatgpt_plus';
 
       if (isChatgptPlus) {
-        const { header: authHeader, refreshed, newTokens } = await resolveAccessToken(currentProvider);
+        const { header: authHeader, refreshed, newTokens, apiKeyName: akName } = await resolveAccessToken(currentProvider);
         if (refreshed && newTokens) {
           import('@/lib/storage').then(({ updateProvider }) =>
             updateProvider(currentProvider!.id, newTokens as any)
@@ -269,14 +269,14 @@ export async function POST(request: NextRequest) {
         import('@/lib/storage').then(({ addLog, updateProviderStats, incrementQuotaUsage }) => {
           addLog({ providerId: currentProvider!.id, providerName: currentProvider!.name, model: selectedModel || requestedModel, status: 'success', latencyMs, tokensUsed });
           updateProviderStats(currentProvider!.id, true, latencyMs);
-          incrementQuotaUsage(currentProvider!.id, tokensUsed || 0).catch(() => {});
+          incrementQuotaUsage(currentProvider!.id, tokensUsed || 0, akName).catch(() => {});
         }).catch(() => {});
         return cgptResp;
       }
 
       // Standard OpenAI-compatible provider
       const upstreamUrl = `${currentProvider.baseUrl.replace(/\/+$/, '')}/chat/completions`;
-      const { header: authHeader } = await resolveAccessToken(currentProvider);
+      const { header: authHeader, apiKeyName: stdAkName } = await resolveAccessToken(currentProvider);
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs);
@@ -347,7 +347,7 @@ export async function POST(request: NextRequest) {
         });
 
         if (data.usage?.total_tokens) {
-          await incrementQuotaUsage(currentProvider.id, data.usage.total_tokens);
+          await incrementQuotaUsage(currentProvider.id, data.usage.total_tokens, stdAkName);
         }
 
         const res = NextResponse.json(data, { status: 200 });

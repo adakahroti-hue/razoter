@@ -60,6 +60,7 @@ function dbToLog(row: any): RequestLog {
     latencyMs: row.latency_ms,
     tokensUsed: row.tokens_used ?? null,
     errorMessage: row.error_message ?? null,
+    apiKeyName: row.api_key_name ?? undefined,
     createdAt: row.timestamp ?? row.created_at,
   };
 }
@@ -351,6 +352,7 @@ export async function addLog(log: Omit<RequestLog, 'id' | 'createdAt'>): Promise
     latency_ms: log.latencyMs,
     error_message: log.errorMessage ?? null,
     tokens_used: log.tokensUsed ?? null,
+    api_key_name: log.apiKeyName ?? null,
   };
 
   const { data, error } = await supabase

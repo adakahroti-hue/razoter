@@ -77,6 +77,7 @@ export interface RequestLog {
   latencyMs: number;
   tokensUsed?: number | null;
   errorMessage?: string | null;
+  apiKeyName?: string;
   createdAt: string;
 }
 

@@ -56,6 +56,7 @@ interface Quota {
   providerId: string;
   providerName: string;
   model: string;
+  apiKeyName: string;
   monthlyLimit: number;
   currentUsage: number;
   resetDay: number;
@@ -72,6 +73,7 @@ interface RequestLog {
   latencyMs: number;
   tokensUsed?: number;
   errorMessage?: string;
+  apiKeyName?: string;
   createdAt: string;
 }
 
@@ -231,7 +233,7 @@ export default function Dashboard() {
   }, [token, fetchData]);
 
   // ─── Auto-sync quotas with providers ───────────
-  // Silently create quota cards for any provider+model combos missing
+  // Silently create quota cards for any provider+apiKeyName combos missing
   useEffect(() => {
     if (!providers.length || !quotas.length) return;
     const asyncSync = async () => {
@@ -239,13 +241,14 @@ export default function Dashboard() {
         let created = 0;
         for (const provider of providers) {
           if (!provider.enabled) continue;
-          const models = provider.selectedModels.length > 0 ? provider.selectedModels : provider.models;
-          for (const model of models) {
-            const hasQuota = quotas.some(q => q.providerId === provider.id && q.model === model);
+          const keys = provider.apiKeys || [{ name: 'Default', key: provider.apiKey, enabled: true }];
+          for (const ak of keys) {
+            if (!ak.enabled) continue;
+            const hasQuota = quotas.some(q => q.providerId === provider.id && q.apiKeyName === ak.name);
             if (!hasQuota) {
               await api('/api/quotas', {
                 method: 'POST',
-                body: JSON.stringify({ providerId: provider.id, providerName: provider.name, model, monthlyLimit: 0, resetDay: 1 }),
+                body: JSON.stringify({ providerId: provider.id, providerName: provider.name, model: '', monthlyLimit: 0, resetDay: 1, apiKeyName: ak.name }),
               });
               created++;
             }
@@ -284,12 +287,13 @@ export default function Dashboard() {
 
   // ─── Provider actions ────────────────────────────
 
-  async function handleAutoCreateQuotas(providerId: string, providerName: string, models: string[]) {
+  async function handleAutoCreateQuotas(providerId: string, providerName: string, keys: Array<{name: string, key: string}>) {
     try {
-      for (const model of models) {
+      for (const ak of keys) {
+        if (!ak.key) continue;
         await api('/api/quotas', {
           method: 'POST',
-          body: JSON.stringify({ providerId, providerName, model, monthlyLimit: 0, resetDay: 1 }),
+          body: JSON.stringify({ providerId, providerName, model: '', monthlyLimit: 0, resetDay: 1, apiKeyName: ak.name }),
         });
       }
       fetchData();
@@ -377,7 +381,7 @@ export default function Dashboard() {
         const data = await res.json();
         setShowProviderModal(false); resetProviderForm(); fetchData();
         if (!editingProvider && data.id) {
-          handleAutoCreateQuotas(data.id, providerForm.name, selectedModels);
+          handleAutoCreateQuotas(data.id, providerForm.name, providerFormKeys);
         }
       }
       else { const err = await res.json(); alert(err.error || 'Failed'); }
@@ -840,7 +844,7 @@ export default function Dashboard() {
                         <div>
                           <div className="flex items-center gap-2">
                             <h3 className="font-semibold text-slate-900">{q.providerName}</h3>
-                            {q.model && <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-600 text-xs font-mono">{q.model}</span>}
+                            {q.apiKeyName && <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-600 text-xs font-mono">{q.apiKeyName}</span>}
                             {isOver && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">LIMIT EXCEEDED</span>}
                           </div>
                           <div className="text-xs text-slate-500 mt-1">Reset tanggal {q.resetDay} setiap bulan</div>
@@ -878,7 +882,7 @@ export default function Dashboard() {
               {/* Desktop table view */}
               <table className="w-full text-sm hidden sm:table">
                 <thead><tr className="bg-slate-50 text-left">
-                  <th className="px-4 py-2 text-slate-500 font-medium">Time</th><th className="px-4 py-2 text-slate-500 font-medium">Provider</th><th className="px-4 py-2 text-slate-500 font-medium">Model</th><th className="px-4 py-2 text-slate-500 font-medium">Status</th><th className="px-4 py-2 text-slate-500 font-medium">Keterangan</th><th className="px-4 py-2 text-slate-500 font-medium">Latency</th><th className="px-4 py-2 text-slate-500 font-medium">Tokens</th>
+                  <th className="px-4 py-2 text-slate-500 font-medium">Time</th><th className="px-4 py-2 text-slate-500 font-medium">Provider</th><th className="px-4 py-2 text-slate-500 font-medium">Model</th><th className="px-4 py-2 text-slate-500 font-medium">Status</th><th className="px-4 py-2 text-slate-500 font-medium">Keterangan</th><th className="px-4 py-2 text-slate-500 font-medium">Latency</th><th className="px-4 py-2 text-slate-500 font-medium">API Key</th>
                 </tr></thead>
                 <tbody>
                   {logs.length === 0 ? <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">Belum ada logs</td></tr> :
@@ -890,7 +894,7 @@ export default function Dashboard() {
                         <td className="px-4 py-2"><div className="flex items-center gap-1">{statusBadge(log.status)}{log.errorMessage && <span title="View error details">🔴</span>}</div></td>
                         <td className="px-4 py-2 text-xs text-red-600 max-w-[200px] truncate">{log.errorMessage ? log.errorMessage.length > 50 ? log.errorMessage.slice(0, 50) + '...' : log.errorMessage : <span className="text-slate-300">-</span>}</td>
                         <td className="px-4 py-2 text-slate-500">{formatLatency(log.latencyMs)}</td>
-                        <td className="px-4 py-2 text-slate-500">{log.tokensUsed ? formatTokens(log.tokensUsed) : '-'}</td>
+                        <td className="px-4 py-2 text-slate-500 text-xs font-mono">{log.apiKeyName || '-'}</td>
                       </tr>
                     ))
                   }
@@ -914,7 +918,7 @@ export default function Dashboard() {
                       )}
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-slate-500">{formatLatency(log.latencyMs)}</span>
-                        <span className="text-xs text-slate-500">{log.tokensUsed ? formatTokens(log.tokensUsed) : '-'}</span>
+                        <span className="text-xs text-slate-500 font-mono">{log.apiKeyName || '-'}</span>
                       </div>
                     </div>
                   ))
