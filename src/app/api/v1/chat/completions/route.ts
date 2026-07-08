@@ -29,12 +29,25 @@ function parseRateLimitHeaders(headers: Headers) {
   };
 }
 
+
+/** Pick a random enabled API key from provider's apiKeys array. Falls back to provider.apiKey. */
+function pickRandomApiKey(provider: any): string {
+  const keys = provider.apiKeys;
+  if (Array.isArray(keys) && keys.length > 0) {
+    const enabled = keys.filter((k: any) => k.enabled !== false);
+    if (enabled.length > 0) {
+      return enabled[Math.floor(Math.random() * enabled.length)].key;
+    }
+  }
+  return provider.apiKey;
+}
+
 /** Resolve a valid access token for a provider, refreshing if needed. */
 async function resolveAccessToken(provider: any): Promise<{ header: string; refreshed: boolean; newTokens?: any }> {
   if (provider.authType === 'chatgpt_plus' && provider.chatgptRefreshToken && provider.chatgptExpiresAt) {
     try {
       const r = await getValidAccessToken(
-        provider.apiKey,
+        pickRandomApiKey(provider),
         provider.chatgptRefreshToken,
         provider.chatgptExpiresAt,
       );

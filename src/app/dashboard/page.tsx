@@ -9,6 +9,7 @@ interface Provider {
   name: string;
   baseUrl: string;
   apiKey: string;
+  apiKeys: Array<{ name: string; key: string; enabled: boolean }>;
   models: string[];
   selectedModels: string[];
   priority: number;
@@ -142,6 +143,7 @@ export default function Dashboard() {
 
   // Provider form
   const [providerForm, setProviderForm] = useState({ name: '', baseUrl: '', apiKey: '' });
+  const [providerFormKeys, setProviderFormKeys] = useState<Array<{name: string, key: string}>>([{ name: 'Key 1', key: '' }]);
   const [providerType, setProviderType] = useState<'custom' | 'chatgpt_plus' | null>(null);
   const [discoveredModels, setDiscoveredModels] = useState<string[]>([]);
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
@@ -228,6 +230,38 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [token, fetchData]);
 
+  // ─── Auto-sync quotas with providers ───────────
+  // Silently create quota cards for any provider+model combos missing
+  useEffect(() => {
+    if (!providers.length || !quotas.length) return;
+    const asyncSync = async () => {
+      try {
+        let created = 0;
+        for (const provider of providers) {
+          if (!provider.enabled) continue;
+          const models = provider.selectedModels.length > 0 ? provider.selectedModels : provider.models;
+          for (const model of models) {
+            const hasQuota = quotas.some(q => q.providerId === provider.id && q.model === model);
+            if (!hasQuota) {
+              await api('/api/quotas', {
+                method: 'POST',
+                body: JSON.stringify({ providerId: provider.id, providerName: provider.name, model, monthlyLimit: 0, resetDay: 1 }),
+              });
+              created++;
+            }
+          }
+        }
+        if (created > 0) {
+          console.log(`[Auto-sync] Created ${created} missing quota card(s)`);
+          fetchData();
+        }
+      } catch (e) {
+        console.error('[Auto-sync] Error syncing quotas:', e);
+      }
+    };
+    asyncSync();
+  }, [providers, quotas, api, fetchData]);
+
   // ─── Auth ────────────────────────────────────────
 
   async function handleLogin(e: React.FormEvent) {
@@ -266,8 +300,9 @@ export default function Dashboard() {
     if (!providerForm.baseUrl) return;
     // When editing without new key, use stored key by sending providerId
     const testBody: Record<string, unknown> = { baseUrl: providerForm.baseUrl };
-    if (providerForm.apiKey) {
-      testBody.apiKey = providerForm.apiKey;
+    const firstNewKey = providerFormKeys.find(k => k.key && !k.key.startsWith('•'));
+    if (firstNewKey?.key) {
+      testBody.apiKey = firstNewKey.key;
     } else if (editingProvider) {
       testBody.providerId = editingProvider.id;
     } else {
@@ -298,16 +333,46 @@ export default function Dashboard() {
 
   async function handleSaveProvider() {
     if (!providerForm.name || !providerForm.baseUrl) return;
-    if (!editingProvider && !providerForm.apiKey) return; // New provider needs key
+    // New provider needs at least one key with a value
+    const validNewKeys = providerFormKeys.filter(k => k.key && !k.key.startsWith('•'));
+    if (!editingProvider && validNewKeys.length === 0) { alert('Masukkan minimal 1 API key!'); return; }
     if (discoveredModels.length === 0) { alert('Test connection dulu untuk discover models!'); return; }
     if (selectedModels.length === 0) { alert('Pilih minimal 1 model!'); return; }
     try {
       const body: Record<string, unknown> = { name: providerForm.name, baseUrl: providerForm.baseUrl, models: discoveredModels, selectedModels, priority: 10, enabled: true };
-      // Only include apiKey if user entered a new one
-      if (providerForm.apiKey) body.apiKey = providerForm.apiKey;
+      // Build apiKeys array: mix of existing (masked) + new keys
+      const apiKeysPayload: Array<{name: string, key: string, enabled: boolean}> = [];
+      if (editingProvider && editingProvider.apiKeys && editingProvider.apiKeys.length > 0) {
+        // Keep existing keys that user didn't change (their key field will be masked '•••...')
+        for (let i = 0; i < editingProvider.apiKeys.length; i++) {
+          const formKey = providerFormKeys[i];
+          if (formKey && formKey.key && !formKey.key.startsWith('•')) {
+            // User provided a new key for this slot
+            apiKeysPayload.push({ name: formKey.name || editingProvider.apiKeys[i].name, key: formKey.key, enabled: editingProvider.apiKeys[i].enabled });
+          } else {
+            // Keep original key
+            apiKeysPayload.push(editingProvider.apiKeys[i]);
+          }
+        }
+        // Add any extra new keys beyond existing count
+        for (let i = editingProvider.apiKeys.length; i < providerFormKeys.length; i++) {
+          if (providerFormKeys[i].key) {
+            apiKeysPayload.push({ name: providerFormKeys[i].name, key: providerFormKeys[i].key, enabled: true });
+          }
+        }
+      } else {
+        // New provider — all form keys are new
+        for (const fk of providerFormKeys) {
+          if (fk.key) apiKeysPayload.push({ name: fk.name, key: fk.key, enabled: true });
+        }
+      }
+      if (apiKeysPayload.length > 0) body.apiKeys = apiKeysPayload;
+      // Backward compat: first real key
+      const firstRealKey = validNewKeys.length > 0 ? validNewKeys[0].key : (editingProvider?.apiKeys?.[0]?.key || '');
+      if (firstRealKey) body.apiKey = firstRealKey;
       const res = editingProvider
         ? await api('/api/providers', { method: 'PUT', body: JSON.stringify({ id: editingProvider.id, ...body }) })
-        : await api('/api/providers', { method: 'POST', body: JSON.stringify({ ...body, apiKey: providerForm.apiKey }) });
+        : await api('/api/providers', { method: 'POST', body: JSON.stringify({ ...body, apiKey: firstRealKey }) });
       if (res.ok) {
         const data = await res.json();
         setShowProviderModal(false); resetProviderForm(); fetchData();
@@ -331,6 +396,10 @@ export default function Dashboard() {
   function openEditModal(provider: Provider) {
     setEditingProvider(provider);
     setProviderForm({ name: provider.name, baseUrl: provider.baseUrl, apiKey: '' });
+    const existingKeys = (provider.apiKeys && provider.apiKeys.length > 0)
+      ? provider.apiKeys.map(k => ({ name: k.name, key: '' }))
+      : [{ name: 'Key 1', key: '' }];
+    setProviderFormKeys(existingKeys);
     setDiscoveredModels(provider.models);
     setSelectedModels(provider.selectedModels);
     setTestResult(null);
@@ -339,6 +408,7 @@ export default function Dashboard() {
 
   function resetProviderForm() {
     setProviderForm({ name: '', baseUrl: '', apiKey: '' });
+    setProviderFormKeys([{ name: 'Key 1', key: '' }]);
     setDiscoveredModels([]); setSelectedModels([]); setTestResult(null); setEditingProvider(null);
     setProviderType(null);
     setChatgptStep('idle'); setChatgptUserCode(''); setChatgptDeviceId(''); setChatgptError('');
@@ -693,6 +763,20 @@ export default function Dashboard() {
                           {!p.enabled && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-200 text-slate-500">disabled</span>}
                         </div>
                         <div className="text-xs text-slate-400 mt-1 font-mono truncate">{p.baseUrl}</div>
+                        {((p.apiKeys && p.apiKeys.length > 0) || p.apiKey) && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {p.apiKeys && p.apiKeys.length > 0 ? p.apiKeys.map((ak, idx) => (
+                              <span key={idx} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono ${ak.enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400 line-through'}`}>
+                                <span className="text-xs font-medium px-1 rounded bg-emerald-100 text-emerald-600 mr-0.5">{ak.name}</span>
+                                {ak.key.slice(0, 8)}...{ak.key.slice(-4)}
+                              </span>
+                            )) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono bg-emerald-50 text-emerald-700">
+                                {p.apiKey.slice(0, 8)}...{p.apiKey.slice(-4)}
+                              </span>
+                            )}
+                          </div>
+                        )}
                         <div className="flex flex-wrap gap-1 mt-2">
                           {(p.selectedModels.length > 0 ? p.selectedModels : p.models).map(m => {
                             const key = `${p.id}:${m}`;
@@ -849,16 +933,17 @@ export default function Dashboard() {
               {/* Desktop table view */}
               <table className="w-full text-sm hidden sm:table">
                 <thead><tr className="bg-slate-50 text-left">
-                  <th className="px-4 py-2 text-slate-500 font-medium">Time</th><th className="px-4 py-2 text-slate-500 font-medium">Provider</th><th className="px-4 py-2 text-slate-500 font-medium">Model</th><th className="px-4 py-2 text-slate-500 font-medium">Status</th><th className="px-4 py-2 text-slate-500 font-medium">Latency</th><th className="px-4 py-2 text-slate-500 font-medium">Tokens</th>
+                  <th className="px-4 py-2 text-slate-500 font-medium">Time</th><th className="px-4 py-2 text-slate-500 font-medium">Provider</th><th className="px-4 py-2 text-slate-500 font-medium">Model</th><th className="px-4 py-2 text-slate-500 font-medium">Status</th><th className="px-4 py-2 text-slate-500 font-medium">Keterangan</th><th className="px-4 py-2 text-slate-500 font-medium">Latency</th><th className="px-4 py-2 text-slate-500 font-medium">Tokens</th>
                 </tr></thead>
                 <tbody>
-                  {logs.length === 0 ? <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">Belum ada logs</td></tr> :
+                  {logs.length === 0 ? <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">Belum ada logs</td></tr> :
                     logs.map(log => (
                       <tr key={log.id} className={`border-t border-slate-100 ${log.errorMessage ? 'cursor-pointer hover:bg-red-50 transition-colors' : ''}`} onClick={log.errorMessage ? () => setSelectedLogError(log) : undefined}>
                         <td className="px-4 py-2 text-slate-500 font-mono text-xs">{formatTime(log.createdAt)}</td>
                         <td className="px-4 py-2 text-slate-700">{log.providerName}</td>
                         <td className="px-4 py-2 text-slate-500 font-mono text-xs">{log.model}</td>
                         <td className="px-4 py-2"><div className="flex items-center gap-1">{statusBadge(log.status)}{log.errorMessage && <span title="View error details">🔴</span>}</div></td>
+                        <td className="px-4 py-2 text-xs text-red-600 max-w-[200px] truncate">{log.errorMessage ? log.errorMessage.length > 50 ? log.errorMessage.slice(0, 50) + '...' : log.errorMessage : <span className="text-slate-300">-</span>}</td>
                         <td className="px-4 py-2 text-slate-500">{formatLatency(log.latencyMs)}</td>
                         <td className="px-4 py-2 text-slate-500">{log.tokensUsed ? formatTokens(log.tokensUsed) : '-'}</td>
                       </tr>
@@ -879,6 +964,9 @@ export default function Dashboard() {
                         <span className="text-xs text-slate-500 font-mono truncate max-w-[60%]">{log.model}</span>
                         <div className="flex items-center gap-1">{statusBadge(log.status)}{log.errorMessage && <span title="View error details">🔴</span>}</div>
                       </div>
+                      {log.errorMessage && (
+                        <div className="mt-1 text-xs text-red-600 truncate">{log.errorMessage.length > 50 ? log.errorMessage.slice(0, 50) + '...' : log.errorMessage}</div>
+                      )}
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-slate-500">{formatLatency(log.latencyMs)}</span>
                         <span className="text-xs text-slate-500">{log.tokensUsed ? formatTokens(log.tokensUsed) : '-'}</span>
@@ -1004,10 +1092,40 @@ export default function Dashboard() {
               <div className="space-y-3">
                 <div><label className="text-sm text-slate-600">Nama Provider</label><input type="text" className="input mt-1" placeholder="e.g. OpenRouter, Together AI" value={providerForm.name} onChange={e => setProviderForm(f => ({ ...f, name: e.target.value }))} /></div>
                 <div><label className="text-sm text-slate-600">Base URL</label><input type="text" className="input mt-1" placeholder="https://openrouter.ai/api/v1" value={providerForm.baseUrl} onChange={e => setProviderForm(f => ({ ...f, baseUrl: e.target.value }))} /></div>
-                <div><label className="text-sm text-slate-600">API Key</label><input type="password" className="input mt-1" placeholder={editingProvider ? 'Enter new key to update (leave blank to keep current)' : 'sk-...'} value={providerForm.apiKey} onChange={e => setProviderForm(f => ({ ...f, apiKey: e.target.value }))} />{editingProvider && <p className="text-xs text-slate-500 mt-1">Current key: <code className="bg-slate-100 px-1 rounded">{editingProvider.apiKey}</code></p>}</div>
+                <div>
+                  <label className="text-sm text-slate-600">API Keys</label>
+                  <div className="space-y-2 mt-1">
+                    {providerFormKeys.map((fk, idx) => {
+                      const isExisting = editingProvider && editingProvider.apiKeys && idx < editingProvider.apiKeys.length && !fk.key;
+                      return (
+                        <div key={idx} className="flex flex-col sm:flex-row gap-2 items-start p-2 rounded-lg bg-slate-50 border border-slate-200">
+                          <input type="text" className="input w-full sm:w-28 text-xs" placeholder="Nama" value={fk.name} onChange={e => {
+                            const updated = [...providerFormKeys];
+                            updated[idx] = { ...updated[idx], name: e.target.value };
+                            setProviderFormKeys(updated);
+                          }} />
+                          <div className="flex-1 w-full">
+                            <input type="password" className="input w-full text-xs" placeholder={isExisting ? 'Leave blank to keep current key' : 'sk-...'} value={fk.key} onChange={e => {
+                              const updated = [...providerFormKeys];
+                              updated[idx] = { ...updated[idx], key: e.target.value };
+                              setProviderFormKeys(updated);
+                            }} />
+                            {isExisting && editingProvider!.apiKeys[idx] && (
+                              <p className="text-xs text-slate-400 mt-0.5">Current: {editingProvider!.apiKeys[idx].key.slice(0, 8)}...{editingProvider!.apiKeys[idx].key.slice(-4)}</p>
+                            )}
+                          </div>
+                          {providerFormKeys.length > 1 && (
+                            <button type="button" onClick={() => setProviderFormKeys(prev => prev.filter((_, i) => i !== idx))} className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 whitespace-nowrap">✕</button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <button type="button" onClick={() => setProviderFormKeys(prev => [...prev, { name: `Key ${prev.length + 1}`, key: '' }])} className="mt-2 text-xs text-indigo-600 hover:text-indigo-800">+ Tambah Key</button>
+                </div>
               </div>
               <div className="border-t border-slate-200 pt-4">
-                <button onClick={handleTestConnection} disabled={testingConnection || !providerForm.baseUrl || (!providerForm.apiKey && !editingProvider)} className="btn btn-primary w-full">
+                <button onClick={handleTestConnection} disabled={testingConnection || !providerForm.baseUrl || (providerFormKeys.every(k => !k.key || k.key.startsWith('•')) && !editingProvider)} className="btn btn-primary w-full">
                   {testingConnection ? <span className="flex items-center justify-center gap-2"><span className="pulse-dot">⏳</span> Testing...</span> : '🔌 Test Connection & Discover Models'}
                 </button>
                 {testResult && (

@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { name, baseUrl, apiKey, models, selectedModels, priority, enabled } = body;
+    const { name, baseUrl, apiKey, models, selectedModels, priority, enabled, apiKeys } = body;
 
     if (!name || !baseUrl || !apiKey) {
       return withCors(
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
       ? selectedModels
       : models; // default: all models selected
 
-    const provider = await addProvider({
+    const provider = await addProvider({ ...apiKeys ? { apiKeys } : {},
       name,
       baseUrl: baseUrl.replace(/\/+$/, ''),
       apiKey,
@@ -94,10 +94,19 @@ export async function PUT(request: NextRequest) {
       updates.baseUrl = updates.baseUrl.replace(/\/+$/, '');
     }
 
-    // Skip apiKey update if it's a masked value (e.g. "sk-abc12...xyz9")
-    // Masked keys contain "..." and are only for display, not for storage
+    // Handle apiKey (single) - skip if masked
     if (updates.apiKey && updates.apiKey.includes('...')) {
       delete updates.apiKey;
+    }
+
+    // Handle apiKeys (multi) - filter out masked keys
+    if (updates.apiKeys && Array.isArray(updates.apiKeys)) {
+      updates.apiKeys = updates.apiKeys.map((k: any) => {
+        if (k.key && k.key.includes('...')) {
+          return undefined; // skip masked keys
+        }
+        return k;
+      }).filter(Boolean);
     }
 
     const updated = await updateProvider(id, updates);
