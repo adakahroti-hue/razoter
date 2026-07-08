@@ -171,7 +171,6 @@ export default function Dashboard() {
   // Quota form
   const [showQuotaModal, setShowQuotaModal] = useState(false);
   const [quotaForm, setQuotaForm] = useState({ providerId: '', monthlyLimit: 0, resetDay: 1 });
-  const [quotaFormModel, setQuotaFormModel] = useState('');
 
   // Log error modal
   const [selectedLogError, setSelectedLogError] = useState<RequestLog | null>(null);
@@ -602,19 +601,17 @@ export default function Dashboard() {
 
   function openQuotaModal() {
     setQuotaForm({ providerId: '', monthlyLimit: 0, resetDay: 1 });
-    setQuotaFormModel('');
     setShowQuotaModal(true);
   }
 
   async function handleSaveQuota() {
     if (!quotaForm.providerId) { alert('Pilih provider!'); return; }
-    if (!quotaFormModel) { alert('Pilih model!'); return; }
     const provider = providers.find(p => p.id === quotaForm.providerId);
     if (!provider) return;
     try {
       const res = await api('/api/quotas', {
         method: 'POST',
-        body: JSON.stringify({ providerId: quotaForm.providerId, providerName: provider.name, model: quotaFormModel, monthlyLimit: quotaForm.monthlyLimit, resetDay: quotaForm.resetDay }),
+        body: JSON.stringify({ providerId: quotaForm.providerId, providerName: provider.name, model: '', monthlyLimit: quotaForm.monthlyLimit, resetDay: quotaForm.resetDay }),
       });
       if (res.ok) { setShowQuotaModal(false); fetchData(); }
       else { const err = await res.json(); alert(err.error || 'Failed'); }
@@ -882,39 +879,145 @@ export default function Dashboard() {
             {quotas.length === 0 ? (
               <div className="card text-center py-12 text-slate-400"><div className="text-4xl mb-2">📊</div><p>Belum ada quota. Tambah quota pertama!</p></div>
             ) : (
-              <div className="space-y-3">
-                {quotas.map(q => {
-                  const pct = q.monthlyLimit > 0 ? Math.min(100, Math.round((q.currentUsage / q.monthlyLimit) * 100)) : 0;
-                  const isOver = q.monthlyLimit > 0 && q.currentUsage >= q.monthlyLimit;
-                  return (
-                    <div key={q.id} className="card">
-                      <div className="flex items-start justify-between mb-3">
+              (() => {
+                // Group quotas by provider
+                const providerMap = new Map<string, { providerId: string; providerName: string; keys: Quota[]; totalUsage: number; totalLimit: number; resetDay: number }>();
+                for (const q of quotas) {
+                  const key = q.providerId;
+                  if (!providerMap.has(key)) {
+                    providerMap.set(key, { providerId: q.providerId, providerName: q.providerName, keys: [], totalUsage: 0, totalLimit: 0, resetDay: q.resetDay });
+                  }
+                  const entry = providerMap.get(key)!;
+                  entry.keys.push(q);
+                  entry.totalUsage += q.currentUsage || 0;
+                  entry.totalLimit += q.monthlyLimit || 0;
+                  entry.resetDay = q.resetDay;
+                }
+                const providerGroups = Array.from(providerMap.values());
+
+                // Summary stats
+                const grandTotalUsage = providerGroups.reduce((s, g) => s + g.totalUsage, 0);
+                const grandTotalLimit = providerGroups.reduce((s, g) => s + g.totalLimit, 0);
+                const providersOverLimit = providerGroups.filter(g => g.totalLimit > 0 && g.totalUsage >= g.totalLimit).length;
+
+                return (
+                  <>
+                    {/* Summary cards */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      <div className="card p-4 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center text-xl">📝</div>
                         <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-semibold text-slate-900">{q.providerName}</h3>
-                            {q.apiKeyName && <span className="px-2 py-0.5 rounded bg-green-50 text-green-600 text-xs font-mono">{q.apiKeyName}</span>}
-                            {isOver && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">LIMIT EXCEEDED</span>}
-                          </div>
-                          <div className="text-xs text-slate-500 mt-1">Reset tanggal {q.resetDay} setiap bulan</div>
+                          <div className="text-xs text-slate-500">Total Token Usage</div>
+                          <div className="text-lg font-bold text-slate-900">{formatTokens(grandTotalUsage)}</div>
                         </div>
-                        <button onClick={() => handleDeleteQuota(q.id)} className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100">Hapus</button>
                       </div>
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-slate-600">{formatTokens(q.currentUsage)} / {q.monthlyLimit > 0 ? formatTokens(q.monthlyLimit) : '∞'} tokens</span>
-                          {q.monthlyLimit > 0 && <span className={`font-medium ${isOver ? 'text-red-600' : 'text-slate-700'}`}>{pct}%</span>}
+                      <div className="card p-4 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-xl">📦</div>
+                        <div>
+                          <div className="text-xs text-slate-500">Total Limit</div>
+                          <div className="text-lg font-bold text-slate-900">{grandTotalLimit > 0 ? formatTokens(grandTotalLimit) : '∞'}</div>
                         </div>
-                        {q.monthlyLimit > 0 && (
-                          <div className="w-full bg-slate-100 rounded-full h-2.5">
-                            <div className={`h-2.5 rounded-full transition-all ${pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, pct)}%` }}></div>
-                          </div>
-                        )}
-                        {q.monthlyLimit === 0 && <div className="text-xs text-slate-400">Unlimited — tracking only</div>}
+                      </div>
+                      <div className="card p-4 flex items-center gap-3 col-span-2 sm:col-span-1">
+                        <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center text-xl">⚠️</div>
+                        <div>
+                          <div className="text-xs text-slate-500">Providers Over Limit</div>
+                          <div className="text-lg font-bold text-slate-900">{providersOverLimit}</div>
+                        </div>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+
+                    {/* Provider cards */}
+                    <div className="space-y-3">
+                      {providerGroups.map(g => {
+                        const pct = g.totalLimit > 0 ? Math.min(100, Math.round((g.totalUsage / g.totalLimit) * 100)) : 0;
+                        const isOver = g.totalLimit > 0 && g.totalUsage >= g.totalLimit;
+                        const barColor = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500';
+                        const hasMultiKey = g.keys.length > 1;
+                        return (
+                          <div key={g.providerId} className="card overflow-hidden">
+                            {/* Provider header */}
+                            <div className="p-4">
+                              <div className="flex items-start justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold ${isOver ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                                    {g.providerName.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <h3 className="font-semibold text-slate-900">{g.providerName}</h3>
+                                      {isOver && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">LIMIT</span>}
+                                      {hasMultiKey && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-600">{g.keys.length} keys</span>}
+                                    </div>
+                                    <div className="text-xs text-slate-400 mt-0.5">Reset tanggal {g.resetDay} setiap bulan</div>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <div className={`text-lg font-bold ${isOver ? 'text-red-600' : 'text-slate-900'}`}>{formatTokens(g.totalUsage)}</div>
+                                  <div className="text-xs text-slate-400">{g.totalLimit > 0 ? `dari ${formatTokens(g.totalLimit)}` : 'unlimited'}</div>
+                                </div>
+                              </div>
+
+                              {/* Progress bar */}
+                              {g.totalLimit > 0 ? (
+                                <div className="space-y-1.5">
+                                  <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+                                    <div className={`h-3 rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${Math.min(100, pct)}%` }}></div>
+                                  </div>
+                                  <div className="flex justify-between text-xs">
+                                    <span className={`font-medium ${isOver ? 'text-red-600' : pct >= 70 ? 'text-amber-600' : 'text-emerald-600'}`}>{pct}% terpakai</span>
+                                    <span className="text-slate-400">{formatTokens(g.totalLimit - g.totalUsage)} tersisa</span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="text-xs text-slate-400 flex items-center gap-1">♾️ Tracking only — tidak ada limit</div>
+                              )}
+                            </div>
+
+                            {/* Per-key breakdown */}
+                            {hasMultiKey && (
+                              <div className="border-t border-slate-100 bg-slate-50/50 p-4">
+                                <div className="text-xs font-medium text-slate-500 mb-2">Breakdown per API Key</div>
+                                <div className="space-y-2">
+                                  {g.keys.map((k, idx) => {
+                                    const kPct = k.monthlyLimit > 0 ? Math.min(100, Math.round((k.currentUsage / k.monthlyLimit) * 100)) : 0;
+                                    const kOver = k.monthlyLimit > 0 && k.currentUsage >= k.monthlyLimit;
+                                    return (
+                                      <div key={k.id || idx} className="flex items-center gap-3">
+                                        <span className="text-xs font-mono px-2 py-0.5 rounded bg-white border-slate-200 text-slate-600 min-w-[60px] text-center truncate max-w-[120px]">{k.apiKeyName || 'Default'}</span>
+                                        <div className="flex-1 min-w-0">
+                                          {k.monthlyLimit > 0 ? (
+                                            <div className="w-full bg-slate-200 rounded-full h-1.5">
+                                              <div className={`h-1.5 rounded-full ${kOver ? 'bg-red-500' : kPct >= 70 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, kPct)}%` }}></div>
+                                            </div>
+                                          ) : (
+                                            <div className="h-1.5 rounded-full bg-slate-200 relative overflow-hidden">
+                                              <div className="absolute inset-0 bg-gradient-to-r from-emerald-200 to-emerald-300" style={{ width: '30%' }}></div>
+                                            </div>
+                                          )}
+                                        </div>
+                                        <span className="text-xs text-slate-500 font-mono whitespace-nowrap">{formatTokens(k.currentUsage)}{k.monthlyLimit > 0 ? ` / ${formatTokens(k.monthlyLimit)}` : ''}</span>
+                                        <button onClick={() => handleDeleteQuota(k.id)} className="text-xs text-slate-300 hover:text-red-500 transition-colors">✕</button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Single key — delete button */}
+                            {!hasMultiKey && (
+                              <div className="border-t border-slate-100 px-4 py-2 flex justify-end">
+                                <button onClick={() => handleDeleteQuota(g.keys[0].id)} className="text-xs px-2 py-1 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors">Hapus</button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                );
+              })()
             )}
           </div>
         )}
@@ -1279,24 +1382,11 @@ export default function Dashboard() {
               </div>
               <div>
                 <label className="text-sm text-slate-600">Provider</label>
-                <select className="input mt-1" value={quotaForm.providerId} onChange={e => { setQuotaForm(f => ({ ...f, providerId: e.target.value })); setQuotaFormModel(''); }}>
+                <select className="input mt-1" value={quotaForm.providerId} onChange={e => setQuotaForm(f => ({ ...f, providerId: e.target.value }))}>
                   <option value="">Pilih Provider...</option>
                   {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </div>
-              {quotaForm.providerId && (() => {
-                const selectedProvider = providers.find(p => p.id === quotaForm.providerId);
-                const models = selectedProvider?.selectedModels?.length ? selectedProvider.selectedModels : (selectedProvider?.models || []);
-                return models.length > 0 ? (
-                  <div>
-                    <label className="text-sm text-slate-600">Model</label>
-                    <select className="input mt-1" value={quotaFormModel} onChange={e => setQuotaFormModel(e.target.value)}>
-                      <option value="">Pilih Model...</option>
-                      {models.map(m => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                  </div>
-                ) : null;
-              })()}
               <div>
                 <label className="text-sm text-slate-600">Monthly Limit (tokens)</label>
                 <input type="number" className="input mt-1" placeholder="0 = unlimited" min={0} value={quotaForm.monthlyLimit} onChange={e => setQuotaForm(f => ({ ...f, monthlyLimit: parseInt(e.target.value) || 0 }))} />
@@ -1305,10 +1395,11 @@ export default function Dashboard() {
               <div>
                 <label className="text-sm text-slate-600">Reset Day</label>
                 <input type="number" className="input mt-1" min={1} max={28} value={quotaForm.resetDay} onChange={e => setQuotaForm(f => ({ ...f, resetDay: parseInt(e.target.value) || 1 }))} />
+                <p className="text-xs text-slate-400 mt-1">Tanggal reset counter setiap bulan (1-28)</p>
               </div>
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setShowQuotaModal(false)} className="btn btn-secondary flex-1">Batal</button>
-                <button onClick={handleSaveQuota} disabled={!quotaForm.providerId || !quotaFormModel} className="btn btn-primary flex-1">📊 Tambah</button>
+                <button onClick={handleSaveQuota} disabled={!quotaForm.providerId} className="btn btn-primary flex-1">📊 Tambah</button>
               </div>
             </div>
           </div>
