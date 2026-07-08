@@ -680,42 +680,57 @@ export async function deleteQuota(id: string): Promise<boolean> {
 }
 
 export async function incrementQuotaUsage(providerId: string, tokens: number, apiKeyName?: string): Promise<void> {
-  // Get current quota for this provider, optionally filtering by api_key_name
-  const query = supabase
-    .from('quotas')
-    .select('id, current_usage');
+  if (!tokens || tokens <= 0) return;
 
-  let queryBuilder;
+  // Find quota entry by provider_id AND api_key_name (if provided)
+  let queryBuilder = supabase
+    .from('quotas')
+    .select('id, current_usage')
+    .eq('provider_id', providerId);
+
   if (apiKeyName) {
-    queryBuilder = query.eq('api_key_name', apiKeyName).limit(1);
-  } else {
-    queryBuilder = query.eq('provider_id', providerId).limit(1);
+    queryBuilder = queryBuilder.eq('api_key_name', apiKeyName);
   }
 
-  const { data } = await queryBuilder.maybeSingle();
+  const { data } = await queryBuilder.limit(1).maybeSingle();
 
   if (data) {
     await supabase
       .from('quotas')
       .update({ current_usage: (data.current_usage ?? 0) + tokens })
       .eq('id', data.id);
+  } else if (apiKeyName) {
+    // No entry for this api_key_name — try provider-level entry (api_key_name = '' or null)
+    const { data: fallback } = await supabase
+      .from('quotas')
+      .select('id, current_usage, api_key_name')
+      .eq('provider_id', providerId)
+      .or('api_key_name.is.null,api_key_name.eq.')
+      .limit(1)
+      .maybeSingle();
+
+    if (fallback) {
+      await supabase
+        .from('quotas')
+        .update({ current_usage: (fallback.current_usage ?? 0) + tokens })
+        .eq('id', fallback.id);
+    }
+    // If still no entry, do nothing — no quota configured for this provider
   }
 }
 
 export async function checkQuotaLimit(providerId: string, apiKeyName?: string): Promise<boolean> {
   // Returns true if provider is within quota (or no quota set)
-  const query = supabase
+  let queryBuilder = supabase
     .from('quotas')
-    .select('monthly_limit, current_usage');
+    .select('monthly_limit, current_usage')
+    .eq('provider_id', providerId);
 
-  let queryBuilder;
   if (apiKeyName) {
-    queryBuilder = query.eq('api_key_name', apiKeyName).limit(1);
-  } else {
-    queryBuilder = query.eq('provider_id', providerId).limit(1);
+    queryBuilder = queryBuilder.eq('api_key_name', apiKeyName);
   }
 
-  const { data } = await queryBuilder.maybeSingle();
+  const { data } = await queryBuilder.limit(1).maybeSingle();
 
   if (!data || !data.monthly_limit || data.monthly_limit === 0) return true; // no limit
   return (data.current_usage ?? 0) < data.monthly_limit;

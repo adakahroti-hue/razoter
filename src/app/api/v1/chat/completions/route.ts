@@ -212,8 +212,44 @@ export async function POST(request: NextRequest) {
         if (upstreamResponse.ok) {
           if (isStreaming && upstreamResponse.body) {
             await updateProviderStats(comboProvider.id, true, latencyMs);
+
+            // Intercept stream to extract token usage, then update quota
+            const reader = upstreamResponse.body.getReader();
+            const stream = new ReadableStream({
+              async start(controller) {
+                let lastUsage: number | undefined;
+                const decoder = new TextDecoder();
+                let buffer = '';
+                try {
+                  while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+                    for (const line of lines) {
+                      if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+                        try {
+                          const json = JSON.parse(line.slice(6));
+                          if (json.usage?.total_tokens) lastUsage = json.usage.total_tokens;
+                        } catch {}
+                      }
+                    }
+                    controller.enqueue(value);
+                  }
+                } finally {
+                  controller.close();
+                  if (lastUsage) {
+                    import('@/lib/storage').then(({ incrementQuotaUsage }) =>
+                      incrementQuotaUsage(comboProvider!.id, lastUsage!, comboKeyName).catch(() => {})
+                    ).catch(() => {});
+                  }
+                }
+              }
+            });
+
             await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'success', statusCode: 200, latencyMs, apiKeyName: comboKeyName });
-            return new NextResponse(upstreamResponse.body, {
+            return new NextResponse(stream, {
               status: 200,
               headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', ...corsHeaders() },
             });
@@ -221,6 +257,9 @@ export async function POST(request: NextRequest) {
           const data = await upstreamResponse.json();
           await updateProviderStats(comboProvider.id, true, latencyMs);
           await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'success', statusCode: 200, latencyMs, tokensUsed: data.usage?.total_tokens, apiKeyName: comboKeyName });
+          if (data.usage?.total_tokens) {
+            await incrementQuotaUsage(comboProvider.id, data.usage.total_tokens, comboKeyName);
+          }
           return withCors(NextResponse.json(data, { status: 200 }));
         }
 
@@ -338,6 +377,54 @@ export async function POST(request: NextRequest) {
         // Streaming response
         if (isStreaming && upstreamResponse.body) {
           await updateProviderStats(currentProvider.id, true, latencyMs);
+
+          // Intercept stream to extract token usage from last chunk, then update quota
+          const reader = upstreamResponse.body.getReader();
+          const stream = new ReadableStream({
+            async start(controller) {
+              let lastUsage: number | undefined;
+              const decoder = new TextDecoder();
+              let buffer = '';
+              try {
+                while (true) {
+                  const { done, value } = await reader.read();
+                  if (done) break;
+                  buffer += decoder.decode(value, { stream: true });
+                  // Look for usage in chunks
+                  const lines = buffer.split('\n');
+                  buffer = lines.pop() || '';
+                  for (const line of lines) {
+                    if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+                      try {
+                        const json = JSON.parse(line.slice(6));
+                        if (json.usage?.total_tokens) lastUsage = json.usage.total_tokens;
+                      } catch {}
+                    }
+                  }
+                  controller.enqueue(value);
+                }
+                // Process final buffer
+                const finalLines = buffer.split('\n');
+                for (const line of finalLines) {
+                  if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+                    try {
+                      const json = JSON.parse(line.slice(6));
+                      if (json.usage?.total_tokens) lastUsage = json.usage.total_tokens;
+                    } catch {}
+                  }
+                }
+              } finally {
+                controller.close();
+                // Update quota and log with token usage after stream ends
+                if (lastUsage) {
+                  import('@/lib/storage').then(({ incrementQuotaUsage }) =>
+                    incrementQuotaUsage(currentProvider!.id, lastUsage!, stdAkName).catch(() => {})
+                  ).catch(() => {});
+                }
+              }
+            }
+          });
+
           await addLog({
             providerId: currentProvider.id,
             providerName: currentProvider.name,
@@ -348,7 +435,7 @@ export async function POST(request: NextRequest) {
             apiKeyName: stdAkName,
           });
 
-          const response = new NextResponse(upstreamResponse.body, {
+          const response = new NextResponse(stream, {
             status: 200,
             headers: {
               'Content-Type': 'text/event-stream',
