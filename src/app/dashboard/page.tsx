@@ -728,7 +728,7 @@ export default function Dashboard() {
                         <button
                           onClick={() => handleTestAllModels(p)}
                           disabled={testingAllModels === p.id}
-                          className="text-xs px-3 py-1.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors"
+                          className="text-xs px-3 py-1.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors w-full sm:w-auto"
                         >
                           {testingAllModels === p.id ? '⏳ Testing...' : '🧪 Cek Semua Model'}
                         </button>
