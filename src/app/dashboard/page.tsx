@@ -1098,30 +1098,32 @@ export default function Dashboard() {
                     {providerFormKeys.map((fk, idx) => {
                       const isExisting = editingProvider && editingProvider.apiKeys && idx < editingProvider.apiKeys.length && !fk.key;
                       return (
-                        <div key={idx} className="flex flex-col sm:flex-row gap-2 items-start p-2 rounded-lg bg-slate-50 border border-slate-200">
-                          <input type="text" className="input w-full sm:w-28 text-xs" placeholder="Nama" value={fk.name} onChange={e => {
-                            const updated = [...providerFormKeys];
-                            updated[idx] = { ...updated[idx], name: e.target.value };
-                            setProviderFormKeys(updated);
-                          }} />
-                          <div className="flex-1 w-full">
-                            <input type="password" className="input w-full text-xs" placeholder={isExisting ? 'Leave blank to keep current key' : 'sk-...'} value={fk.key} onChange={e => {
+                        <div key={idx} className="flex flex-col gap-2 p-3 rounded-lg bg-slate-50 border border-slate-200">
+                          <div className="flex items-center justify-between">
+                            <input type="text" className="input flex-1 text-sm" placeholder="Nama key (e.g. Akun Utama, Akun Cadangan)" value={fk.name} onChange={e => {
+                              const updated = [...providerFormKeys];
+                              updated[idx] = { ...updated[idx], name: e.target.value };
+                              setProviderFormKeys(updated);
+                            }} />
+                            {providerFormKeys.length > 1 && (
+                              <button type="button" onClick={() => setProviderFormKeys(prev => prev.filter((_, i) => i !== idx))} className="ml-2 px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 text-sm flex-shrink-0">✕</button>
+                            )}
+                          </div>
+                          <div>
+                            <input type="password" className="input w-full text-sm" placeholder={isExisting ? 'Leave blank to keep current key' : 'sk-...'} value={fk.key} onChange={e => {
                               const updated = [...providerFormKeys];
                               updated[idx] = { ...updated[idx], key: e.target.value };
                               setProviderFormKeys(updated);
                             }} />
                             {isExisting && editingProvider!.apiKeys[idx] && (
-                              <p className="text-xs text-slate-400 mt-0.5">Current: {editingProvider!.apiKeys[idx].key.slice(0, 8)}...{editingProvider!.apiKeys[idx].key.slice(-4)}</p>
+                              <p className="text-xs text-slate-400 mt-1">Current: {editingProvider!.apiKeys[idx].key.slice(0, 8)}...{editingProvider!.apiKeys[idx].key.slice(-4)}</p>
                             )}
                           </div>
-                          {providerFormKeys.length > 1 && (
-                            <button type="button" onClick={() => setProviderFormKeys(prev => prev.filter((_, i) => i !== idx))} className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 whitespace-nowrap">✕</button>
-                          )}
                         </div>
                       );
                     })}
                   </div>
-                  <button type="button" onClick={() => setProviderFormKeys(prev => [...prev, { name: `Key ${prev.length + 1}`, key: '' }])} className="mt-2 text-xs text-indigo-600 hover:text-indigo-800">+ Tambah Key</button>
+                  <button type="button" onClick={() => setProviderFormKeys(prev => [...prev, { name: `Key ${prev.length + 1}`, key: '' }])} className="mt-2 text-sm font-medium text-indigo-600 hover:text-indigo-800">+ Tambah Key</button>
                 </div>
               </div>
               <div className="border-t border-slate-200 pt-4">
