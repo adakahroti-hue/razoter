@@ -23,13 +23,13 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { providerId, providerName, monthlyLimit, resetDay } = body;
+    const { providerId, providerName, model, monthlyLimit, resetDay } = body;
 
     if (!providerId || !providerName) {
       return withCors(NextResponse.json({ error: 'Provider ID and name required' }, { status: 400 }));
     }
 
-    const quota = await addQuota(providerId, providerName, monthlyLimit || 0, resetDay || 1);
+    const quota = await addQuota(providerId, providerName, model || '', monthlyLimit || 0, resetDay || 1);
     return withCors(NextResponse.json(quota, { status: 201 }));
   } catch (e: any) {
     return withCors(NextResponse.json({ error: e.message || 'Invalid JSON' }, { status: 400 }));

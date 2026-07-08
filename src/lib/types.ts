@@ -112,6 +112,7 @@ export interface Quota {
   id: string;
   providerId: string;
   providerName: string;
+  model: string;                // track per model ('' = all models)
   monthlyLimit: number;       // max tokens per month (0 = unlimited)
   currentUsage: number;       // tokens used this month
   resetDay: number;           // day of month to reset (1-28)

@@ -558,7 +558,10 @@ export async function deleteCombo(id: string): Promise<boolean> {
 
 // ─── Combo resolution ────────────────────────────────────
 
-export async function resolveComboModel(modelName: string): Promise<{ providerId: string; model: string } | null> {
+export async function resolveComboModel(
+  modelName: string,
+  triedIndices?: number[]
+): Promise<{ providerId: string; model: string; itemIndex: number } | null> {
   const { data, error } = await supabase
     .from('combos')
     .select('items, strategy')
@@ -573,20 +576,26 @@ export async function resolveComboModel(modelName: string): Promise<{ providerId
 
   const items = data.items as Combo['items'];
   const strategy = (data.strategy as Combo['strategy']) ?? 'failover-priority';
-
-  let picked: Combo['items'][0];
+  const tried = new Set(triedIndices ?? []);
 
   if (strategy === 'round-robin') {
-    // Round-robin: cycle through items in order
+    for (let i = 0; i < items.length; i++) {
+      if (!tried.has(i)) {
+        return { providerId: items[i].providerId, model: items[i].model, itemIndex: i };
+      }
+    }
     const idx = comboRoundRobinIndex.get(modelName) ?? 0;
-    picked = items[idx % items.length];
+    const nextIdx = idx % items.length;
     comboRoundRobinIndex.set(modelName, idx + 1);
+    return { providerId: items[nextIdx].providerId, model: items[nextIdx].model, itemIndex: nextIdx };
   } else {
-    // Failover-priority: pick random (first is "priority" but rotation gives failover)
-    picked = items[Math.floor(Math.random() * items.length)];
+    for (let i = 0; i < items.length; i++) {
+      if (!tried.has(i)) {
+        return { providerId: items[i].providerId, model: items[i].model, itemIndex: i };
+      }
+    }
+    return null;
   }
-
-  return { providerId: picked.providerId, model: picked.model };
 }
 
 // ─── Quotas ──────────────────────────────────────────────
@@ -605,6 +614,7 @@ export async function getQuotas(): Promise<Quota[]> {
     id: row.id,
     providerId: row.provider_id,
     providerName: row.provider_name,
+    model: row.model ?? '',
     monthlyLimit: row.monthly_limit ?? 0,
     currentUsage: row.current_usage ?? 0,
     resetDay: row.reset_day ?? 1,
@@ -612,13 +622,13 @@ export async function getQuotas(): Promise<Quota[]> {
   }));
 }
 
-export async function addQuota(providerId: string, providerName: string, monthlyLimit: number, resetDay: number): Promise<Quota> {
+export async function addQuota(providerId: string, providerName: string, model: string, monthlyLimit: number, resetDay: number): Promise<Quota> {
   const id = randomUUID();
   const now = new Date().toISOString();
 
   const { data, error } = await supabase
     .from('quotas')
-    .insert({ id, provider_id: providerId, provider_name: providerName, monthly_limit: monthlyLimit, current_usage: 0, reset_day: resetDay, created_at: now })
+    .insert({ id, provider_id: providerId, provider_name: providerName, model: model || '', monthly_limit: monthlyLimit, current_usage: 0, reset_day: resetDay, created_at: now })
     .select()
     .single();
 
@@ -627,7 +637,7 @@ export async function addQuota(providerId: string, providerName: string, monthly
     throw new Error(`Failed to add quota: ${error.message}`);
   }
 
-  return { id: data.id, providerId: data.provider_id, providerName: data.provider_name, monthlyLimit: data.monthly_limit, currentUsage: data.current_usage, resetDay: data.reset_day, createdAt: data.created_at };
+  return { id: data.id, providerId: data.provider_id, providerName: data.provider_name, model: data.model ?? '', monthlyLimit: data.monthly_limit, currentUsage: data.current_usage, resetDay: data.reset_day, createdAt: data.created_at };
 }
 
 export async function updateQuota(id: string, updates: Partial<Quota>): Promise<Quota | null> {
@@ -648,7 +658,7 @@ export async function updateQuota(id: string, updates: Partial<Quota>): Promise<
   }
   if (!data) return null;
 
-  return { id: data.id, providerId: data.provider_id, providerName: data.provider_name, monthlyLimit: data.monthly_limit, currentUsage: data.current_usage, resetDay: data.reset_day, createdAt: data.created_at };
+  return { id: data.id, providerId: data.provider_id, providerName: data.provider_name, model: data.model ?? '', monthlyLimit: data.monthly_limit, currentUsage: data.current_usage, resetDay: data.reset_day, createdAt: data.created_at };
 }
 
 export async function deleteQuota(id: string): Promise<boolean> {

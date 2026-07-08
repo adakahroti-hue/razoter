@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyDashboardAuth } from '@/lib/auth';
-import { getProviders, addProvider, updateProvider, deleteProvider } from '@/lib/storage';
+import { getProviders, addProvider, updateProvider, deleteProvider, addQuota } from '@/lib/storage';
 import { withCors, handleCorsPreflight } from '@/lib/cors';
 
 export async function OPTIONS() {
@@ -50,17 +50,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const selected = Array.isArray(selectedModels) && selectedModels.length > 0
+      ? selectedModels
+      : models; // default: all models selected
+
     const provider = await addProvider({
       name,
       baseUrl: baseUrl.replace(/\/+$/, ''),
       apiKey,
       models,
-      selectedModels: Array.isArray(selectedModels) && selectedModels.length > 0
-        ? selectedModels
-        : models, // default: all models selected
+      selectedModels: selected,
       priority: priority ?? 10,
       enabled: enabled ?? true,
     });
+
+    // Auto-create quota entry for each selected model
+    for (const model of selected) {
+      try {
+        await addQuota(provider.id, name, model, 0, 1);
+      } catch {}
+    }
 
     return withCors(NextResponse.json(provider, { status: 201 }));
   } catch {

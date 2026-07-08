@@ -54,6 +54,7 @@ interface Quota {
   id: string;
   providerId: string;
   providerName: string;
+  model: string;
   monthlyLimit: number;
   currentUsage: number;
   resetDay: number;
@@ -164,6 +165,10 @@ export default function Dashboard() {
   // Quota form
   const [showQuotaModal, setShowQuotaModal] = useState(false);
   const [quotaForm, setQuotaForm] = useState({ providerId: '', monthlyLimit: 0, resetDay: 1 });
+  const [quotaFormModel, setQuotaFormModel] = useState('');
+
+  // Log error modal
+  const [selectedLogError, setSelectedLogError] = useState<RequestLog | null>(null);
 
   // ChatGPT Plus login flow
   const [chatgptStep, setChatgptStep] = useState<'idle' | 'code' | 'waiting' | 'done' | 'error'>('idle');
@@ -245,6 +250,18 @@ export default function Dashboard() {
 
   // ─── Provider actions ────────────────────────────
 
+  async function handleAutoCreateQuotas(providerId: string, providerName: string, models: string[]) {
+    try {
+      for (const model of models) {
+        await api('/api/quotas', {
+          method: 'POST',
+          body: JSON.stringify({ providerId, providerName, model, monthlyLimit: 0, resetDay: 1 }),
+        });
+      }
+      fetchData();
+    } catch (e) { console.error('Auto-create quotas error:', e); }
+  }
+
   async function handleTestConnection() {
     if (!providerForm.baseUrl) return;
     // When editing without new key, use stored key by sending providerId
@@ -291,7 +308,13 @@ export default function Dashboard() {
       const res = editingProvider
         ? await api('/api/providers', { method: 'PUT', body: JSON.stringify({ id: editingProvider.id, ...body }) })
         : await api('/api/providers', { method: 'POST', body: JSON.stringify({ ...body, apiKey: providerForm.apiKey }) });
-      if (res.ok) { setShowProviderModal(false); resetProviderForm(); fetchData(); }
+      if (res.ok) {
+        const data = await res.json();
+        setShowProviderModal(false); resetProviderForm(); fetchData();
+        if (!editingProvider && data.id) {
+          handleAutoCreateQuotas(data.id, providerForm.name, selectedModels);
+        }
+      }
       else { const err = await res.json(); alert(err.error || 'Failed'); }
     } catch { alert('Network error'); }
   }
@@ -503,17 +526,19 @@ export default function Dashboard() {
 
   function openQuotaModal() {
     setQuotaForm({ providerId: '', monthlyLimit: 0, resetDay: 1 });
+    setQuotaFormModel('');
     setShowQuotaModal(true);
   }
 
   async function handleSaveQuota() {
     if (!quotaForm.providerId) { alert('Pilih provider!'); return; }
+    if (!quotaFormModel) { alert('Pilih model!'); return; }
     const provider = providers.find(p => p.id === quotaForm.providerId);
     if (!provider) return;
     try {
       const res = await api('/api/quotas', {
         method: 'POST',
-        body: JSON.stringify({ providerId: quotaForm.providerId, providerName: provider.name, monthlyLimit: quotaForm.monthlyLimit, resetDay: quotaForm.resetDay }),
+        body: JSON.stringify({ providerId: quotaForm.providerId, providerName: provider.name, model: quotaFormModel, monthlyLimit: quotaForm.monthlyLimit, resetDay: quotaForm.resetDay }),
       });
       if (res.ok) { setShowQuotaModal(false); fetchData(); }
       else { const err = await res.json(); alert(err.error || 'Failed'); }
@@ -785,6 +810,7 @@ export default function Dashboard() {
                         <div>
                           <div className="flex items-center gap-2">
                             <h3 className="font-semibold text-slate-900">{q.providerName}</h3>
+                            {q.model && <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-600 text-xs font-mono">{q.model}</span>}
                             {isOver && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">LIMIT EXCEEDED</span>}
                           </div>
                           <div className="text-xs text-slate-500 mt-1">Reset tanggal {q.resetDay} setiap bulan</div>
@@ -826,11 +852,11 @@ export default function Dashboard() {
                 <tbody>
                   {logs.length === 0 ? <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">Belum ada logs</td></tr> :
                     logs.map(log => (
-                      <tr key={log.id} className="border-t border-slate-100">
+                      <tr key={log.id} className={`border-t border-slate-100 ${log.errorMessage ? 'cursor-pointer hover:bg-red-50 transition-colors' : ''}`} onClick={log.errorMessage ? () => setSelectedLogError(log) : undefined}>
                         <td className="px-4 py-2 text-slate-500 font-mono text-xs">{formatTime(log.createdAt)}</td>
                         <td className="px-4 py-2 text-slate-700">{log.providerName}</td>
                         <td className="px-4 py-2 text-slate-500 font-mono text-xs">{log.model}</td>
-                        <td className="px-4 py-2">{statusBadge(log.status)}</td>
+                        <td className="px-4 py-2"><div className="flex items-center gap-1">{statusBadge(log.status)}{log.errorMessage && <span title="View error details">🔴</span>}</div></td>
                         <td className="px-4 py-2 text-slate-500">{formatLatency(log.latencyMs)}</td>
                         <td className="px-4 py-2 text-slate-500">{log.tokensUsed ? formatTokens(log.tokensUsed) : '-'}</td>
                       </tr>
@@ -1088,11 +1114,24 @@ export default function Dashboard() {
               </div>
               <div>
                 <label className="text-sm text-slate-600">Provider</label>
-                <select className="input mt-1" value={quotaForm.providerId} onChange={e => setQuotaForm(f => ({ ...f, providerId: e.target.value }))}>
+                <select className="input mt-1" value={quotaForm.providerId} onChange={e => { setQuotaForm(f => ({ ...f, providerId: e.target.value })); setQuotaFormModel(''); }}>
                   <option value="">Pilih Provider...</option>
                   {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </div>
+              {quotaForm.providerId && (() => {
+                const selectedProvider = providers.find(p => p.id === quotaForm.providerId);
+                const models = selectedProvider?.selectedModels?.length ? selectedProvider.selectedModels : (selectedProvider?.models || []);
+                return models.length > 0 ? (
+                  <div>
+                    <label className="text-sm text-slate-600">Model</label>
+                    <select className="input mt-1" value={quotaFormModel} onChange={e => setQuotaFormModel(e.target.value)}>
+                      <option value="">Pilih Model...</option>
+                      {models.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                ) : null;
+              })()}
               <div>
                 <label className="text-sm text-slate-600">Monthly Limit (tokens)</label>
                 <input type="number" className="input mt-1" placeholder="0 = unlimited" min={0} value={quotaForm.monthlyLimit} onChange={e => setQuotaForm(f => ({ ...f, monthlyLimit: parseInt(e.target.value) || 0 }))} />
@@ -1104,7 +1143,40 @@ export default function Dashboard() {
               </div>
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setShowQuotaModal(false)} className="btn btn-secondary flex-1">Batal</button>
-                <button onClick={handleSaveQuota} disabled={!quotaForm.providerId} className="btn btn-primary flex-1">📊 Tambah</button>
+                <button onClick={handleSaveQuota} disabled={!quotaForm.providerId || !quotaFormModel} className="btn btn-primary flex-1">📊 Tambah</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Error Detail Modal ─────────────────────── */}
+      {selectedLogError && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedLogError(null)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-slate-900">🔴 Error Details</h3>
+                <button onClick={() => setSelectedLogError(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+              </div>
+              <div className="space-y-3">
+                <div className="flex gap-4 text-sm">
+                  <div><span className="text-slate-500">Time:</span> <span className="font-mono text-slate-700">{formatTime(selectedLogError.createdAt)}</span></div>
+                  <div><span className="text-slate-500">Provider:</span> <span className="text-slate-700">{selectedLogError.providerName}</span></div>
+                  <div><span className="text-slate-500">Model:</span> <span className="font-mono text-slate-700">{selectedLogError.model}</span></div>
+                </div>
+                <div className="flex gap-4 text-sm">
+                  <div><span className="text-slate-500">Status:</span> {statusBadge(selectedLogError.status)}</div>
+                  {selectedLogError.statusCode && <div><span className="text-slate-500">Code:</span> <span className="font-mono text-slate-700">{selectedLogError.statusCode}</span></div>}
+                  <div><span className="text-slate-500">Latency:</span> <span className="text-slate-700">{formatLatency(selectedLogError.latencyMs)}</span></div>
+                </div>
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="text-sm font-medium text-red-800 mb-2">Error Message:</div>
+                  <pre className="text-sm text-red-700 whitespace-pre-wrap break-words font-mono">{selectedLogError.errorMessage}</pre>
+                </div>
+              </div>
+              <div className="flex justify-end pt-2">
+                <button onClick={() => setSelectedLogError(null)} className="btn btn-secondary">Close</button>
               </div>
             </div>
           </div>

@@ -112,110 +112,98 @@ export async function POST(request: NextRequest) {
   const isStreaming = body.stream === true;
   const config = await getConfig();
 
-  // ─── Combo resolution ────────────────────────────────
-  let comboResolved = false;
+  // ─── Combo resolution (with internal failover) ────────
   if (requestedModel) {
-    const comboResult = await resolveComboModel(requestedModel);
-    if (comboResult) {
+    const comboTriedIndices: number[] = [];
+    const maxComboAttempts = 5;
+
+    for (let comboAttempt = 0; comboAttempt < maxComboAttempts; comboAttempt++) {
+      const comboResult = await resolveComboModel(requestedModel, comboTriedIndices);
+      if (!comboResult) break;
+
       const comboProvider = await getProvider(comboResult.providerId);
-      if (comboProvider && comboProvider.enabled) {
-        body.model = comboResult.model;
-        comboResolved = true;
+      if (!comboProvider || !comboProvider.enabled) {
+        comboTriedIndices.push(comboResult.itemIndex);
+        continue;
+      }
 
-        const comboStart = Date.now();
-        try {
-          // ChatGPT Plus uses /responses API
-          if (comboProvider.authType === 'chatgpt_plus') {
-            const { header: comboAuth, refreshed, newTokens } = await resolveAccessToken(comboProvider);
-            if (refreshed && newTokens) {
-              import('@/lib/storage').then(({ updateProvider }) =>
-                updateProvider(comboProvider!.id, newTokens as any)
-              ).catch(() => {});
-            }
-            const accessToken = comboAuth.replace('Bearer ', '');
-            const { response: cgptResp, tokensUsed } = await handleChatgptPlusRequest(
-              accessToken, body, comboResult.model, isStreaming
-            );
-            const latencyMs = Date.now() - comboStart;
-            import('@/lib/storage').then(({ addLog, updateProviderStats, incrementQuotaUsage }) => {
-              addLog({ providerId: comboProvider!.id, providerName: comboProvider!.name, model: comboResult.model, status: 'success', latencyMs, tokensUsed });
-              updateProviderStats(comboProvider!.id, true, latencyMs);
-              incrementQuotaUsage(comboProvider!.id, tokensUsed || 0).catch(() => {});
-            }).catch(() => {});
-            return cgptResp;
+      body.model = comboResult.model;
+
+      const comboStart = Date.now();
+      try {
+        if (comboProvider.authType === 'chatgpt_plus') {
+          const { header: comboAuth, refreshed, newTokens } = await resolveAccessToken(comboProvider);
+          if (refreshed && newTokens) {
+            import('@/lib/storage').then(({ updateProvider }) =>
+              updateProvider(comboProvider!.id, newTokens as any)
+            ).catch(() => {});
           }
-
-          // Standard provider
-          const upstreamUrl = `${comboProvider.baseUrl.replace(/\/+$/, '')}/chat/completions`;
-          const { header: comboAuth } = await resolveAccessToken(comboProvider);
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs);
-
-          const upstreamResponse = await fetch(upstreamUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': comboAuth,
-            },
-            body: JSON.stringify(body),
-            signal: controller.signal,
-          });
-
-          clearTimeout(timeoutId);
+          const accessToken = comboAuth.replace('Bearer ', '');
+          const { response: cgptResp, tokensUsed } = await handleChatgptPlusRequest(
+            accessToken, body, comboResult.model, isStreaming
+          );
           const latencyMs = Date.now() - comboStart;
-
-          if (upstreamResponse.ok) {
-            if (isStreaming && upstreamResponse.body) {
-              await updateProviderStats(comboProvider.id, true, latencyMs);
-              await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'success', statusCode: 200, latencyMs });
-              return new NextResponse(upstreamResponse.body, {
-                status: 200,
-                headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', ...corsHeaders() },
-              });
-            }
-            const data = await upstreamResponse.json();
-            await updateProviderStats(comboProvider.id, true, latencyMs);
-            await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'success', statusCode: 200, latencyMs, tokensUsed: data.usage?.total_tokens });
-            return withCors(NextResponse.json(data, { status: 200 }));
-          }
-
-          const errText = await upstreamResponse.text();
-          let parsedError = errText;
-          try { parsedError = JSON.parse(errText)?.error?.message || errText; } catch {}
-          await updateProviderStats(comboProvider.id, false, latencyMs);
-          await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'error', statusCode: upstreamResponse.status, latencyMs, errorMessage: parsedError });
-        } catch (err: any) {
-          const latencyMs = Date.now() - comboStart;
-          await updateProviderStats(comboProvider.id, false, latencyMs);
-          await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'error', latencyMs, errorMessage: err.message });
+          import('@/lib/storage').then(({ addLog, updateProviderStats, incrementQuotaUsage }) => {
+            addLog({ providerId: comboProvider!.id, providerName: comboProvider!.name, model: comboResult.model, status: 'success', latencyMs, tokensUsed });
+            updateProviderStats(comboProvider!.id, true, latencyMs);
+            incrementQuotaUsage(comboProvider!.id, tokensUsed || 0).catch(() => {});
+          }).catch(() => {});
+          return cgptResp;
         }
+
+        const upstreamUrl = `${comboProvider.baseUrl.replace(/\/+$/, '')}/chat/completions`;
+        const { header: comboAuth } = await resolveAccessToken(comboProvider);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs);
+
+        const upstreamResponse = await fetch(upstreamUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': comboAuth },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+        const latencyMs = Date.now() - comboStart;
+
+        if (upstreamResponse.ok) {
+          if (isStreaming && upstreamResponse.body) {
+            await updateProviderStats(comboProvider.id, true, latencyMs);
+            await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'success', statusCode: 200, latencyMs });
+            return new NextResponse(upstreamResponse.body, {
+              status: 200,
+              headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', ...corsHeaders() },
+            });
+          }
+          const data = await upstreamResponse.json();
+          await updateProviderStats(comboProvider.id, true, latencyMs);
+          await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'success', statusCode: 200, latencyMs, tokensUsed: data.usage?.total_tokens });
+          return withCors(NextResponse.json(data, { status: 200 }));
+        }
+
+        const errText = await upstreamResponse.text();
+        let parsedError = errText;
+        try { parsedError = JSON.parse(errText)?.error?.message || errText; } catch {}
+        await updateProviderStats(comboProvider.id, false, latencyMs);
+        await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'retry', statusCode: upstreamResponse.status, latencyMs, errorMessage: parsedError + '. Combo failover -> next item.' });
+      } catch (err: any) {
+        const latencyMs = Date.now() - comboStart;
+        await updateProviderStats(comboProvider.id, false, latencyMs);
+        await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'retry', latencyMs, errorMessage: err.message + '. Combo failover -> next item.' });
       }
+
+      comboTriedIndices.push(comboResult.itemIndex);
     }
 
-    // Combo model was requested but not found or provider disabled — block fallback
-    if (requestedModel) {
-      const comboCheck = await resolveComboModel(requestedModel);
-      if (comboCheck) {
-        // Model exists in combo but provider is disabled/unreachable
-        return withCors(
-          NextResponse.json(
-            { error: { message: `Combo model '${requestedModel}' resolved but provider is disabled or unreachable.`, type: 'server_error' } },
-            { status: 502 }
-          )
-        );
-      }
-      // Model not found in any combo — return clear error
-      return withCors(
-        NextResponse.json(
-          { error: { message: `Model '${requestedModel}' not found in any provider. Add it to a combo or provider.`, type: 'invalid_request_error' } },
-          { status: 404 }
-        )
-      );
-    }
+    return withCors(
+      NextResponse.json(
+        { error: { message: `Combo model '${requestedModel}' failed: all items exhausted or provider disabled.`, type: 'server_error' } },
+        { status: 502 }
+      )
+    );
+  }
 
-
-    // Only fall through to provider rotation if NO combo model was requested
-    const enabledProviders = await getEnabledProviders();
+  const enabledProviders = await getEnabledProviders();
 
   if (enabledProviders.length === 0) {
     return withCors(
