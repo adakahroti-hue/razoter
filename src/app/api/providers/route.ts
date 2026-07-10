@@ -14,20 +14,8 @@ export async function GET(request: NextRequest) {
 
   const includeArchived = request.nextUrl.searchParams.get('archived') === 'true';
   const providers = await getProviders(includeArchived);
-  // Mask API keys in response
-  const maskKey = (k?: string) =>
-    k && k.length >= 12 ? `${k.slice(0, 8)}...${k.slice(-4)}` : (k ? `${k.slice(0, 2)}...` : '');
-
-  const masked = providers.map(p => ({
-    ...p,
-    apiKey: maskKey(p.apiKey),
-    apiKeys: (p.apiKeys || []).map((ak: any) => ({
-      ...ak,
-      key: maskKey(ak.key),
-    })),
-  }));
-  
-  return withCors(NextResponse.json(masked));
+  // Return full (unmasked) API keys — the dashboard edit form needs the real values
+  return withCors(NextResponse.json(providers));
 }
 
 export async function POST(request: NextRequest) {
