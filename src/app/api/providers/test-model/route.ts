@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     let refreshToken: string | undefined;
     let expiresAt: string | undefined;
     let providerName = 'Test';
-    let testAkName: string | undefined;
+    let testAkName: string | undefined = '🔍 Tes Model';
 
     if (providerId) {
       const provider = await getProvider(providerId);
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
       refreshToken = provider.chatgptRefreshToken;
       expiresAt = provider.chatgptExpiresAt;
       providerName = provider.name;
-      testAkName = Array.isArray(provider.apiKeys) && provider.apiKeys.length > 0 ? provider.apiKeys[0].name : 'Default';
+      // testAkName stays '🔍 Tes Model' so logs are clearly labeled as model tests
     }
 
     if (!resolvedBaseUrl) {
@@ -124,12 +124,12 @@ export async function POST(request: NextRequest) {
           reader.cancel();
           const chunk = decoder.decode(value);
           if (chunk.includes('response.output_text') || chunk.includes('response.created')) {
-            addLog({ providerId: providerId || '', providerName, model, status: 'success', latencyMs }).catch(() => {});
+            addLog({ providerId: providerId || '', providerName, model, status: 'success', latencyMs, apiKeyName: '🔍 Tes Model' }).catch(() => {});
             return withCors(NextResponse.json({ success: true, model, latencyMs }));
           }
         }
 
-        addLog({ providerId: providerId || '', providerName, model, status: 'error', latencyMs, errorMessage: 'Unexpected response format' }).catch(() => {});
+        addLog({ providerId: providerId || '', providerName, model, status: 'error', latencyMs, errorMessage: 'Unexpected response format', apiKeyName: '🔍 Tes Model' }).catch(() => {});
         return withCors(NextResponse.json({
           success: false,
           model,
@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
         const latencyMs = Date.now() - startTime;
         const isTimeout = fetchError.name === 'AbortError' || fetchError.name === 'TimeoutError';
         const errorMsg = isTimeout ? 'Request timed out (30s)' : fetchError.message;
-        addLog({ providerId: providerId || '', providerName, model, status: 'error', latencyMs, errorMessage: errorMsg }).catch(() => {});
+        addLog({ providerId: providerId || '', providerName, model, status: 'error', latencyMs, errorMessage: errorMsg, apiKeyName: '🔍 Tes Model' }).catch(() => {});
         return withCors(NextResponse.json({
           success: false,
           model,
@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
         } catch {
           errorMsg = `HTTP ${res.status}: ${errorText.slice(0, 200)}`;
         }
-        addLog({ providerId: providerId || '', providerName, model, status: 'error', latencyMs, errorMessage: errorMsg }).catch(() => {});
+        addLog({ providerId: providerId || '', providerName, model, status: 'error', latencyMs, errorMessage: errorMsg, apiKeyName: '🔍 Tes Model' }).catch(() => {});
 
         return withCors(
           NextResponse.json({ success: false, model, latencyMs, error: errorMsg, statusCode: res.status })
@@ -194,7 +194,7 @@ export async function POST(request: NextRequest) {
       const latencyMs = Date.now() - startTime;
       const isTimeout = fetchError.name === 'AbortError' || fetchError.name === 'TimeoutError';
       const errorMsg = isTimeout ? 'Request timed out (30s)' : fetchError.message;
-      addLog({ providerId: providerId || '', providerName, model, status: 'error', latencyMs, errorMessage: errorMsg }).catch(() => {});
+      addLog({ providerId: providerId || '', providerName, model, status: 'error', latencyMs, errorMessage: errorMsg, apiKeyName: '🔍 Tes Model' }).catch(() => {});
       return withCors(NextResponse.json({
         success: false,
         model,

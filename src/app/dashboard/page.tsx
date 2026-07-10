@@ -751,13 +751,13 @@ export default function Dashboard() {
             {providers.length === 0 ? (
               <div className="card text-center py-12 text-slate-400"><div className="text-4xl mb-2">🔌</div><p>Belum ada provider. Tambah provider pertama!</p></div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {providers.map(p => (
                   <div key={p.id} className="card flex flex-col p-3">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-semibold text-slate-900 text-sm truncate">{p.name}</h3>
-                      {!p.enabled && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-200 text-slate-500">off</span>}
-                      {p.archived && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-200 text-amber-800">📦</span>}
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-slate-900 text-sm truncate flex-1">{p.name}</h3>
+                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${p.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>{p.enabled ? 'ON' : 'OFF'}</span>
+                      <button onClick={() => handleArchiveProvider(p)} className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-amber-50 text-amber-700 hover:bg-amber-100" title={p.archived ? 'Buka dari arsip' : 'Arsip'}>{p.archived ? 'Buka' : '📦 Arsip'}</button>
                     </div>
                     <div className="text-[10px] text-slate-400 mt-1 font-mono truncate" title={p.baseUrl}>{p.baseUrl}</div>
                     <div className="flex flex-wrap gap-1 mt-2 flex-1">
@@ -791,9 +791,7 @@ export default function Dashboard() {
                     </button>
 
                     <div className="grid grid-cols-2 gap-2 mt-2">
-                      <button onClick={() => handleToggleProvider(p)} className={`text-xs px-2 py-2 rounded-lg font-medium ${p.enabled ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>{p.enabled ? 'ON' : 'OFF'}</button>
                       <button onClick={() => openEditModal(p)} className="text-xs px-2 py-2 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 font-medium">✏️ Edit</button>
-                      <button onClick={() => handleArchiveProvider(p)} className="text-xs px-2 py-2 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 font-medium">📦 {p.archived ? 'Buka' : 'Arsip'}</button>
                       <button onClick={() => handleDeleteProvider(p.id)} className="text-xs px-2 py-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 font-medium">🗑️ Hapus</button>
                     </div>
                   </div>
@@ -1024,10 +1022,10 @@ export default function Dashboard() {
               {/* Desktop table view */}
               <table className="w-full text-sm hidden sm:table">
                 <thead><tr className="bg-slate-50 text-left">
-                  <th className="px-4 py-2 text-slate-500 font-medium">Time</th><th className="px-4 py-2 text-slate-500 font-medium">Provider</th><th className="px-4 py-2 text-slate-500 font-medium">API Key</th><th className="px-4 py-2 text-slate-500 font-medium">Model</th><th className="px-4 py-2 text-slate-500 font-medium">Status</th><th className="px-4 py-2 text-slate-500 font-medium">Keterangan</th><th className="px-4 py-2 text-slate-500 font-medium">Latency</th>
+                  <th className="px-4 py-2 text-slate-500 font-medium">Time</th><th className="px-4 py-2 text-slate-500 font-medium">Provider</th><th className="px-4 py-2 text-slate-500 font-medium">API Key</th><th className="px-4 py-2 text-slate-500 font-medium">Model</th><th className="px-4 py-2 text-slate-500 font-medium">Status</th><th className="px-4 py-2 text-slate-500 font-medium">Keterangan</th>
                 </tr></thead>
                 <tbody>
-                  {logs.length === 0 ? <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">Belum ada logs</td></tr> :
+                  {logs.length === 0 ? <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">Belum ada logs</td></tr> :
                     logs.map(log => (
                       <tr key={log.id} className={`border-t border-slate-100 ${log.errorMessage ? 'cursor-pointer hover:bg-red-50 transition-colors' : ''}`} onClick={log.errorMessage ? () => setSelectedLogError(log) : undefined}>
                         <td className="px-4 py-2 text-slate-500 font-mono text-xs">{formatTime(log.createdAt)}</td>
@@ -1036,7 +1034,6 @@ export default function Dashboard() {
                         <td className="px-4 py-2 text-slate-500 font-mono text-xs">{log.model}</td>
                         <td className="px-4 py-2"><div className="flex items-center gap-1">{statusBadge(log.status)}{log.errorMessage && <span title="View error details">🔴</span>}</div></td>
                         <td className="px-4 py-2 text-xs text-red-600 max-w-[200px] truncate">{log.errorMessage ? log.errorMessage.length > 50 ? log.errorMessage.slice(0, 50) + '...' : log.errorMessage : <span className="text-slate-300">-</span>}</td>
-                        <td className="px-4 py-2 text-slate-500">{formatLatency(log.latencyMs)}</td>
                       </tr>
                     ))
                   }
@@ -1059,7 +1056,6 @@ export default function Dashboard() {
                         <div className="mt-1 text-xs text-red-600 truncate">{log.errorMessage.length > 50 ? log.errorMessage.slice(0, 50) + '...' : log.errorMessage}</div>
                       )}
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-slate-500">{formatLatency(log.latencyMs)}</span>
                         <span className="text-xs text-slate-500 font-mono">{log.apiKeyName || '-'}</span>
                       </div>
                     </div>
