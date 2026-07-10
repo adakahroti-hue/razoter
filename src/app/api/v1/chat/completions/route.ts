@@ -208,7 +208,7 @@ export async function POST(request: NextRequest) {
         const upstreamResponse = await fetch(upstreamUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': comboAuth },
-          body: JSON.stringify(body),
+          body: JSON.stringify({ ...body, ...(isStreaming ? { stream_options: { include_usage: true, ...(body.stream_options || {}) } } : {}) }),
           signal: controller.signal,
         });
 
@@ -254,7 +254,7 @@ export async function POST(request: NextRequest) {
               }
             });
 
-            await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'success', statusCode: 200, latencyMs, apiKeyName: comboKeyName });
+            await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'success', statusCode: 200, latencyMs, tokensUsed: lastUsage, apiKeyName: comboKeyName });
             return new NextResponse(stream, {
               status: 200,
               headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', ...corsHeaders() },
@@ -364,6 +364,7 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           ...body,
           model: selectedModel || requestedModel,
+          ...(isStreaming ? { stream_options: { include_usage: true, ...(body.stream_options || {}) } } : {}),
         }),
         signal: controller.signal,
       });
@@ -438,6 +439,7 @@ export async function POST(request: NextRequest) {
             status: 'success',
             statusCode: 200,
             latencyMs,
+            tokensUsed: lastUsage,
             apiKeyName: stdAkName,
           });
 
