@@ -45,6 +45,7 @@ export interface ComboItem {
   providerId: string;
   providerName: string;
   model: string;
+  apiKeyName?: string;
 }
 
 export interface Combo {

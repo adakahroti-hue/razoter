@@ -49,6 +49,7 @@ interface ComboItem {
   providerId: string;
   providerName: string;
   model: string;
+  apiKeyName?: string;
 }
 
 interface Combo {
@@ -582,7 +583,7 @@ export default function Dashboard() {
       const updated = [...prev];
       if (field === 'providerId') {
         const provider = providers.find(p => p.id === value);
-        updated[index] = { ...updated[index], providerId: value, providerName: provider?.name || '', model: '' };
+        updated[index] = { ...updated[index], providerId: value, providerName: provider?.name || '', model: '', apiKeyName: '' };
       } else {
         updated[index] = { ...updated[index], [field]: value };
       }
@@ -914,8 +915,9 @@ export default function Dashboard() {
                       </div>
                       <div className="flex flex-wrap gap-1 mt-2.5">
                         {c.items.map((item, i) => (
-                          <span key={i} className="chip-model font-mono" title={`${item.providerName} → ${item.model}`}>
+                          <span key={i} className="chip-model font-mono" title={`${item.providerName} → ${item.apiKeyName ? item.apiKeyName + ' → ' : ''}${item.model}`}>
                             <span className="prov">{item.providerName}</span>
+                            {item.apiKeyName && <><span className="arrow">→</span><span className="key truncate max-w-[6rem] text-yellow-600">{item.apiKeyName}</span></>}
                             <span className="arrow">→</span>
                             <span className="model truncate max-w-[7rem]">{item.model}</span>
                           </span>
@@ -1325,7 +1327,7 @@ export default function Dashboard() {
               </div>
               <div className="border-t border-slate-200 pt-4">
                 <div className="flex items-center justify-between mb-3">
-                  <label className="text-sm font-medium text-slate-700">Provider + Model ({comboItems.length})</label>
+                  <label className="text-sm font-medium text-slate-700">Urutan: Provider → API Key → Model ({comboItems.length})</label>
                   <button onClick={addComboItem} className="text-xs text-green-600 hover:text-green-800">+ Tambah Item</button>
                 </div>
                 <div className="space-y-3">
@@ -1352,6 +1354,12 @@ export default function Dashboard() {
                           <select className="input" value={item.providerId} onChange={e => updateComboItem(i, 'providerId', e.target.value)}>
                             <option value="">Pilih Provider...</option>
                             {providers.filter(p => p.enabled || (p.apiKeys && p.apiKeys.filter(k => k.enabled !== false).length > 1)).map(p => <option key={p.id} value={p.id}>{p.name}{p.enabled ? '' : ' (multi-key)'}</option>)}
+                          </select>
+                        </div>
+                        <div className="flex-1">
+                          <select className="input" value={item.apiKeyName ?? ''} onChange={e => updateComboItem(i, 'apiKeyName', e.target.value)}>
+                            <option value="">— Semua key (urutan) —</option>
+                            {provider?.apiKeys?.filter(k => k.enabled !== false).map(k => <option key={k.name} value={k.name}>{k.name}</option>)}
                           </select>
                         </div>
                         <div className="flex-1">

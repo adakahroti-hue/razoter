@@ -37,13 +37,19 @@ function parseRateLimitHeaders(headers: Headers) {
 
 
 /** Pick an API key based on provider's apiKeyStrategy setting.
- *  triedKeyNames: names of keys already tried and failed (for failover-priority). */
-function pickApiKey(provider: any, triedKeyNames?: Set<string>): { key: string; name: string } {
+ *  triedKeyNames: names of keys already tried and failed (for failover-priority).
+ *  forcedKeyName: when set (combo item specifies a key), pick that exact key. */
+function pickApiKey(provider: any, triedKeyNames?: Set<string>, forcedKeyName?: string): { key: string; name: string } {
   const keys = provider.apiKeys;
   const strategy = provider.apiKeyStrategy || 'random';
   if (Array.isArray(keys) && keys.length > 0) {
     let enabled = keys.filter((k: any) => k.enabled !== false);
     if (enabled.length > 0) {
+      // Combo: explicit key chosen -> use it directly (fall back to first enabled if not found)
+      if (forcedKeyName) {
+        const forced = enabled.find((k: any) => k.name === forcedKeyName);
+        if (forced) return { key: forced.key, name: forced.name };
+      }
       // For failover-priority, skip already-tried keys
       if (strategy === 'failover-priority' && triedKeyNames && triedKeyNames.size > 0) {
         const remaining = enabled.filter((k: any) => !triedKeyNames.has(k.name));
@@ -73,10 +79,11 @@ function pickApiKey(provider: any, triedKeyNames?: Set<string>): { key: string; 
 const apiKeyRoundRobinIndex = new Map<string, number>();
 
 /** Resolve a valid access token for a provider, refreshing if needed.
- *  triedKeyNames: names of keys already tried (for failover-priority multi-key failover). */
-async function resolveAccessToken(provider: any, triedKeyNames?: Set<string>): Promise<{ header: string; refreshed: boolean; newTokens?: any; apiKeyName: string }> {
+ *  triedKeyNames: names of keys already tried (for failover-priority multi-key failover).
+ *  forcedKeyName: when set (combo item specifies a key), pick that exact key. */
+async function resolveAccessToken(provider: any, triedKeyNames?: Set<string>, forcedKeyName?: string): Promise<{ header: string; refreshed: boolean; newTokens?: any; apiKeyName: string }> {
   if (provider.authType === 'chatgpt_plus' && provider.chatgptRefreshToken && provider.chatgptExpiresAt) {
-    const ak = pickApiKey(provider, triedKeyNames);
+    const ak = pickApiKey(provider, triedKeyNames, forcedKeyName);
     try {
       const r = await getValidAccessToken(
         ak.key,
@@ -102,7 +109,7 @@ async function resolveAccessToken(provider: any, triedKeyNames?: Set<string>): P
       });
     }
   }
-  const fallback = pickApiKey(provider, triedKeyNames);
+  const fallback = pickApiKey(provider, triedKeyNames, forcedKeyName);
   return { header: `Bearer ${fallback.key}`, refreshed: false, apiKeyName: fallback.name };
 }
 
@@ -183,7 +190,7 @@ export async function POST(request: NextRequest) {
       const comboStart = Date.now();
       try {
         if (comboProvider.authType === 'chatgpt_plus') {
-          const { header: comboAuth, refreshed, newTokens, apiKeyName: comboKeyName } = await resolveAccessToken(comboProvider);
+          const { header: comboAuth, refreshed, newTokens, apiKeyName: comboKeyName } = await resolveAccessToken(comboProvider, undefined, comboResult.apiKeyName);
           if (refreshed && newTokens) {
             import('@/lib/storage').then(({ updateProvider }) =>
               updateProvider(comboProvider!.id, newTokens as any)
@@ -203,7 +210,7 @@ export async function POST(request: NextRequest) {
         }
 
         const upstreamUrl = `${comboProvider.baseUrl.replace(/\/+$/, '')}/chat/completions`;
-        const { header: comboAuth, apiKeyName: comboKeyName } = await resolveAccessToken(comboProvider);
+        const { header: comboAuth, apiKeyName: comboKeyName } = await resolveAccessToken(comboProvider, undefined, comboResult.apiKeyName);
         // TEMP DIAGNOSTIC
         if (comboKeyName === 'Default') {
           const ak = comboProvider?.apiKeys;

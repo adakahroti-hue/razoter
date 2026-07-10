@@ -604,7 +604,7 @@ export async function deleteCombo(id: string): Promise<boolean> {
 export async function resolveComboModel(
   modelName: string,
   triedIndices?: number[]
-): Promise<{ providerId: string; model: string; itemIndex: number } | null> {
+): Promise<{ providerId: string; model: string; itemIndex: number; apiKeyName?: string } | null> {
   const { data, error } = await supabase
     .from('combos')
     .select('items, strategy')
@@ -624,13 +624,13 @@ export async function resolveComboModel(
     const idx = comboRoundRobinIndex.get(modelName) ?? 0;
     const nextIdx = idx % items.length;
     comboRoundRobinIndex.set(modelName, idx + 1);
-    return { providerId: items[nextIdx].providerId, model: items[nextIdx].model, itemIndex: nextIdx };
+    return { providerId: items[nextIdx].providerId, model: items[nextIdx].model, itemIndex: nextIdx, apiKeyName: items[nextIdx].apiKeyName };
   } else {
     // failover-priority: try items in order, skip already-tried ones
     const tried = new Set(triedIndices ?? []);
     for (let i = 0; i < items.length; i++) {
       if (!tried.has(i)) {
-        return { providerId: items[i].providerId, model: items[i].model, itemIndex: i };
+        return { providerId: items[i].providerId, model: items[i].model, itemIndex: i, apiKeyName: items[i].apiKeyName };
       }
     }
     return null;
