@@ -252,18 +252,18 @@ body::before {
   background-image:
     /* weave diagonal 1 →↘ */
     repeating-linear-gradient(45deg,
-      rgba(53,230,255,0.06) 0 2px,
-      rgba(0,0,0,0.12) 2px 4px,
-      transparent 4px 9px),
+      rgba(53,230,255,0.11) 0 2px,
+      rgba(0,0,0,0.20) 2px 4px,
+      transparent 4px 10px),
     /* weave diagonal 2 ↙← */
     repeating-linear-gradient(-45deg,
-      rgba(53,230,255,0.06) 0 2px,
-      rgba(0,0,0,0.12) 2px 4px,
-      transparent 4px 9px);
-  background-size: 9px 9px, 9px 9px;
+      rgba(53,230,255,0.11) 0 2px,
+      rgba(0,0,0,0.20) 2px 4px,
+      transparent 4px 10px);
+  background-size: 10px 10px, 10px 10px;
   /* fade edges → keep readable center */
-  mask-image: radial-gradient(circle at 50% 40%, black 0%, rgba(0,0,0,0.5) 80%, transparent 100%);
-  -webkit-mask-image: radial-gradient(circle at 50% 40%, black 0%, rgba(0,0,0,0.5) 80%, transparent 100%);
+  mask-image: radial-gradient(circle at 50% 38%, black 0%, rgba(0,0,0,0.7) 85%, transparent 100%);
+  -webkit-mask-image: radial-gradient(circle at 50% 38%, black 0%, rgba(0,0,0,0.7) 85%, transparent 100%);
   opacity: 1;
 }
 

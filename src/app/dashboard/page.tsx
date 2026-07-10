@@ -758,9 +758,9 @@ export default function Dashboard() {
         {/* Tabs */}
         <div className="tab-bar flex gap-1 rounded-lg p-1 overflow-x-auto flex-nowrap justify-center sm:justify-start">
           {(['providers', 'combos', 'logs', 'settings'] as const).map(tab => (
-            <button key={tab} aria-label={tab === 'providers' ? 'Providers' : tab === 'combos' ? 'Gabung' : tab === 'settings' ? 'Pengaturan' : 'Logs'} onClick={() => setActiveTab(tab)} className={`flex-1 sm:flex-none min-w-[3rem] px-3 sm:px-4 py-2.5 sm:py-2 rounded-md text-[15px] sm:text-[16px] font-semibold transition-colors whitespace-nowrap flex items-center justify-center gap-2 ${activeTab === tab ? 'tab-active shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+            <button key={tab} aria-label={tab === 'providers' ? 'Providers' : tab === 'combos' ? 'Gabung' : tab === 'settings' ? 'Dokumentasi' : 'Logs'} onClick={() => setActiveTab(tab)} className={`flex-1 sm:flex-none min-w-[3rem] px-3 sm:px-4 py-2.5 sm:py-2 rounded-md text-[15px] sm:text-[16px] font-semibold transition-colors whitespace-nowrap flex items-center justify-center gap-2 ${activeTab === tab ? 'tab-active shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
               <NavIcon name={tab} active={activeTab === tab} size={19} />
-              <span className="hidden sm:inline">{tab === 'providers' ? 'Providers' : tab === 'combos' ? 'Gabung' : tab === 'settings' ? 'Pengaturan' : 'Logs'}</span>
+              <span className="hidden sm:inline">{tab === 'providers' ? 'Providers' : tab === 'combos' ? 'Gabung' : tab === 'settings' ? 'Dokumentasi' : 'Logs'}</span>
             </button>
           ))}
         </div>
@@ -890,7 +890,7 @@ export default function Dashboard() {
         {activeTab === 'settings' && (
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <h2 className="text-[23px] font-bold text-slate-900 tracking-tight">Pengaturan</h2>
+              <h2 className="text-[23px] font-bold text-slate-900 tracking-tight">Dokumentasi</h2>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="card">
@@ -1109,7 +1109,7 @@ export default function Dashboard() {
                 <div><label className="text-sm text-slate-600">Nama Provider</label><input type="text" className="input mt-1" placeholder="e.g. OpenRouter, Together AI" value={providerForm.name} onChange={e => setProviderForm(f => ({ ...f, name: e.target.value }))} /></div>
                 <div><label className="text-sm text-slate-600">Base URL</label><input type="text" className="input mt-1" placeholder="https://openrouter.ai/api/v1" value={providerForm.baseUrl} onChange={e => setProviderForm(f => ({ ...f, baseUrl: e.target.value }))} /></div>
                 <div>
-                  <label className="text-sm text-slate-600">API Keys</label>
+                  <label className="text-sm text-slate-600">API Keys {providerFormKeys.length > 1 && <span className="text-xs text-slate-400">(urutan = prioritas, teratas didahulukan)</span>}</label>
                   <div className="space-y-2 mt-1">
                     {providerFormKeys.map((fk, idx) => {
                       const isExisting = editingProvider && editingProvider.apiKeys && idx < editingProvider.apiKeys.length && !fk.key;
@@ -1122,7 +1122,21 @@ export default function Dashboard() {
                               setProviderFormKeys(updated);
                             }} />
                             {providerFormKeys.length > 1 && (
-                              <button type="button" onClick={() => setProviderFormKeys(prev => prev.filter((_, i) => i !== idx))} className="ml-2 px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 text-sm flex-shrink-0">✕</button>
+                              <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                                <button type="button" aria-label="Pindah ke atas" disabled={idx === 0} onClick={() => {
+                                  if (idx === 0) return;
+                                  const updated = [...providerFormKeys];
+                                  [updated[idx - 1], updated[idx]] = [updated[idx], updated[idx - 1]];
+                                  setProviderFormKeys(updated);
+                                }} className="px-2 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 text-sm disabled:opacity-30 disabled:cursor-not-allowed">↑</button>
+                                <button type="button" aria-label="Pindah ke bawah" disabled={idx === providerFormKeys.length - 1} onClick={() => {
+                                  if (idx === providerFormKeys.length - 1) return;
+                                  const updated = [...providerFormKeys];
+                                  [updated[idx + 1], updated[idx]] = [updated[idx], updated[idx + 1]];
+                                  setProviderFormKeys(updated);
+                                }} className="px-2 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 text-sm disabled:opacity-30 disabled:cursor-not-allowed">↓</button>
+                                <button type="button" onClick={() => setProviderFormKeys(prev => prev.filter((_, i) => i !== idx))} className="px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 text-sm">✕</button>
+                              </div>
                             )}
                           </div>
                           <div>
