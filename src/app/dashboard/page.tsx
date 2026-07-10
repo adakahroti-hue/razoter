@@ -3,6 +3,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { NavIcon } from '@/components/NavIcon';
 import RazoterLogo from '@/components/RazoterLogo';
+import {
+  IconCopy, IconArchive, IconKey, IconCoin, IconSearch, IconCheck, IconCross,
+  IconClock, IconFlask, IconPencil, IconTrash, IconSync, IconRoute, IconPlus,
+  IconWarning, IconPlug, IconChart, IconSpinner, IconSpinnerLg,
+} from '@/components/AppIcon';
 
 // ─── Types ─────────────────────────────────────────
 
@@ -123,7 +128,7 @@ function CopyButton({ text }: { text: string }) {
   };
   return (
     <button onClick={handleCopy} className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
-      {copied ? '✅' : '📋'}
+      {copied ? <IconCheck size={14} className="text-emerald-600" /> : <IconCopy size={14} className="text-slate-400" />}
     </button>
   );
 }
@@ -730,14 +735,14 @@ export default function Dashboard() {
 
   // ─── Login screen ──────────────────────────────
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center" style={{ background: 'radial-gradient(900px 600px at 50% 20%, rgba(0,191,255,0.10), transparent 60%), linear-gradient(180deg,#050B18,#081426)' }}><div className="pulse-dot text-4xl">⏳</div></div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center" style={{ background: 'radial-gradient(900px 600px at 50% 20%, rgba(0,191,255,0.10), transparent 60%), linear-gradient(180deg,#050B18,#081426)' }}><div className="pulse-dot text-cyan-400"><IconSpinnerLg size={36} className="text-cyan-400" /></div></div>;
 
   if (!token) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'radial-gradient(900px 600px at 50% 20%, rgba(0,191,255,0.12), transparent 60%), radial-gradient(800px 500px at 110% 90%, rgba(53,230,255,0.08), transparent 60%), linear-gradient(180deg,#050B18,#081426)' }}>
         <form onSubmit={handleLogin} className="card w-full max-w-sm space-y-4" style={{ animation: 'fade-in 0.4s ease both' }}>
           <div className="text-center">
-            <div className="w-14 h-14 mx-auto mb-3 rounded-2xl flex items-center justify-center text-2xl" style={{ background: 'linear-gradient(135deg,#6366f1,#06b6d4)', boxShadow: '0 8px 24px -6px rgba(99,102,241,0.5)' }}>⚡</div>
+            <div className="w-14 h-14 mx-auto mb-3 rounded-2xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg,#6366f1,#06b6d4)', boxShadow: '0 8px 24px -6px rgba(99,102,241,0.5)' }}><RazoterLogo size={32} /></div>
             <h1 className="text-2xl font-bold text-slate-900">Razoter</h1>
             <p className="text-sm text-slate-500 mt-1">Dashboard Login</p>
           </div>
@@ -785,7 +790,7 @@ export default function Dashboard() {
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
               <h2 className="text-[23px] font-bold text-slate-900 tracking-tight">Providers</h2>
               <div className="flex gap-2 w-full sm:w-auto">
-                <button onClick={() => setShowArchived(s => !s)} className={`flex-1 sm:flex-none text-[13px] px-3 py-2.5 rounded-lg font-medium whitespace-nowrap ${showArchived ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>📦 {showArchived ? 'Sembunyikan Arsip' : 'Tampilkan Arsip'}</button>
+                <button onClick={() => setShowArchived(s => !s)} className={`flex-1 sm:flex-none text-[13px] px-3 py-2.5 rounded-lg font-medium whitespace-nowrap flex items-center justify-center gap-1.5 ${showArchived ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}><IconArchive size={14} />{showArchived ? 'Sembunyikan Arsip' : 'Tampilkan Arsip'}</button>
                 <button onClick={() => { resetProviderForm(); setShowProviderModal(true); }} className="btn btn-primary flex-1 sm:flex-none text-[13.5px] justify-center">+ Add Provider</button>
               </div>
             </div>
@@ -798,12 +803,12 @@ export default function Dashboard() {
                     <div className="flex items-center gap-2">
                       <h3 className="font-semibold text-slate-900 text-[15px] leading-snug truncate flex-1">{p.name}</h3>
                       <span className={`px-1.5 py-0.5 rounded-full text-[11px] font-semibold ${p.enabled ? 'bg-emerald-100 text-emerald-700 status-on' : 'bg-slate-200 text-slate-500'}`}>{p.enabled ? 'ON' : 'OFF'}</span>
-                      <button onClick={() => handleArchiveProvider(p)} className="text-[11px] px-1.5 py-0.5 rounded-full font-medium bg-amber-50 text-amber-700 hover:bg-amber-100" title={p.archived ? 'Buka dari arsip' : 'Arsip'}>{p.archived ? 'Buka' : '📦 Arsip'}</button>
+                      <button onClick={() => handleArchiveProvider(p)} className="text-[11px] px-1.5 py-0.5 rounded-full font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 inline-flex items-center gap-1" title={p.archived ? 'Buka dari arsip' : 'Arsip'}>{p.archived ? 'Buka' : <><IconArchive size={12} /> Arsip</>}</button>
                     </div>
                     <div className="text-[13px] text-slate-400 mt-1.5 font-mono truncate leading-relaxed" title={p.baseUrl}>{p.baseUrl}</div>
                     <div className="flex items-center gap-3 mt-1.5 text-[12.5px] text-slate-500 leading-relaxed">
-                      <span className="inline-flex items-center gap-1">🔑 <b className="font-semibold text-slate-700">{p.apiKeys?.length ?? 0}</b> key</span>
-                      <span className="inline-flex items-center gap-1">🪙 <b className="font-semibold text-slate-700">{formatTokens(tokenByProvider[p.id] ?? 0)}</b> token</span>
+                      <span className="inline-flex items-center gap-1"><IconKey size={13} className="text-slate-400" /> <b className="font-semibold text-slate-700">{p.apiKeys?.length ?? 0}</b> key</span>
+                      <span className="inline-flex items-center gap-1"><IconCoin size={13} className="text-slate-400" /> <b className="font-semibold text-slate-700">{formatTokens(tokenByProvider[p.id] ?? 0)}</b> token</span>
                     </div>
                     <div className="flex flex-col gap-2 mt-2 flex-1 content-start">
                       {/* Group model test results by API key */}
@@ -822,7 +827,7 @@ export default function Dashboard() {
                           return (
                             <div key={g.name} className="rounded-lg border border-slate-200/70 p-2">
                               <div className="text-[11px] font-semibold text-slate-500 mb-1 flex items-center gap-1">
-                                🔑 {g.name}
+                                <IconKey size={12} className="text-slate-400" /> {g.name}
                                 {hasAny && (
                                   <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${groupResults.every(m => modelTestResults[`${groupKey}${m}`]?.status === 'ok') ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
                                     {groupResults.filter(m => modelTestResults[`${groupKey}${m}`]?.status === 'ok').length}/{groupResults.length} ok
@@ -833,7 +838,7 @@ export default function Dashboard() {
                                 {modelsList.map(m => {
                                   const rkey = `${groupKey}${m}`;
                                   const result = modelTestResults[rkey];
-                                  const statusIcon = result?.status === 'testing' ? '⏳' : result?.status === 'ok' ? '✅' : result?.status === 'fail' ? '❌' : null;
+                                  const statusIcon = result?.status === 'testing' ? <IconSpinner size={11} className="text-slate-400" /> : result?.status === 'ok' ? <IconCheck size={11} className="text-emerald-600" /> : result?.status === 'fail' ? <IconCross size={11} className="text-red-500" /> : null;
                                   const testedBg = result?.status === 'ok' ? 'bg-emerald-50 text-emerald-700' : result?.status === 'fail' ? 'bg-red-50 text-red-700' : 'text-slate-600';
                                   return (
                                     <span key={m} className={`group inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[12.5px] font-mono leading-relaxed ${testedBg}`}>
@@ -843,9 +848,9 @@ export default function Dashboard() {
                                       <button
                                         onClick={(e) => { e.stopPropagation(); handleTestSingleModel(p, m, p.apiKeys?.find(k => k.name === g.name)?.key, g.name); }}
                                         disabled={result?.status === 'testing'}
-                                        className="ml-0.5 opacity-0 group-hover:opacity-100 hover:opacity-100 text-blue-400 hover:text-blue-300 transition-opacity"
+                                        className="ml-0.5 opacity-0 group-hover:opacity-100 hover:opacity-100 text-blue-400 hover:text-blue-300 transition-opacity inline-flex items-center"
                                         title="Test model ini"
-                                      >🔍</button>
+                                      ><IconSearch size={12} /></button>
                                     </span>
                                   );
                                 })}
@@ -864,12 +869,12 @@ export default function Dashboard() {
                         disabled={testingAllModels === p.id}
                         className="text-[13.5px] px-2 py-2 rounded-lg bg-blue-50 text-blue-400 hover:text-blue-300 border border-blue-300/40 hover:border-blue-300/70 transition-colors w-full font-medium"
                       >
-                        {testingAllModels === p.id ? '⏳ Testing...' : '🧪 Cek Semua Model'}
+                        {testingAllModels === p.id ? <span className="flex items-center justify-center gap-2"><IconSpinner size={14} className="text-blue-400" /> Testing...</span> : <span className="inline-flex items-center justify-center gap-1.5"><IconFlask size={14} /> Cek Semua Model</span>}
                       </button>
 
                       <div className="grid grid-cols-2 gap-2 mt-2">
-                        <button onClick={() => openEditModal(p)} className="text-[13.5px] px-2 py-2 rounded-lg bg-slate-100 text-slate-700 hover:text-slate-900 hover:bg-slate-200 border border-slate-300/30 hover:border-blue-300/60 transition-colors font-medium">✏️ Edit</button>
-                        <button onClick={() => handleDeleteProvider(p.id)} className="text-[13.5px] px-2 py-2 rounded-lg bg-red-50 text-red-300 hover:text-red-200 hover:bg-red-100 border border-red-300/30 hover:border-red-300/60 transition-colors font-medium">🗑️ Hapus</button>
+                        <button onClick={() => openEditModal(p)} className="text-[13.5px] px-2 py-2 rounded-lg bg-slate-100 text-slate-700 hover:text-slate-900 hover:bg-slate-200 border border-slate-300/30 hover:border-blue-300/60 transition-colors font-medium inline-flex items-center justify-center gap-1.5"><IconPencil size={14} /> Edit</button>
+                        <button onClick={() => handleDeleteProvider(p.id)} className="text-[13.5px] px-2 py-2 rounded-lg bg-red-50 text-red-300 hover:text-red-200 hover:bg-red-100 border border-red-300/30 hover:border-red-300/60 transition-colors font-medium inline-flex items-center justify-center gap-1.5"><IconTrash size={14} /> Hapus</button>
                       </div>
                     </div>
                   </div>
@@ -904,7 +909,7 @@ export default function Dashboard() {
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5 mt-2">
                         <span className={`chip ${c.enabled ? 'chip-cyan' : ''}`}>{c.items.length} models</span>
-                        <span className="chip">{c.strategy === 'round-robin' ? '🔄 RR' : '🔀 Failover'}</span>
+                        <span className="chip inline-flex items-center gap-1"><IconRoute size={12} /> {c.strategy === 'round-robin' ? 'Round Robin' : 'Failover'}</span>
                         {!c.enabled && <span className="chip" style={{opacity:0.8}}>disabled</span>}
                       </div>
                       <div className="flex flex-wrap gap-1 mt-2.5">
@@ -919,8 +924,8 @@ export default function Dashboard() {
                     </div>
                     <hr className="combo-divider" />
                     <div className="flex gap-2">
-                      <button onClick={() => openEditComboModal(c)} className="btn-xs btn-xs-edit flex-1">✏️ Edit</button>
-                      <button onClick={() => handleDeleteCombo(c.id)} className="btn-xs btn-xs-del flex-1">🗑️</button>
+                      <button onClick={() => openEditComboModal(c)} className="btn-xs btn-xs-edit flex-1 inline-flex items-center justify-center gap-1.5"><IconPencil size={13} /> Edit</button>
+                      <button onClick={() => handleDeleteCombo(c.id)} className="btn-xs btn-xs-del flex-1 inline-flex items-center justify-center"><IconTrash size={13} /></button>
                     </div>
                   </div>
                 ))}
@@ -945,19 +950,19 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="card">
-                <h3 className="font-semibold text-slate-900 mb-3">🔑 API Keys</h3>
+                <h3 className="font-semibold text-slate-900 mb-3 inline-flex items-center gap-1.5"><IconKey size={15} className="text-slate-500" /> API Keys</h3>
                 <div className="flex gap-2 mb-3">
                   <input type="text" className="input flex-1" placeholder="Nama key (e.g. Cursor, Open WebUI)" value={newKeyName} onChange={e => setNewKeyName(e.target.value)} />
-                  <button onClick={handleGenerateApiKey} className="btn btn-primary whitespace-nowrap">🎲 Generate</button>
+                  <button onClick={handleGenerateApiKey} className="btn btn-primary whitespace-nowrap inline-flex items-center gap-1.5"><IconPlus size={14} /> Generate</button>
                 </div>
                 {generatedKey && (
                   <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-3">
-                    <div className="text-sm font-medium text-emerald-800 mb-1">✅ Key baru!</div>
+                    <div className="text-sm font-medium text-emerald-800 mb-1 inline-flex items-center gap-1.5"><IconCheck size={14} className="text-emerald-600" /> Key baru!</div>
                     <div className="flex items-center gap-2">
                       <code className="text-xs text-emerald-700 font-mono flex-1 break-all">{generatedKey}</code>
                       <CopyButton text={generatedKey} />
                     </div>
-                    <div className="text-xs text-emerald-600 mt-1">⚠️ Copy sekarang! Tidak akan ditampilkan lagi.</div>
+                    <div className="text-xs text-emerald-600 mt-1 inline-flex items-center gap-1.5"><IconWarning size={12} className="text-amber-500" /> Copy sekarang! Tidak akan ditampilkan lagi.</div>
                   </div>
                 )}
                 {apiKeys.length > 0 && (
@@ -969,7 +974,7 @@ export default function Dashboard() {
                           <code className="text-xs text-slate-600 font-mono ml-2 break-all">{k.key}</code>
                         </div>
                         <CopyButton text={k.key} />
-                        <button onClick={() => handleDeleteApiKey(k.id)} className="text-xs px-1.5 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-100">🗑️</button>
+                        <button onClick={() => handleDeleteApiKey(k.id)} className="text-xs px-1.5 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-100 inline-flex items-center"><IconTrash size={12} /></button>
                       </div>
                     ))}
                   </div>
@@ -987,7 +992,7 @@ export default function Dashboard() {
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-semibold text-slate-900">Request Logs</h2>
-              <button onClick={handleClearLogs} className="btn btn-secondary text-sm">🗑️ Clear</button>
+              <button onClick={handleClearLogs} className="btn btn-secondary text-sm inline-flex items-center gap-1.5"><IconTrash size={14} /> Clear</button>
             </div>
             <div className="card overflow-hidden">
               {/* Desktop table view */}
@@ -1083,7 +1088,7 @@ export default function Dashboard() {
                 <div className="space-y-4">
                   {chatgptStep === 'waiting' && (
                     <div className="text-center py-8">
-                      <div className="pulse-dot text-4xl mb-3">⏳</div>
+                      <div className="pulse-dot text-cyan-400 mb-3"><IconSpinnerLg size={36} className="text-cyan-400" /></div>
                       <p className="text-slate-600">Meminta kode login dari OpenAI...</p>
                     </div>
                   )}
@@ -1119,14 +1124,14 @@ export default function Dashboard() {
                         </div>
                       </div>
                       <div className="flex items-center justify-center gap-2 text-sm text-slate-500">
-                        <span className="pulse-dot">⏳</span>
+                        <span className="pulse-dot"><IconSpinner size={14} className="text-cyan-400" /></span>
                         <span>Menunggu login...</span>
                       </div>
                     </div>
                   )}
                   {chatgptStep === 'done' && (
                     <div className="text-center py-8">
-                      <div className="text-4xl mb-3">✅</div>
+                      <div className="text-4xl mb-3 text-emerald-500"><IconCheck size={36} className="text-emerald-500" /></div>
                       <p className="text-emerald-700 font-medium">Berhasil terhubung!</p>
                       <p className="text-sm text-slate-500 mt-1">Provider ChatGPT Plus sudah ditambahkan</p>
                     </div>
@@ -1134,7 +1139,7 @@ export default function Dashboard() {
                   {chatgptStep === 'error' && (
                     <div className="space-y-3">
                       <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
-                        <p className="text-red-700 font-medium">❌ {chatgptError || 'Login gagal'}</p>
+                        <p className="text-red-700 font-medium inline-flex items-center gap-1.5"><IconCross size={16} className="text-red-500" /> {chatgptError || 'Login gagal'}</p>
                       </div>
                       <button onClick={() => { setChatgptStep('idle'); setProviderType(null); }} className="btn btn-secondary w-full">Coba Lagi</button>
                     </div>
@@ -1201,18 +1206,18 @@ export default function Dashboard() {
                   {/* API Key Strategy */}
                   {providerFormKeys.length > 1 && (
                     <div className="mt-3 pt-3 border-t border-slate-200">
-                      <label className="text-sm text-slate-600 mb-2 block">🔑 Strategi Pemilihan API Key</label>
+                      <label className="text-sm text-slate-600 mb-2 block inline-flex items-center gap-1.5"><IconKey size={14} className="text-slate-400" /> Strategi Pemilihan API Key</label>
                       <div className="grid grid-cols-1 gap-2">
                         <button type="button" onClick={() => setProviderFormStrategy('random')} className={`p-2 rounded-lg border-2 text-left text-sm transition-colors ${providerFormStrategy === 'random' ? 'border-green-500 bg-green-50' : 'border-slate-200 hover:border-slate-300'}`}>
-                          <span className="font-medium text-slate-900">🎲 Random</span>
+                          <span className="font-medium text-slate-900 inline-flex items-center gap-1.5"><IconSync size={13} className="text-slate-400" /> Random</span>
                           <span className="block text-xs text-slate-500 mt-0.5">Pick random key setiap request</span>
                         </button>
                         <button type="button" onClick={() => setProviderFormStrategy('failover-priority')} className={`p-2 rounded-lg border-2 text-left text-sm transition-colors ${providerFormStrategy === 'failover-priority' ? 'border-green-500 bg-green-50' : 'border-slate-200 hover:border-slate-300'}`}>
-                          <span className="font-medium text-slate-900">🔀 Failover Priority</span>
+                          <span className="font-medium text-slate-900 inline-flex items-center gap-1.5"><IconRoute size={13} className="text-slate-400" /> Failover Priority</span>
                           <span className="block text-xs text-slate-500 mt-0.5">Pakai key pertama, jika gagal ke key berikutnya</span>
                         </button>
                         <button type="button" onClick={() => setProviderFormStrategy('round-robin')} className={`p-2 rounded-lg border-2 text-left text-sm transition-colors ${providerFormStrategy === 'round-robin' ? 'border-green-500 bg-green-50' : 'border-slate-200 hover:border-slate-300'}`}>
-                          <span className="font-medium text-slate-900">🔄 Round Robin</span>
+                          <span className="font-medium text-slate-900 inline-flex items-center gap-1.5"><IconSync size={13} className="text-slate-400" /> Round Robin</span>
                           <span className="block text-xs text-slate-500 mt-0.5">Rotasi berurutan ke semua key secara merata</span>
                         </button>
                       </div>
@@ -1222,7 +1227,7 @@ export default function Dashboard() {
               </div>
               <div className="border-t border-slate-200 pt-4">
                 <button onClick={handleTestConnection} disabled={testingConnection || !providerForm.baseUrl || (providerFormKeys.every(k => !k.key || k.key.startsWith('•')) && !editingProvider)} className="btn btn-primary w-full">
-                  {testingConnection ? <span className="flex items-center justify-center gap-2"><span className="pulse-dot">⏳</span> Testing...</span> : '🔌 Test Connection & Discover Models'}
+                  {testingConnection ? <span className="flex items-center justify-center gap-2"><IconSpinner size={14} className="text-blue-400" /> Testing...</span> : <span className="inline-flex items-center justify-center gap-1.5"><IconPlug size={14} /> Test Connection & Discover Models</span>}
                 </button>
                 {testResult && (
                   <div className="mt-3 space-y-2">
@@ -1231,7 +1236,7 @@ export default function Dashboard() {
                       <div className="space-y-1.5">
                         {testResult.keyResults.map((kr: any, i: number) => (
                           <div key={i} className={`p-2 rounded-lg text-sm flex items-center justify-between gap-2 ${kr.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                            <span className="font-medium truncate">{kr.ok ? '✅' : '❌'} {kr.name}</span>
+                            <span className="font-medium truncate inline-flex items-center gap-1.5">{kr.ok ? <IconCheck size={14} className="text-emerald-600" /> : <IconCross size={14} className="text-red-500" />} {kr.name}</span>
                             <span className="text-xs flex-shrink-0">
                               {kr.ok ? `${kr.modelCount} models • ${formatLatency(kr.latencyMs || 0)}` : (kr.error || 'Failed')}
                             </span>
@@ -1242,8 +1247,8 @@ export default function Dashboard() {
                     {/* Overall summary */}
                     <div className={`p-3 rounded-lg text-sm ${testResult.success ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
                       {testResult.success
-                        ? <div><div className="font-medium">✅ {testResult.keyResults.filter((k: any) => k.ok).length}/{testResult.keyResults.length} key berhasil terhubung</div><div className="text-xs mt-1">{testResult.modelCount ?? testResult.models?.length} models ditemukan • {formatLatency(testResult.latencyMs || 0)}</div></div>
-                        : <div><div className="font-medium">❌ Failed</div><div className="text-xs mt-1">{testResult.error}</div></div>}
+                        ? <div><div className="font-medium inline-flex items-center gap-1.5"><IconCheck size={15} className="text-emerald-600" /> {testResult.keyResults.filter((k: any) => k.ok).length}/{testResult.keyResults.length} key berhasil terhubung</div><div className="text-xs mt-1">{testResult.modelCount ?? testResult.models?.length} models ditemukan • {formatLatency(testResult.latencyMs || 0)}</div></div>
+                        : <div><div className="font-medium inline-flex items-center gap-1.5"><IconCross size={15} className="text-red-500" /> Failed</div><div className="text-xs mt-1">{testResult.error}</div></div>}
                     </div>
                   </div>
                 )}
@@ -1309,11 +1314,11 @@ export default function Dashboard() {
                 <label className="text-sm text-slate-600">Strategy</label>
                 <div className="grid grid-cols-2 gap-2 mt-2">
                   <button type="button" onClick={() => setComboForm(f => ({ ...f, strategy: 'failover-priority' }))} className={`p-3 rounded-lg border-2 text-left text-sm transition-colors ${comboForm.strategy === 'failover-priority' ? 'border-green-500 bg-green-50' : 'border-slate-200 hover:border-slate-300'}`}>
-                    <div className="font-medium text-slate-900">🔀 Failover Priority</div>
+                    <div className="font-medium text-slate-900 inline-flex items-center gap-1.5"><IconRoute size={14} className="text-slate-400" /> Failover Priority</div>
                     <div className="text-xs text-slate-500 mt-1">Pilih random dari list. Gagal → coba lain.</div>
                   </button>
                   <button type="button" onClick={() => setComboForm(f => ({ ...f, strategy: 'round-robin' }))} className={`p-3 rounded-lg border-2 text-left text-sm transition-colors ${comboForm.strategy === 'round-robin' ? 'border-green-500 bg-green-50' : 'border-slate-200 hover:border-slate-300'}`}>
-                    <div className="font-medium text-slate-900">🔄 Round Robin</div>
+                    <div className="font-medium text-slate-900 inline-flex items-center gap-1.5"><IconSync size={14} className="text-slate-400" /> Round Robin</div>
                     <div className="text-xs text-slate-500 mt-1">Rotasi berurutan, merata ke semua model.</div>
                   </button>
                 </div>
@@ -1401,7 +1406,7 @@ export default function Dashboard() {
               </div>
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setShowQuotaModal(false)} className="btn btn-secondary flex-1">Batal</button>
-                <button onClick={handleSaveQuota} disabled={!quotaForm.providerId} className="btn btn-primary flex-1">📊 Tambah</button>
+                <button onClick={handleSaveQuota} disabled={!quotaForm.providerId} className="btn btn-primary flex-1 inline-flex items-center justify-center gap-1.5"><IconChart size={15} /> Tambah</button>
               </div>
             </div>
           </div>
