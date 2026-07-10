@@ -292,6 +292,85 @@ body::before {
   background-repeat: no-repeat;
 }
 
+/* ─── Combo card (premium compact) ─── */
+.combo-card .combo-divider {
+  height: 1px;
+  border: 0;
+  margin: 0.65rem 0;
+  background:
+    linear-gradient(90deg, transparent, rgba(53, 230, 255, 0.18), transparent),
+    radial-gradient(circle at 50% 50%, rgba(255, 77, 166, 0.30), transparent 60%);
+  background-size: 100% 1px, 5px 1px;
+  background-repeat: no-repeat;
+}
+
+/* futuristic chip: thin border, dark surface, faint glow */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  background: rgba(13, 27, 48, 0.7);
+  border: 1px solid rgba(53, 230, 255, 0.16);
+  color: #AFC2D6;
+  transition: border-color 180ms ease, box-shadow 180ms ease, color 180ms ease;
+}
+.chip-cyan {
+  background: linear-gradient(180deg, rgba(0,191,255,0.14), rgba(53,230,255,0.08));
+  border-color: rgba(53, 230, 255, 0.45);
+  color: #DCEBFF;
+  box-shadow: inset 0 1px 0 rgba(53,230,255,0.35), 0 0 12px -4px rgba(53,230,255,0.4);
+}
+.chip-model {
+  background: rgba(8, 20, 38, 0.85);
+  border: 1px solid rgba(53, 230, 255, 0.12);
+  padding: 0.28rem 0.65rem;
+  font-size: 0.75rem;
+}
+.chip-model .prov { color: #7E97B5; }
+.chip-model .arrow { color: #35E6FF; margin: 0 0.3rem; opacity: 0.8; }
+.chip-model .model { color: #C7D8EC; font-weight: 500; }
+
+/* compact action buttons */
+.btn-xs {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 9px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 180ms ease;
+  border: 1px solid transparent;
+}
+.btn-xs-edit {
+  background: rgba(13, 27, 48, 0.85);
+  color: #C7D8EC;
+  border-color: rgba(53, 230, 255, 0.3);
+}
+.btn-xs-edit:hover {
+  background: rgba(16, 36, 61, 0.95);
+  border-color: rgba(53, 230, 255, 0.6);
+  color: #F2F8FF;
+  box-shadow: 0 0 14px -5px rgba(53, 230, 255, 0.5);
+}
+.btn-xs-del {
+  background: rgba(42, 12, 24, 0.6);
+  color: #E36FA6;
+  border-color: rgba(255, 77, 166, 0.28);
+}
+.btn-xs-del:hover {
+  background: rgba(58, 17, 30, 0.75);
+  border-color: rgba(255, 77, 166, 0.55);
+  color: #F0A8C8;
+  box-shadow: 0 0 14px -5px rgba(255, 77, 166, 0.45);
+}
+
 .input {
   width: 100%;
   padding: 0.6rem 0.8rem;

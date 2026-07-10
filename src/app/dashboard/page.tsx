@@ -831,43 +831,45 @@ export default function Dashboard() {
 
         {/* ─── Combos Tab ─────────────────────────── */}
         {activeTab === 'combos' && (
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
+          <div className="space-y-5">
+            <div className="flex flex-wrap justify-between items-end gap-3">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">Combo Models</h2>
-                <p className="text-sm text-slate-500">Buat model virtual dari gabungan beberapa provider. Pakai nama combo sebagai model di request.</p>
+                <h2 className="text-[23px] font-bold text-slate-900 tracking-tight">Combo Models</h2>
+                <p className="text-[13px] text-slate-500 mt-1 leading-relaxed max-w-xl">Buat model virtual dari gabungan beberapa provider. Pakai nama combo sebagai model di request.</p>
               </div>
-              <button onClick={openComboModal} className="btn btn-primary text-sm sm:text-base">+ Buat Combo</button>
+              <button onClick={openComboModal} className="btn btn-primary text-[13.5px]">+ Buat Combo</button>
             </div>
             {combos.length === 0 ? (
               <div className="card text-center py-12 text-slate-400"><div className="text-4xl mb-2">🧩</div><p>Belum ada combo. Buat combo pertama!</p></div>
             ) : (
               <div className="space-y-3">
                 {combos.map(c => (
-                  <div key={c.id} className="card p-4">
+                  <div key={c.id} className="card combo-card p-3.5">
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-semibold text-slate-900 font-mono">{c.name}</h3>
-                          {!c.enabled && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-200 text-slate-500">disabled</span>}
-                          <span className="px-2 py-0.5 rounded bg-green-50 text-green-600 text-xs">{c.items.length} models</span>
-                          <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-600 text-xs">{c.strategy === 'round-robin' ? '🔄 Round Robin' : '🔀 Failover Priority'}</span>
+                          <h3 className="font-semibold text-slate-900 text-[16px] leading-snug truncate flex-1">{c.name}</h3>
+                          {!c.enabled && <span className="chip" style={{opacity:0.8}}>disabled</span>}
+                          <span className={`chip ${c.enabled ? 'chip-cyan' : ''}`}>{c.items.length} models</span>
+                          <span className="chip">{c.strategy === 'round-robin' ? '🔄 Round Robin' : '🔀 Failover Priority'}</span>
+                          {c.enabled && <span className="chip chip-cyan status-on">● ON</span>}
                         </div>
-                        <div className="flex flex-wrap gap-2 mt-2">
+                        <div className="flex flex-wrap gap-1.5 mt-2.5">
                           {c.items.map((item, i) => (
-                            <span key={i} className="px-2 py-1 rounded bg-slate-50 border border-slate-200 text-xs">
-                              <span className="text-slate-500">{item.providerName}</span>
-                              <span className="text-slate-300 mx-1">→</span>
-                              <span className="font-mono text-slate-700">{item.model}</span>
+                            <span key={i} className="chip-model font-mono">
+                              <span className="prov">{item.providerName}</span>
+                              <span className="arrow">→</span>
+                              <span className="model">{item.model}</span>
                             </span>
                           ))}
                         </div>
                       </div>
-                      <button onClick={() => handleToggleCombo(c)} className={`flex-shrink-0 text-xs px-2 py-1 rounded ${c.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{c.enabled ? 'ON' : 'OFF'}</button>
+                      <button onClick={() => handleToggleCombo(c)} className={`chip ${c.enabled ? 'chip-cyan status-on' : ''} self-start flex-shrink-0`}>{c.enabled ? '● ON' : '○ OFF'}</button>
                     </div>
-                    <div className="flex gap-2 mt-3">
-                      <button onClick={() => openEditComboModal(c)} className="flex-1 text-sm px-3 py-2 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 font-medium">✏️ Edit</button>
-                      <button onClick={() => handleDeleteCombo(c.id)} className="flex-1 text-sm px-3 py-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 font-medium">🗑️ Hapus</button>
+                    <hr className="combo-divider" />
+                    <div className="flex gap-2">
+                      <button onClick={() => openEditComboModal(c)} className="btn-xs btn-xs-edit flex-1">✏️ Edit</button>
+                      <button onClick={() => handleDeleteCombo(c.id)} className="btn-xs btn-xs-del flex-1">🗑️ Hapus</button>
                     </div>
                   </div>
                 ))}
