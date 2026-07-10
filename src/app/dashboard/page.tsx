@@ -742,9 +742,9 @@ export default function Dashboard() {
       </header>
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* Tabs */}
-        <div className="flex gap-1 bg-slate-100 rounded-lg p-1 overflow-x-auto flex-nowrap">
+        <div className="tab-bar flex gap-1 rounded-lg p-1 overflow-x-auto flex-nowrap">
           {(['providers', 'combos', 'logs', 'settings'] as const).map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 min-w-[3rem] px-2 sm:px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${activeTab === tab ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+            <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 min-w-[3rem] px-2 sm:px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${activeTab === tab ? 'tab-active shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
               <span className="sm:hidden">{tab === 'providers' ? '🔌' : tab === 'combos' ? '🧩' : tab === 'settings' ? '⚙️' : '📋'}</span>
               <span className="hidden sm:inline">{tab === 'providers' ? '🔌 Providers' : tab === 'combos' ? '🧩 Kombo' : tab === 'settings' ? '⚙️ Pengaturan' : '📋 Logs'}</span>
             </button>

@@ -1,12 +1,14 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import Script from "next/script";
+import CyberBackground from "@/components/CyberBackground";
 
 const inter = Inter({ subsets: ["latin"] });
+const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains" });
 
 export const viewport: Viewport = {
-  themeColor: "#6366f1",
+  themeColor: "#05070f",
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
@@ -34,9 +36,10 @@ export default function RootLayout({
       <head>
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
-      <body className={`${inter.className} antialiased`}>
+      <body className={`${inter.className} ${jetbrainsMono.variable} antialiased`}>
+        <CyberBackground />
         {children}
         <Script id="sw-register" strategy="afterInteractive">
           {`
