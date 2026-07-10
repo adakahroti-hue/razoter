@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
   const providerBreakdown = providers.map(p => {
     const pLogs = logs.filter(l => l.providerId === p.id);
     const pSuccesses = pLogs.filter(l => l.status === 'success').length;
+    const totalTokens = pLogs.reduce((sum, l) => sum + (l.tokensUsed || 0), 0);
     return {
       providerId: p.id,
       providerName: p.name,
@@ -35,6 +36,7 @@ export async function GET(request: NextRequest) {
       avgLatency: pLogs.length > 0
         ? Math.round(pLogs.reduce((sum, l) => sum + l.latencyMs, 0) / pLogs.length)
         : 0,
+      totalTokens,
     };
   });
 

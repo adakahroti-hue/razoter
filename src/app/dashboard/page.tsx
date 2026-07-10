@@ -92,6 +92,7 @@ interface Stats {
     successes: number;
     errors: number;
     avgLatency: number;
+    totalTokens: number;
   }>;
 }
 
@@ -141,8 +142,14 @@ export default function Dashboard() {
   const [combos, setCombos] = useState<Combo[]>([]);
   const [quotas, setQuotas] = useState<Quota[]>([]);
 
-  const [activeTab, setActiveTab] = useState<'providers' | 'combos' | 'logs' | 'quotas'>('providers');
+  const [activeTab, setActiveTab] = useState<'providers' | 'combos' | 'logs' | 'quotas' | 'settings'>('providers');
   const [showProviderModal, setShowProviderModal] = useState(false);
+
+  // Token usage per provider (from stats breakdown)
+  const tokenByProvider = (stats?.providerBreakdown ?? []).reduce<Record<string, number>>((acc, b) => {
+    acc[b.providerId] = b.totalTokens;
+    return acc;
+  }, {});
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
 
   // Provider form
@@ -233,7 +240,15 @@ export default function Dashboard() {
         api('/api/combos'),
         api('/api/quotas'),
       ]);
-      if (provRes.ok) setProviders(await provRes.json());
+      if (provRes.ok) {
+        const provs = await provRes.json();
+        provs.sort((a: any, b: any) => {
+          const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return tb - ta; // terbaru dulu
+        });
+        setProviders(provs);
+      }
       if (logRes.ok) { const d = await logRes.json(); setLogs(d.logs || d); }
       if (statsRes.ok) setStats(await statsRes.json());
       if (configRes.ok) { const c = await configRes.json(); setConfig(c); }
@@ -730,10 +745,10 @@ export default function Dashboard() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* Tabs */}
         <div className="flex gap-1 bg-slate-100 rounded-lg p-1 overflow-x-auto flex-nowrap">
-          {(['providers', 'combos', 'logs', 'quotas'] as const).map(tab => (
+          {(['providers', 'combos', 'logs', 'quotas', 'settings'] as const).map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 min-w-[3rem] px-2 sm:px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${activeTab === tab ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-              <span className="sm:hidden">{tab === 'providers' ? '🔌' : tab === 'combos' ? '🧩' : tab === 'quotas' ? '📊' : '📋'}</span>
-              <span className="hidden sm:inline">{tab === 'providers' ? '🔌 Providers' : tab === 'combos' ? '🧩 Kombo' : tab === 'quotas' ? '📊 Quotas' : '📋 Logs'}</span>
+              <span className="sm:hidden">{tab === 'providers' ? '🔌' : tab === 'combos' ? '🧩' : tab === 'quotas' ? '📊' : tab === 'settings' ? '⚙️' : '📋'}</span>
+              <span className="hidden sm:inline">{tab === 'providers' ? '🔌 Providers' : tab === 'combos' ? '🧩 Kombo' : tab === 'quotas' ? '📊 Quotas' : tab === 'settings' ? '⚙️ Pengaturan' : '📋 Logs'}</span>
             </button>
           ))}
         </div>
@@ -760,6 +775,10 @@ export default function Dashboard() {
                       <button onClick={() => handleArchiveProvider(p)} className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-amber-50 text-amber-700 hover:bg-amber-100" title={p.archived ? 'Buka dari arsip' : 'Arsip'}>{p.archived ? 'Buka' : '📦 Arsip'}</button>
                     </div>
                     <div className="text-[10px] text-slate-400 mt-1 font-mono truncate" title={p.baseUrl}>{p.baseUrl}</div>
+                    <div className="flex items-center gap-3 mt-1.5 text-[10px] text-slate-500">
+                      <span className="inline-flex items-center gap-1">🔑 <b className="font-semibold text-slate-700">{p.apiKeys?.length ?? 0}</b> key</span>
+                      <span className="inline-flex items-center gap-1">🪙 <b className="font-semibold text-slate-700">{formatTokens(tokenByProvider[p.id] ?? 0)}</b> token</span>
+                    </div>
                     <div className="flex flex-wrap gap-1 mt-2 flex-1">
                       {(p.selectedModels.length > 0 ? p.selectedModels : p.models).map(m => {
                         const key = `${p.id}:${m}`;
@@ -799,51 +818,7 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* Base URL & API Keys — inside providers tab */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-              <div className="card">
-                <h3 className="font-semibold text-slate-900 mb-3">📡 Base URL</h3>
-                <p className="text-sm text-slate-500 mb-3">Pakai URL ini sebagai base URL di platform tujuan (Cursor, Open WebUI, dll).</p>
-                <div className="flex items-center gap-2 bg-slate-50 rounded-lg p-3">
-                  <code className="text-sm text-slate-700 font-mono flex-1">{BASE_URL}</code>
-                  <CopyButton text={BASE_URL} />
-                </div>
-              </div>
-              <div className="card">
-                <h3 className="font-semibold text-slate-900 mb-3">🔑 API Keys</h3>
-                <div className="flex gap-2 mb-3">
-                  <input type="text" className="input flex-1" placeholder="Nama key (e.g. Cursor, Open WebUI)" value={newKeyName} onChange={e => setNewKeyName(e.target.value)} />
-                  <button onClick={handleGenerateApiKey} className="btn btn-primary whitespace-nowrap">🎲 Generate</button>
-                </div>
-                {generatedKey && (
-                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-3">
-                    <div className="text-sm font-medium text-emerald-800 mb-1">✅ Key baru!</div>
-                    <div className="flex items-center gap-2">
-                      <code className="text-xs text-emerald-700 font-mono flex-1 break-all">{generatedKey}</code>
-                      <CopyButton text={generatedKey} />
-                    </div>
-                    <div className="text-xs text-emerald-600 mt-1">⚠️ Copy sekarang! Tidak akan ditampilkan lagi.</div>
-                  </div>
-                )}
-                {apiKeys.length > 0 && (
-                  <div className="space-y-1">
-                    {apiKeys.map(k => (
-                      <div key={k.id} className="flex items-center gap-2 bg-slate-50 rounded-lg p-2">
-                        <div className="flex-1 min-w-0">
-                          <span className="font-medium text-slate-700 text-sm">{k.name}</span>
-                          <code className="text-xs text-slate-500 font-mono ml-2">{k.key.slice(0, 8)}...{k.key.slice(-4)}</code>
-                        </div>
-                        <CopyButton text={k.key} />
-                        <button onClick={() => handleDeleteApiKey(k.id)} className="text-xs px-1.5 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-100">🗑️</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {apiKeys.length === 0 && !generatedKey && (
-                  <div className="text-center py-3 text-slate-400 text-sm">Belum ada API key</div>
-                )}
-              </div>
-            </div>
+            {/* Base URL & API Keys — moved to Pengaturan tab */}
           </div>
         )}
 
@@ -1008,6 +983,59 @@ export default function Dashboard() {
                 );
               })()
             )}
+          </div>
+        )}
+
+        {/* ─── Settings Tab ────────────────────────── */}
+        {activeTab === 'settings' && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-semibold text-slate-900">Pengaturan</h2>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="card">
+                <h3 className="font-semibold text-slate-900 mb-3">📡 Base URL</h3>
+                <p className="text-sm text-slate-500 mb-3">Pakai URL ini sebagai base URL di platform tujuan (Cursor, Open WebUI, dll).</p>
+                <div className="flex items-center gap-2 bg-slate-50 rounded-lg p-3">
+                  <code className="text-sm text-slate-700 font-mono flex-1">{BASE_URL}</code>
+                  <CopyButton text={BASE_URL} />
+                </div>
+              </div>
+              <div className="card">
+                <h3 className="font-semibold text-slate-900 mb-3">🔑 API Keys</h3>
+                <div className="flex gap-2 mb-3">
+                  <input type="text" className="input flex-1" placeholder="Nama key (e.g. Cursor, Open WebUI)" value={newKeyName} onChange={e => setNewKeyName(e.target.value)} />
+                  <button onClick={handleGenerateApiKey} className="btn btn-primary whitespace-nowrap">🎲 Generate</button>
+                </div>
+                {generatedKey && (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-3">
+                    <div className="text-sm font-medium text-emerald-800 mb-1">✅ Key baru!</div>
+                    <div className="flex items-center gap-2">
+                      <code className="text-xs text-emerald-700 font-mono flex-1 break-all">{generatedKey}</code>
+                      <CopyButton text={generatedKey} />
+                    </div>
+                    <div className="text-xs text-emerald-600 mt-1">⚠️ Copy sekarang! Tidak akan ditampilkan lagi.</div>
+                  </div>
+                )}
+                {apiKeys.length > 0 && (
+                  <div className="space-y-1">
+                    {apiKeys.map(k => (
+                      <div key={k.id} className="flex items-center gap-2 bg-slate-50 rounded-lg p-2">
+                        <div className="flex-1 min-w-0">
+                          <span className="font-medium text-slate-700 text-sm">{k.name}</span>
+                          <code className="text-xs text-slate-500 font-mono ml-2">{k.key.slice(0, 8)}...{k.key.slice(-4)}</code>
+                        </div>
+                        <CopyButton text={k.key} />
+                        <button onClick={() => handleDeleteApiKey(k.id)} className="text-xs px-1.5 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-100">🗑️</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {apiKeys.length === 0 && !generatedKey && (
+                  <div className="text-center py-3 text-slate-400 text-sm">Belum ada API key</div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 

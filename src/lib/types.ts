@@ -92,6 +92,7 @@ export interface ProviderBreakdown {
   successes: number;
   errors: number;
   avgLatency: number;
+  totalTokens: number;
 }
 
 export interface Stats {
