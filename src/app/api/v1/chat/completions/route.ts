@@ -211,6 +211,11 @@ export async function POST(request: NextRequest) {
 
         const upstreamUrl = `${comboProvider.baseUrl.replace(/\/+$/, '')}/chat/completions`;
         const { header: comboAuth, apiKeyName: comboKeyName } = await resolveAccessToken(comboProvider, undefined, comboResult.apiKeyName);
+        // TEMP KDIAG (combo): always log key state to trace Default fallback
+        {
+          const ak = comboProvider?.apiKeys;
+          addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'success', latencyMs: 0, errorMessage: `[K] src=combo forced=${comboResult.apiKeyName ?? ''} akType=${Array.isArray(ak) ? 'arr(' + ak.length + ')' : typeof ak} strat=${comboProvider.apiKeyStrategy} picked=${comboKeyName}`, apiKeyName: comboKeyName }).catch(() => {});
+        }
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs);
 
@@ -365,6 +370,11 @@ export async function POST(request: NextRequest) {
       // Standard OpenAI-compatible provider
       const upstreamUrl = `${currentProvider.baseUrl.replace(/\/+$/, '')}/chat/completions`;
       const { header: authHeader, apiKeyName: stdAkName } = await resolveAccessToken(currentProvider);
+      // TEMP KDIAG (provider-path): always log key state
+      {
+        const ak = currentProvider?.apiKeys;
+        addLog({ providerId: currentProvider.id, providerName: currentProvider.name, model: selectedModel || requestedModel, status: 'success', latencyMs: 0, errorMessage: `[K] src=provider akType=${Array.isArray(ak) ? 'arr(' + ak.length + ')' : typeof ak} strat=${currentProvider.apiKeyStrategy} picked=${stdAkName}`, apiKeyName: stdAkName }).catch(() => {});
+      }
       lastAkName = stdAkName;
 
       const controller = new AbortController();

@@ -28,7 +28,11 @@ function dbToProvider(row: any): Provider {
     chatgptExpiresAt: row.chatgpt_expires_at ?? undefined,
     models: row.models ?? (row.model ? [row.model] : []),
     selectedModels: row.selected_models ?? (row.model ? [row.model] : []),
-    apiKeys: Array.isArray(row.api_keys) && row.api_keys.length > 0 ? row.api_keys : [{ name: 'Default', key: row.api_key, enabled: true }],
+    apiKeys: (() => {
+      let raw = row.api_keys;
+      if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { raw = []; } }
+      return Array.isArray(raw) && raw.length > 0 ? raw : [{ name: 'Default', key: row.api_key, enabled: true }];
+    })(),
     apiKeyStrategy: row.api_key_strategy ?? 'random',
     priority: row.priority,
     enabled: row.enabled,

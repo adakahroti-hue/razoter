@@ -159,6 +159,7 @@ export default function Dashboard() {
     return acc;
   }, {});
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Provider | null>(null);
 
   // Provider form
   const [providerForm, setProviderForm] = useState({ name: '', baseUrl: '', apiKey: '' });
@@ -447,7 +448,6 @@ export default function Dashboard() {
   }
 
   async function handleDeleteProvider(id: string) {
-    if (!confirm('Hapus provider ini?')) return;
     const url = `/api/providers?id=${id}`;
     try { await api(url, { method: 'DELETE' }); fetchData(); } catch {}
   }
@@ -875,7 +875,7 @@ export default function Dashboard() {
 
                       <div className="grid grid-cols-2 gap-2 mt-2">
                         <button onClick={() => openEditModal(p)} className="text-[13.5px] px-2 py-2 rounded-lg bg-slate-100 text-slate-700 hover:text-slate-900 hover:bg-slate-200 border border-slate-300/30 hover:border-blue-300/60 transition-colors font-medium inline-flex items-center justify-center gap-1.5"><IconPencil size={14} /> Edit</button>
-                        <button onClick={() => handleDeleteProvider(p.id)} className="text-[13.5px] px-2 py-2 rounded-lg bg-red-50 text-red-300 hover:text-red-200 hover:bg-red-100 border border-red-300/30 hover:border-red-300/60 transition-colors font-medium inline-flex items-center justify-center gap-1.5"><IconTrash size={14} /> Hapus</button>
+                        <button onClick={() => setDeleteTarget(p)} className="text-[13.5px] px-2 py-2 rounded-lg bg-red-50 text-red-300 hover:text-red-200 hover:bg-red-100 border border-red-300/30 hover:border-red-300/60 transition-colors font-medium inline-flex items-center justify-center gap-1.5"><IconTrash size={14} /> Hapus</button>
                       </div>
                     </div>
                   </div>
