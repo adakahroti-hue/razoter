@@ -351,12 +351,13 @@ export default function Dashboard() {
 
   async function handleTestConnection() {
     if (!providerForm.baseUrl) return;
-    // When editing without new key, use stored key by sending providerId
+    // Send ALL keys (in order) so each is tested individually.
     const testBody: Record<string, unknown> = { baseUrl: providerForm.baseUrl };
-    const firstNewKey = providerFormKeys.find(k => k.key && !k.key.startsWith('•'));
-    if (firstNewKey?.key) {
-      testBody.apiKey = firstNewKey.key;
+    const keysToTest = providerFormKeys.filter(k => k.key && !k.key.includes('...'));
+    if (keysToTest.length > 0) {
+      testBody.apiKeys = keysToTest.map(k => ({ name: k.name, key: k.key }));
     } else if (editingProvider) {
+      // No new key typed — let backend use the stored keys for this provider
       testBody.providerId = editingProvider.id;
     } else {
       return; // New provider needs a key
@@ -1185,8 +1186,26 @@ export default function Dashboard() {
                   {testingConnection ? <span className="flex items-center justify-center gap-2"><span className="pulse-dot">⏳</span> Testing...</span> : '🔌 Test Connection & Discover Models'}
                 </button>
                 {testResult && (
-                  <div className={`mt-3 p-3 rounded-lg text-sm ${testResult.success ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                    {testResult.success ? <div><div className="font-medium">✅ Connected!</div><div className="text-xs mt-1">{testResult.modelCount} models ditemukan • {formatLatency(testResult.latencyMs || 0)}</div></div> : <div><div className="font-medium">❌ Failed</div><div className="text-xs mt-1">{testResult.error}</div></div>}
+                  <div className="mt-3 space-y-2">
+                    {/* Per-key results */}
+                    {Array.isArray(testResult.keyResults) && testResult.keyResults.length > 0 && (
+                      <div className="space-y-1.5">
+                        {testResult.keyResults.map((kr: any, i: number) => (
+                          <div key={i} className={`p-2 rounded-lg text-sm flex items-center justify-between gap-2 ${kr.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                            <span className="font-medium truncate">{kr.ok ? '✅' : '❌'} {kr.name}</span>
+                            <span className="text-xs flex-shrink-0">
+                              {kr.ok ? `${kr.modelCount} models • ${formatLatency(kr.latencyMs || 0)}` : (kr.error || 'Failed')}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {/* Overall summary */}
+                    <div className={`p-3 rounded-lg text-sm ${testResult.success ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                      {testResult.success
+                        ? <div><div className="font-medium">✅ {testResult.keyResults.filter((k: any) => k.ok).length}/{testResult.keyResults.length} key berhasil terhubung</div><div className="text-xs mt-1">{testResult.modelCount ?? testResult.models?.length} models ditemukan • {formatLatency(testResult.latencyMs || 0)}</div></div>
+                        : <div><div className="font-medium">❌ Failed</div><div className="text-xs mt-1">{testResult.error}</div></div>}
+                    </div>
                   </div>
                 )}
               </div>
