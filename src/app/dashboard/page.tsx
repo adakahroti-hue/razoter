@@ -142,7 +142,7 @@ export default function Dashboard() {
   const [combos, setCombos] = useState<Combo[]>([]);
   const [quotas, setQuotas] = useState<Quota[]>([]);
 
-  const [activeTab, setActiveTab] = useState<'providers' | 'combos' | 'logs' | 'quotas' | 'settings'>('providers');
+  const [activeTab, setActiveTab] = useState<'providers' | 'combos' | 'logs' | 'settings'>('providers');
   const [showProviderModal, setShowProviderModal] = useState(false);
 
   // Token usage per provider (from stats breakdown)
@@ -231,14 +231,13 @@ export default function Dashboard() {
   const fetchData = useCallback(async () => {
     try {
       const providersUrl = '/api/providers' + (showArchived ? '?archived=true' : '');
-      const [provRes, logRes, statsRes, configRes, keysRes, combosRes, quotasRes] = await Promise.all([
+      const [provRes, logRes, statsRes, configRes, keysRes, combosRes] = await Promise.all([
         api(providersUrl),
         api('/api/logs?limit=50'),
         api('/api/stats'),
         api('/api/config'),
         api('/api/api-keys'),
         api('/api/combos'),
-        api('/api/quotas'),
       ]);
       if (provRes.ok) {
         const provs = await provRes.json();
@@ -254,7 +253,6 @@ export default function Dashboard() {
       if (configRes.ok) { const c = await configRes.json(); setConfig(c); }
       if (keysRes.ok) setApiKeys(await keysRes.json());
       if (combosRes.ok) setCombos(await combosRes.json());
-      if (quotasRes.ok) setQuotas(await quotasRes.json());
     } catch (e) { console.error('Fetch error:', e); }
   }, [api]);
 
@@ -745,10 +743,10 @@ export default function Dashboard() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* Tabs */}
         <div className="flex gap-1 bg-slate-100 rounded-lg p-1 overflow-x-auto flex-nowrap">
-          {(['providers', 'combos', 'logs', 'quotas', 'settings'] as const).map(tab => (
+          {(['providers', 'combos', 'logs', 'settings'] as const).map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 min-w-[3rem] px-2 sm:px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${activeTab === tab ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-              <span className="sm:hidden">{tab === 'providers' ? '🔌' : tab === 'combos' ? '🧩' : tab === 'quotas' ? '📊' : tab === 'settings' ? '⚙️' : '📋'}</span>
-              <span className="hidden sm:inline">{tab === 'providers' ? '🔌 Providers' : tab === 'combos' ? '🧩 Kombo' : tab === 'quotas' ? '📊 Quotas' : tab === 'settings' ? '⚙️ Pengaturan' : '📋 Logs'}</span>
+              <span className="sm:hidden">{tab === 'providers' ? '🔌' : tab === 'combos' ? '🧩' : tab === 'settings' ? '⚙️' : '📋'}</span>
+              <span className="hidden sm:inline">{tab === 'providers' ? '🔌 Providers' : tab === 'combos' ? '🧩 Kombo' : tab === 'settings' ? '⚙️ Pengaturan' : '📋 Logs'}</span>
             </button>
           ))}
         </div>
@@ -768,7 +766,7 @@ export default function Dashboard() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {providers.map(p => (
-                  <div key={p.id} className="card flex flex-col p-3">
+                  <div key={p.id} className="card flex flex-col p-3 min-h-[280px]">
                     <div className="flex items-center gap-2">
                       <h3 className="font-semibold text-slate-900 text-sm truncate flex-1">{p.name}</h3>
                       <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${p.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>{p.enabled ? 'ON' : 'OFF'}</span>
@@ -837,7 +835,7 @@ export default function Dashboard() {
             ) : (
               <div className="space-y-3">
                 {combos.map(c => (
-                  <div key={c.id} className="card">
+                  <div key={c.id} className="card p-4">
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
@@ -856,132 +854,15 @@ export default function Dashboard() {
                           ))}
                         </div>
                       </div>
-                      <div className="flex flex-row sm:flex-col gap-2 sm:items-end">
-                        <button onClick={() => handleToggleCombo(c)} className={`text-xs px-2 py-1 rounded ${c.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{c.enabled ? 'ON' : 'OFF'}</button>
-                        <button onClick={() => openEditComboModal(c)} className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200">Edit</button>
-                        <button onClick={() => handleDeleteCombo(c.id)} className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100">Hapus</button>
-                      </div>
+                      <button onClick={() => handleToggleCombo(c)} className={`flex-shrink-0 text-xs px-2 py-1 rounded ${c.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{c.enabled ? 'ON' : 'OFF'}</button>
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                      <button onClick={() => openEditComboModal(c)} className="flex-1 text-sm px-3 py-2 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 font-medium">✏️ Edit</button>
+                      <button onClick={() => handleDeleteCombo(c.id)} className="flex-1 text-sm px-3 py-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 font-medium">🗑️ Hapus</button>
                     </div>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-        )}
-
-        {/* ─── Quotas Tab ─────────────────────────── */}
-        {activeTab === 'quotas' && (
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">Quota Tracker</h2>
-                <p className="text-sm text-slate-500">Pantau penggunaan token per provider. Provider yang melewati batas akan di-skip otomatis.</p>
-              </div>
-              <button onClick={openQuotaModal} className="btn btn-primary">+ Tambah Quota</button>
-            </div>
-            {quotas.length === 0 ? (
-              <div className="card text-center py-12 text-slate-400"><div className="text-4xl mb-2">📊</div><p>Belum ada quota. Tambah quota pertama!</p></div>
-            ) : (
-              (() => {
-                // Group quotas by provider
-                const providerMap = new Map<string, { providerId: string; providerName: string; keys: Quota[]; totalUsage: number; totalLimit: number; resetDay: number }>();
-                for (const q of quotas) {
-                  const key = q.providerId;
-                  if (!providerMap.has(key)) {
-                    providerMap.set(key, { providerId: q.providerId, providerName: q.providerName, keys: [], totalUsage: 0, totalLimit: 0, resetDay: q.resetDay });
-                  }
-                  const entry = providerMap.get(key)!;
-                  entry.keys.push(q);
-                  entry.totalUsage += q.currentUsage || 0;
-                  entry.totalLimit += q.monthlyLimit || 0;
-                  entry.resetDay = q.resetDay;
-                }
-                const providerGroups = Array.from(providerMap.values());
-
-                // Summary stats
-                const grandTotalUsage = providerGroups.reduce((s, g) => s + g.totalUsage, 0);
-                const grandTotalLimit = providerGroups.reduce((s, g) => s + g.totalLimit, 0);
-                const providersOverLimit = providerGroups.filter(g => g.totalLimit > 0 && g.totalUsage >= g.totalLimit).length;
-
-                return (
-                  <>
-                    {/* Summary cards */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      <div className="card p-4 flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center text-xl">📝</div>
-                        <div>
-                          <div className="text-xs text-slate-500">Total Token Usage</div>
-                          <div className="text-lg font-bold text-slate-900">{formatTokens(grandTotalUsage)}</div>
-                        </div>
-                      </div>
-                      <div className="card p-4 flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-xl">📦</div>
-                        <div>
-                          <div className="text-xs text-slate-500">Total Limit</div>
-                          <div className="text-lg font-bold text-slate-900">{grandTotalLimit > 0 ? formatTokens(grandTotalLimit) : '∞'}</div>
-                        </div>
-                      </div>
-                      <div className="card p-4 flex items-center gap-3 col-span-2 sm:col-span-1">
-                        <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center text-xl">⚠️</div>
-                        <div>
-                          <div className="text-xs text-slate-500">Providers Over Limit</div>
-                          <div className="text-lg font-bold text-slate-900">{providersOverLimit}</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Provider quota cards — compact 5-column grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
-                      {providerGroups.map(g => {
-                        const pct = g.totalLimit > 0 ? Math.min(100, Math.round((g.totalUsage / g.totalLimit) * 100)) : 0;
-                        const isOver = g.totalLimit > 0 && g.totalUsage >= g.totalLimit;
-                        const barColor = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500';
-                        const hasMultiKey = g.keys.length > 1;
-                        return (
-                          <div key={g.providerId} className="card flex flex-col p-3">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${isOver ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}`}>
-                                  {g.providerName.charAt(0).toUpperCase()}
-                                </div>
-                                <h3 className="font-semibold text-slate-900 text-sm truncate">{g.providerName}</h3>
-                              </div>
-                              <button onClick={() => handleDeleteQuota(g.keys[0].id)} className="text-xs text-slate-300 hover:text-red-500 transition-colors flex-shrink-0" title="Hapus">✕</button>
-                            </div>
-
-                            <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                              {isOver && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700">LIMIT</span>}
-                              {hasMultiKey && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-600">{g.keys.length} keys</span>}
-                              <span className="text-[10px] text-slate-400">Reset tgl {g.resetDay}</span>
-                            </div>
-
-                            <div className="mt-3">
-                              <div className={`text-lg font-bold ${isOver ? 'text-red-600' : 'text-slate-900'}`}>{formatTokens(g.totalUsage)}</div>
-                              <div className="text-[10px] text-slate-400">{g.totalLimit > 0 ? `dari ${formatTokens(g.totalLimit)}` : 'unlimited'}</div>
-                            </div>
-
-                            <div className="mt-2 flex-1 flex flex-col justify-end">
-                              {g.totalLimit > 0 ? (
-                                <div className="space-y-1">
-                                  <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                                    <div className={`h-2 rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${Math.min(100, pct)}%` }}></div>
-                                  </div>
-                                  <div className="flex justify-between text-[10px]">
-                                    <span className={`font-medium ${isOver ? 'text-red-600' : pct >= 70 ? 'text-amber-600' : 'text-emerald-600'}`}>{pct}%</span>
-                                    <span className="text-slate-400">{formatTokens(g.totalLimit - g.totalUsage)} sisa</span>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="text-[10px] text-slate-400 flex items-center gap-1">♾️ Tracking only</div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                );
-              })()
             )}
           </div>
         )}
@@ -992,7 +873,7 @@ export default function Dashboard() {
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-semibold text-slate-900">Pengaturan</h2>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 max-w-2xl">
               <div className="card">
                 <h3 className="font-semibold text-slate-900 mb-3">📡 Base URL</h3>
                 <p className="text-sm text-slate-500 mb-3">Pakai URL ini sebagai base URL di platform tujuan (Cursor, Open WebUI, dll).</p>
