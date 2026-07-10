@@ -40,6 +40,8 @@ export default function RootLayout({
       </head>
       <body className={`${inter.className} ${jetbrainsMono.variable} antialiased`}>
         <CyberBackground />
+        <div className="hud-corner hud-tl" aria-hidden />
+        <div className="hud-corner hud-br" aria-hidden />
         {children}
         <Script id="sw-register" strategy="afterInteractive">
           {`

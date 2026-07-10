@@ -85,15 +85,23 @@
   --color-amber-600: #E6B95C;
   --color-amber-700: #EBC56E;
 
-  /* ── Danger → dark maroon red ── */
-  --color-red-50:  #2A0C12;
-  --color-red-100: #3A1118;
-  --color-red-200: #5A1A24;
-  --color-red-300: #C96272;
-  --color-red-400: #D97585;
-  --color-red-500: #B23A48;
-  --color-red-600: #D97585;
-  --color-red-700: #ECB0BA;
+  /* ── Danger → dark crimson with magenta undertone ── */
+  --color-red-50:  #2A0C18;
+  --color-red-100: #3A111E;
+  --color-red-200: #5A1A2E;
+  --color-red-300: #D2558F;
+  --color-red-400: #E36FA6;
+  --color-red-500: #9E2A57;
+  --color-red-600: #E36FA6;
+  --color-red-700: #F0A8C8;
+
+  /* ── Secondary accent → neon pink / magenta (used sparingly) ── */
+  --color-pink-300:  #FF7AC4;
+  --color-pink-400:  #FF4FA6;
+  --color-pink-500:  #FF2D95;
+  --color-pink-600:  #E01E7E;
+  --color-fuchsia-400: #E84FCC;
+  --color-fuchsia-500: #D61FB0;
 
   --color-primary: #00BFFF;
   --color-primary-hover: #35E6FF;
@@ -112,6 +120,7 @@
   --foreground: #F2F8FF;
   --glow: rgba(53, 230, 255, 0.5);
   --grid: rgba(53, 230, 255, 0.04);
+  --pink: rgba(255, 77, 166, 0.5);
   --radius: 12px;
   --transition: 200ms;
 }
@@ -180,25 +189,59 @@ main::before {
   filter: blur(20px);
 }
 
-/* ─── Soft slow scanline ─── */
+/* ─── Soft slow scanline (cyan base + faint magenta mix) ─── */
 body::after {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -6;
   pointer-events: none;
-  background: repeating-linear-gradient(
-    0deg,
-    rgba(53, 230, 255, 0.018) 0px,
-    rgba(53, 230, 255, 0.018) 1px,
-    transparent 2px,
-    transparent 5px
-  );
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(53, 230, 255, 0.016) 0px,
+      rgba(53, 230, 255, 0.016) 1px,
+      transparent 2px,
+      transparent 5px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 77, 166, 0.007) 0px,
+      transparent 1px,
+      transparent 9px
+    );
   opacity: 0.55;
   animation: scan 14s linear infinite;
 }
 
 @keyframes scan { 0% { transform: translateY(0); } 100% { transform: translateY(5px); } }
+
+/* ─── Cyberpunk pink details (sparing, atmospheric) ─── */
+
+/* Tiny pink HUD corner accents (top-left / bottom-right) */
+body > .hud-corner { display: none; }
+.hud-corner {
+  position: fixed;
+  width: 46px;
+  height: 46px;
+  z-index: -5;
+  pointer-events: none;
+  border-color: rgba(255, 77, 166, 0.22);
+}
+.hud-tl { top: 14px; left: 14px; border-top: 1px solid; border-left: 1px solid; border-top-left-radius: 10px; }
+.hud-br { bottom: 14px; right: 14px; border-bottom: 1px solid; border-right: 1px solid; border-bottom-right-radius: 10px; }
+
+/* Faint pink grid layer (very low opacity, edges only) */
+body::before {
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+    linear-gradient(rgba(53, 230, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(53, 230, 255, 0.05) 1px, transparent 1px),
+    radial-gradient(rgba(53, 230, 255, 0.12) 1px, transparent 1.4px),
+    repeating-linear-gradient(45deg, rgba(53, 230, 255, 0.02) 0 1px, transparent 1px 30px),
+    repeating-linear-gradient(45deg, rgba(255, 77, 166, 0.022) 0 1px, transparent 1px 120px);
+}
 
 /* ─── Components ─────────────────────────── */
 
@@ -213,6 +256,7 @@ body::after {
     0 1px 2px rgba(0, 0, 0, 0.3),
     0 6px 20px -14px rgba(0, 0, 0, 0.45),
     0 0 0 1px rgba(53, 230, 255, 0.03),
+    0 8px 30px -22px rgba(255, 77, 166, 0.16),   /* faint purple-pink reflection */
     inset 0 1px 0 rgba(53, 230, 255, 0.08);   /* thin inner top highlight */
   transition: transform var(--transition) ease, box-shadow var(--transition) ease, border-color var(--transition) ease;
 }
@@ -224,6 +268,7 @@ body::after {
     0 2px 6px rgba(0, 0, 0, 0.35),
     0 12px 30px -16px rgba(0, 0, 0, 0.5),
     0 0 22px -10px rgba(53, 230, 255, 0.38),
+    0 10px 34px -20px rgba(255, 77, 166, 0.28),   /* magenta edge glow on hover */
     inset 0 1px 0 rgba(53, 230, 255, 0.12);
 }
 
@@ -235,12 +280,16 @@ body::after {
   border: 1px solid rgba(53, 230, 255, 0.06);
 }
 
-/* Thin divider inside cards (info ↔ action) */
+/* Thin divider inside cards (info ↔ action) — cyan with a magenta node */
 .card-divider {
   height: 1px;
   border: 0;
   margin: 0.7rem 0;
-  background: linear-gradient(90deg, transparent, rgba(53, 230, 255, 0.18), transparent);
+  background:
+    linear-gradient(90deg, transparent, rgba(53, 230, 255, 0.20), transparent),
+    radial-gradient(circle at 50% 50%, rgba(255, 77, 166, 0.35), transparent 60%);
+  background-size: 100% 1px, 5px 1px;
+  background-repeat: no-repeat;
 }
 
 .input {
@@ -333,7 +382,8 @@ body::after {
   border: 1px solid rgba(53, 230, 255, 0.5) !important;
   box-shadow:
     inset 0 1px 0 rgba(53, 230, 255, 0.45),
-    0 0 16px -4px rgba(53, 230, 255, 0.5);
+    0 0 16px -4px rgba(53, 230, 255, 0.5),
+    0 0 12px -5px rgba(255, 77, 166, 0.35);   /* magenta mixed into active glow */
   animation: tab-glow 2.4s ease-in-out infinite;
 }
 
@@ -355,17 +405,20 @@ body::after {
 }
 
 @keyframes tab-glow {
-  0%, 100% { box-shadow: inset 0 1px 0 rgba(53,230,255,0.45), 0 0 12px -5px rgba(53,230,255,0.4); }
-  50%      { box-shadow: inset 0 1px 0 rgba(53,230,255,0.6), 0 0 20px -4px rgba(53,230,255,0.6); }
+  0%, 100% { box-shadow: inset 0 1px 0 rgba(53,230,255,0.45), 0 0 12px -5px rgba(53,230,255,0.4), 0 0 10px -6px rgba(255,77,166,0.3); }
+  50%      { box-shadow: inset 0 1px 0 rgba(53,230,255,0.6), 0 0 20px -4px rgba(53,230,255,0.6), 0 0 14px -5px rgba(255,77,166,0.4); }
 }
 
-/* ─── App header: dark transparent + blur + cyan underline ─── */
+/* ─── App header: dark transparent + blur + cyan underline + faint magenta corner glow ─── */
 .app-header {
   background: rgba(5, 11, 24, 0.55) !important;
   backdrop-filter: blur(18px) saturate(130%);
   -webkit-backdrop-filter: blur(18px) saturate(130%);
   border-bottom: 1px solid rgba(53, 230, 255, 0.22) !important;
-  box-shadow: 0 1px 0 rgba(53, 230, 255, 0.06), 0 6px 24px -16px rgba(0, 0, 0, 0.6);
+  box-shadow:
+    0 1px 0 rgba(53, 230, 255, 0.06),
+    0 6px 24px -16px rgba(0, 0, 0, 0.6),
+    inset -40px 0 60px -40px rgba(255, 77, 166, 0.18);   /* subtle magenta reflection, right side */
 }
 
 /* ─── Status ON pulse (very soft) ─── */
