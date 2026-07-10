@@ -705,11 +705,11 @@ export default function Dashboard() {
 
   // ─── Login screen ──────────────────────────────
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.1), rgba(6,182,212,0.1))' }}><div className="pulse-dot text-4xl">⏳</div></div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center" style={{ background: 'radial-gradient(900px 600px at 50% 20%, rgba(0,191,255,0.10), transparent 60%), linear-gradient(180deg,#050B18,#081426)' }}><div className="pulse-dot text-4xl">⏳</div></div>;
 
   if (!token) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(6,182,212,0.10) 50%, rgba(139,92,246,0.10) 100%)' }}>
+      <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'radial-gradient(900px 600px at 50% 20%, rgba(0,191,255,0.12), transparent 60%), radial-gradient(800px 500px at 110% 90%, rgba(53,230,255,0.08), transparent 60%), linear-gradient(180deg,#050B18,#081426)' }}>
         <form onSubmit={handleLogin} className="card w-full max-w-sm space-y-4" style={{ animation: 'fade-in 0.4s ease both' }}>
           <div className="text-center">
             <div className="w-14 h-14 mx-auto mb-3 rounded-2xl flex items-center justify-center text-2xl" style={{ background: 'linear-gradient(135deg,#6366f1,#06b6d4)', boxShadow: '0 8px 24px -6px rgba(99,102,241,0.5)' }}>⚡</div>
@@ -728,11 +728,11 @@ export default function Dashboard() {
   // ─── Dashboard ───────────────────────────────────
 
   return (
-    <div className="min-h-screen" style={{ background: 'radial-gradient(1200px 600px at 8% -10%, rgba(99,102,241,0.12), transparent), radial-gradient(1000px 500px at 110% 0%, rgba(6,182,212,0.10), transparent), radial-gradient(900px 600px at 50% 120%, rgba(139,92,246,0.10), transparent), linear-gradient(180deg,#f8faff,#eef2ff)' }}>
-      <header className="sticky top-0 z-40 backdrop-blur-xl border-b" style={{ background: 'rgba(255,255,255,0.6)', borderColor: 'rgba(148,163,184,0.25)' }}>
+    <div className="min-h-screen" style={{ background: 'radial-gradient(1200px 700px at 12% -10%, rgba(0,191,255,0.10), transparent 58%), radial-gradient(1000px 600px at 110% 6%, rgba(53,230,255,0.08), transparent 58%), radial-gradient(900px 700px at 50% 120%, rgba(0,153,204,0.07), transparent 60%), linear-gradient(180deg,#050B18 0%,#081426 100%)' }}>
+      <header className="app-header sticky top-0 z-40 border-b">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg" style={{ background: 'linear-gradient(135deg,#6366f1,#06b6d4)', boxShadow: '0 4px 14px -4px rgba(99,102,241,0.5)' }}>⚡</div>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg" style={{ background: 'linear-gradient(135deg,#0077A3,#35E6FF)', boxShadow: '0 4px 14px -4px rgba(0,191,255,0.5)' }}>⚡</div>
             <h1 className="text-lg sm:text-xl font-bold text-slate-900">Razoter</h1><span className="text-xs text-slate-400">v2.2</span>
           </div>
           <div className="flex items-center gap-4">
@@ -755,7 +755,7 @@ export default function Dashboard() {
         {activeTab === 'providers' && (
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <h2 className="text-lg font-semibold text-slate-900">Providers</h2>
+              <h2 className="text-xl font-bold text-slate-900 tracking-tight">Providers</h2>
               <div className="flex gap-2">
                 <button onClick={() => setShowArchived(s => !s)} className={`text-xs px-2 py-1 rounded ${showArchived ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>📦 {showArchived ? 'Sembunyikan Arsip' : 'Tampilkan Arsip'}</button>
                 <button onClick={() => { resetProviderForm(); setShowProviderModal(true); }} className="btn btn-primary text-sm sm:text-base">+ Add Provider</button>
@@ -769,7 +769,7 @@ export default function Dashboard() {
                   <div key={p.id} className="card flex flex-col p-3 min-h-[280px]">
                     <div className="flex items-center gap-2">
                       <h3 className="font-semibold text-slate-900 text-sm truncate flex-1">{p.name}</h3>
-                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${p.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>{p.enabled ? 'ON' : 'OFF'}</span>
+                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${p.enabled ? 'bg-emerald-100 text-emerald-700 status-on' : 'bg-slate-200 text-slate-500'}`}>{p.enabled ? 'ON' : 'OFF'}</span>
                       <button onClick={() => handleArchiveProvider(p)} className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-amber-50 text-amber-700 hover:bg-amber-100" title={p.archived ? 'Buka dari arsip' : 'Arsip'}>{p.archived ? 'Buka' : '📦 Arsip'}</button>
                     </div>
                     <div className="text-[10px] text-slate-400 mt-1 font-mono truncate" title={p.baseUrl}>{p.baseUrl}</div>
@@ -799,17 +799,19 @@ export default function Dashboard() {
                       })}
                     </div>
 
+                    <hr className="card-divider" />
+
                     <button
                       onClick={() => handleTestAllModels(p)}
                       disabled={testingAllModels === p.id}
-                      className="mt-3 text-xs px-2 py-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors w-full font-medium"
+                      className="mt-3 text-xs px-2 py-2 rounded-lg bg-blue-50 text-blue-400 hover:text-blue-300 border border-blue-300/40 hover:border-blue-300/70 transition-colors w-full font-medium"
                     >
                       {testingAllModels === p.id ? '⏳ Testing...' : '🧪 Cek Semua Model'}
                     </button>
 
                     <div className="grid grid-cols-2 gap-2 mt-2">
-                      <button onClick={() => openEditModal(p)} className="text-xs px-2 py-2 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 font-medium">✏️ Edit</button>
-                      <button onClick={() => handleDeleteProvider(p.id)} className="text-xs px-2 py-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 font-medium">🗑️ Hapus</button>
+                      <button onClick={() => openEditModal(p)} className="text-xs px-2 py-2 rounded-lg bg-slate-100 text-slate-700 hover:text-slate-900 hover:bg-slate-200 border border-slate-300/30 hover:border-blue-300/60 transition-colors font-medium">✏️ Edit</button>
+                      <button onClick={() => handleDeleteProvider(p.id)} className="text-xs px-2 py-2 rounded-lg bg-red-50 text-red-300 hover:text-red-200 hover:bg-red-100 border border-red-300/30 hover:border-red-300/60 transition-colors font-medium">🗑️ Hapus</button>
                     </div>
                   </div>
                 ))}
