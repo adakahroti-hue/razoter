@@ -11,6 +11,10 @@ const rateLimitStore = new Map<string, RateLimitEntry>();
 const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX || '60');
 const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000');
 
+// Explicit provider column list — ensures columns added later (api_keys, api_key_strategy)
+// are always returned even if the Supabase schema cache is stale with select('*').
+const PROVIDER_COLUMNS = 'id, name, base_url, api_key, auth_type, chatgpt_refresh_token, chatgpt_expires_at, models, selected_models, api_keys, api_key_strategy, priority, enabled, archived, health_status, last_health_check, request_count, error_count, avg_latency, rate_limit_remaining, rate_limit_reset, rate_limit_total, created_at';
+
 // ─── Mapping helpers (camelCase ↔ snake_case) ────────────
 
 function dbToProvider(row: any): Provider {
@@ -92,7 +96,7 @@ export function checkRateLimit(ip: string): { allowed: boolean; limit: number; r
 export async function getProviders(includeArchived = false): Promise<Provider[]> {
   let query = supabase
     .from('providers')
-    .select('*')
+    .select(PROVIDER_COLUMNS)
     .order('priority', { ascending: true });
   if (!includeArchived) query = query.eq('archived', false);
 
@@ -121,7 +125,7 @@ export async function archiveProvider(id: string, archived: boolean): Promise<bo
 export async function getProvider(id: string): Promise<Provider | undefined> {
   const { data, error } = await supabase
     .from('providers')
-    .select('*')
+    .select(PROVIDER_COLUMNS)
     .eq('id', id)
     .limit(1)
     .maybeSingle();
@@ -250,7 +254,7 @@ export async function deleteProvider(id: string): Promise<boolean> {
 export async function getEnabledProviders(): Promise<Provider[]> {
   const { data, error } = await supabase
     .from('providers')
-    .select('*')
+    .select(PROVIDER_COLUMNS)
     .eq('enabled', true)
     .eq('archived', false)
     .order('priority', { ascending: true });
