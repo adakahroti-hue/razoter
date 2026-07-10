@@ -221,6 +221,9 @@ export async function updateProvider(id: string, data: Partial<Provider>): Promi
 }
 
 export async function deleteProvider(id: string): Promise<boolean> {
+  // Fetch provider first so we can clean up related quota records by provider name
+  const provider = await getProvider(id);
+
   const { error, count } = await supabase
     .from('providers')
     .delete({ count: 'exact' })
@@ -230,6 +233,17 @@ export async function deleteProvider(id: string): Promise<boolean> {
     console.error('Supabase deleteProvider error:', error);
     return false;
   }
+
+  // Cascade: remove quota tracking rows tied to this provider (by id and by name)
+  try {
+    await supabase.from('quotas').delete().eq('provider_id', id);
+    if (provider?.name) {
+      await supabase.from('quotas').delete().eq('provider_name', provider.name);
+    }
+  } catch (e) {
+    console.error('Supabase deleteProvider quota cascade error:', e);
+  }
+
   return (count ?? 0) > 0;
 }
 

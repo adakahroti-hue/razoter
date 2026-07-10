@@ -751,54 +751,50 @@ export default function Dashboard() {
             {providers.length === 0 ? (
               <div className="card text-center py-12 text-slate-400"><div className="text-4xl mb-2">🔌</div><p>Belum ada provider. Tambah provider pertama!</p></div>
             ) : (
-              <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
                 {providers.map(p => (
-                  <div key={p.id} className="card">
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-slate-900">{p.name}</h3>
-                          {!p.enabled && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-200 text-slate-500">disabled</span>}
-                          {p.archived && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-200 text-amber-800">📦 arsip</span>}
-                        </div>
-                        <div className="text-xs text-slate-400 mt-1 font-mono truncate">{p.baseUrl}</div>
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {(p.selectedModels.length > 0 ? p.selectedModels : p.models).map(m => {
-                            const key = `${p.id}:${m}`;
-                            const result = modelTestResults[key];
-                            const statusIcon = result?.status === 'testing' ? '⏳' : result?.status === 'ok' ? '✅' : result?.status === 'fail' ? '❌' : null;
-                            return (
-                              <span key={m} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono ${result?.status === 'ok' ? 'bg-emerald-50 text-emerald-700' : result?.status === 'fail' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-600'}`}>
-                                {statusIcon && <span className="text-xs">{statusIcon}</span>}
-                                {m}
-                                {result?.status === 'ok' && result.latencyMs && <span className="text-xs opacity-70">{formatLatency(result.latencyMs)}</span>}
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleTestSingleModel(p, m); }}
-                                  disabled={result?.status === 'testing'}
-                                  className="ml-1 opacity-0 group-hover:opacity-100 hover:opacity-100 text-slate-400 hover:text-green-600 transition-opacity"
-                                  title="Test model ini"
-                                >🔍</button>
-                              </span>
-                            );
-                          })}
-                        </div>
+                  <div key={p.id} className="card flex flex-col p-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-semibold text-slate-900 text-sm truncate">{p.name}</h3>
+                      {!p.enabled && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-200 text-slate-500">off</span>}
+                      {p.archived && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-200 text-amber-800">📦</span>}
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-1 font-mono truncate" title={p.baseUrl}>{p.baseUrl}</div>
+                    <div className="flex flex-wrap gap-1 mt-2 flex-1">
+                      {(p.selectedModels.length > 0 ? p.selectedModels : p.models).map(m => {
+                        const key = `${p.id}:${m}`;
+                        const result = modelTestResults[key];
+                        const statusIcon = result?.status === 'testing' ? '⏳' : result?.status === 'ok' ? '✅' : result?.status === 'fail' ? '❌' : null;
+                        const testedBg = result?.status === 'ok' ? 'bg-emerald-50 text-emerald-700' : result?.status === 'fail' ? 'bg-red-50 text-red-700' : 'text-slate-900';
+                        return (
+                          <span key={m} className={`group inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono ${testedBg}`}>
+                            {statusIcon && <span className="text-[10px]">{statusIcon}</span>}
+                            {m}
+                            {result?.status === 'ok' && result.latencyMs && <span className="text-[10px] opacity-70">{formatLatency(result.latencyMs)}</span>}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleTestSingleModel(p, m); }}
+                              disabled={result?.status === 'testing'}
+                              className="ml-0.5 opacity-0 group-hover:opacity-100 hover:opacity-100 text-slate-400 hover:text-green-600 transition-opacity"
+                              title="Test model ini"
+                            >🔍</button>
+                          </span>
+                        );
+                      })}
+                    </div>
 
-                      </div>
-                      <div className="flex flex-row sm:flex-col gap-2 sm:items-end">
-                        <div className="flex gap-2">
-                          <button onClick={() => handleToggleProvider(p)} className={`text-xs px-2 py-1 rounded ${p.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{p.enabled ? 'ON' : 'OFF'}</button>
-                          <button onClick={() => openEditModal(p)} className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200">Edit</button>
-                          <button onClick={() => handleArchiveProvider(p)} className="text-xs px-2 py-1 rounded bg-amber-50 text-amber-700 hover:bg-amber-100">📦 {p.archived ? 'Tampilkan' : 'Arsip'}</button>
-                          <button onClick={() => handleDeleteProvider(p.id)} className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100">Hapus</button>
-                        </div>
-                        <button
-                          onClick={() => handleTestAllModels(p)}
-                          disabled={testingAllModels === p.id}
-                          className="text-xs px-3 py-1.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors w-full sm:w-auto"
-                        >
-                          {testingAllModels === p.id ? '⏳ Testing...' : '🧪 Cek Semua Model'}
-                        </button>
-                      </div>
+                    <button
+                      onClick={() => handleTestAllModels(p)}
+                      disabled={testingAllModels === p.id}
+                      className="mt-3 text-xs px-2 py-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors w-full font-medium"
+                    >
+                      {testingAllModels === p.id ? '⏳ Testing...' : '🧪 Cek Semua Model'}
+                    </button>
+
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      <button onClick={() => handleToggleProvider(p)} className={`text-xs px-2 py-2 rounded-lg font-medium ${p.enabled ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>{p.enabled ? 'ON' : 'OFF'}</button>
+                      <button onClick={() => openEditModal(p)} className="text-xs px-2 py-2 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 font-medium">✏️ Edit</button>
+                      <button onClick={() => handleArchiveProvider(p)} className="text-xs px-2 py-2 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 font-medium">📦 {p.archived ? 'Buka' : 'Arsip'}</button>
+                      <button onClick={() => handleDeleteProvider(p.id)} className="text-xs px-2 py-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 font-medium">🗑️ Hapus</button>
                     </div>
                   </div>
                 ))}
@@ -961,90 +957,51 @@ export default function Dashboard() {
                       </div>
                     </div>
 
-                    {/* Provider cards */}
-                    <div className="space-y-3">
+                    {/* Provider quota cards — compact 5-column grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
                       {providerGroups.map(g => {
                         const pct = g.totalLimit > 0 ? Math.min(100, Math.round((g.totalUsage / g.totalLimit) * 100)) : 0;
                         const isOver = g.totalLimit > 0 && g.totalUsage >= g.totalLimit;
                         const barColor = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500';
                         const hasMultiKey = g.keys.length > 1;
                         return (
-                          <div key={g.providerId} className="card overflow-hidden">
-                            {/* Provider header */}
-                            <div className="p-4">
-                              <div className="flex items-start justify-between mb-3">
-                                <div className="flex items-center gap-2">
-                                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold ${isOver ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}`}>
-                                    {g.providerName.charAt(0).toUpperCase()}
-                                  </div>
-                                  <div>
-                                    <div className="flex items-center gap-2">
-                                      <h3 className="font-semibold text-slate-900">{g.providerName}</h3>
-                                      {isOver && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">LIMIT</span>}
-                                      {hasMultiKey && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-600">{g.keys.length} keys</span>}
-                                    </div>
-                                    <div className="text-xs text-slate-400 mt-0.5">Reset tanggal {g.resetDay} setiap bulan</div>
-                                  </div>
+                          <div key={g.providerId} className="card flex flex-col p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${isOver ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                                  {g.providerName.charAt(0).toUpperCase()}
                                 </div>
-                                <div className="text-right">
-                                  <div className={`text-lg font-bold ${isOver ? 'text-red-600' : 'text-slate-900'}`}>{formatTokens(g.totalUsage)}</div>
-                                  <div className="text-xs text-slate-400">{g.totalLimit > 0 ? `dari ${formatTokens(g.totalLimit)}` : 'unlimited'}</div>
-                                </div>
+                                <h3 className="font-semibold text-slate-900 text-sm truncate">{g.providerName}</h3>
                               </div>
+                              <button onClick={() => handleDeleteQuota(g.keys[0].id)} className="text-xs text-slate-300 hover:text-red-500 transition-colors flex-shrink-0" title="Hapus">✕</button>
+                            </div>
 
-                              {/* Progress bar */}
+                            <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                              {isOver && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700">LIMIT</span>}
+                              {hasMultiKey && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-600">{g.keys.length} keys</span>}
+                              <span className="text-[10px] text-slate-400">Reset tgl {g.resetDay}</span>
+                            </div>
+
+                            <div className="mt-3">
+                              <div className={`text-lg font-bold ${isOver ? 'text-red-600' : 'text-slate-900'}`}>{formatTokens(g.totalUsage)}</div>
+                              <div className="text-[10px] text-slate-400">{g.totalLimit > 0 ? `dari ${formatTokens(g.totalLimit)}` : 'unlimited'}</div>
+                            </div>
+
+                            <div className="mt-2 flex-1 flex flex-col justify-end">
                               {g.totalLimit > 0 ? (
-                                <div className="space-y-1.5">
-                                  <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
-                                    <div className={`h-3 rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${Math.min(100, pct)}%` }}></div>
+                                <div className="space-y-1">
+                                  <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                                    <div className={`h-2 rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${Math.min(100, pct)}%` }}></div>
                                   </div>
-                                  <div className="flex justify-between text-xs">
-                                    <span className={`font-medium ${isOver ? 'text-red-600' : pct >= 70 ? 'text-amber-600' : 'text-emerald-600'}`}>{pct}% terpakai</span>
-                                    <span className="text-slate-400">{formatTokens(g.totalLimit - g.totalUsage)} tersisa</span>
+                                  <div className="flex justify-between text-[10px]">
+                                    <span className={`font-medium ${isOver ? 'text-red-600' : pct >= 70 ? 'text-amber-600' : 'text-emerald-600'}`}>{pct}%</span>
+                                    <span className="text-slate-400">{formatTokens(g.totalLimit - g.totalUsage)} sisa</span>
                                   </div>
                                 </div>
                               ) : (
-                                <div className="text-xs text-slate-400 flex items-center gap-1">♾️ Tracking only — tidak ada limit</div>
+                                <div className="text-[10px] text-slate-400 flex items-center gap-1">♾️ Tracking only</div>
                               )}
                             </div>
-
-                            {/* Per-key breakdown */}
-                            {hasMultiKey && (
-                              <div className="border-t border-slate-100 bg-slate-50/50 p-4">
-                                <div className="text-xs font-medium text-slate-500 mb-2">Breakdown per API Key</div>
-                                <div className="space-y-2">
-                                  {g.keys.map((k, idx) => {
-                                    const kPct = k.monthlyLimit > 0 ? Math.min(100, Math.round((k.currentUsage / k.monthlyLimit) * 100)) : 0;
-                                    const kOver = k.monthlyLimit > 0 && k.currentUsage >= k.monthlyLimit;
-                                    return (
-                                      <div key={k.id || idx} className="flex items-center gap-3">
-                                        <span className="text-xs font-mono px-2 py-0.5 rounded bg-white border-slate-200 text-slate-600 min-w-[60px] text-center truncate max-w-[120px]">{k.apiKeyName || 'Default'}</span>
-                                        <div className="flex-1 min-w-0">
-                                          {k.monthlyLimit > 0 ? (
-                                            <div className="w-full bg-slate-200 rounded-full h-1.5">
-                                              <div className={`h-1.5 rounded-full ${kOver ? 'bg-red-500' : kPct >= 70 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, kPct)}%` }}></div>
-                                            </div>
-                                          ) : (
-                                            <div className="h-1.5 rounded-full bg-slate-200 relative overflow-hidden">
-                                              <div className="absolute inset-0 bg-gradient-to-r from-emerald-200 to-emerald-300" style={{ width: '30%' }}></div>
-                                            </div>
-                                          )}
-                                        </div>
-                                        <span className="text-xs text-slate-500 font-mono whitespace-nowrap">{formatTokens(k.currentUsage)}{k.monthlyLimit > 0 ? ` / ${formatTokens(k.monthlyLimit)}` : ''}</span>
-                                        <button onClick={() => handleDeleteQuota(k.id)} className="text-xs text-slate-300 hover:text-red-500 transition-colors">✕</button>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Single key — delete button */}
-                            {!hasMultiKey && (
-                              <div className="border-t border-slate-100 px-4 py-2 flex justify-end">
-                                <button onClick={() => handleDeleteQuota(g.keys[0].id)} className="text-xs px-2 py-1 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors">Hapus</button>
-                              </div>
-                            )}
                           </div>
                         );
                       })}
