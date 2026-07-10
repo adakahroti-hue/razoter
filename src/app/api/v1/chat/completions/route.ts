@@ -204,6 +204,11 @@ export async function POST(request: NextRequest) {
 
         const upstreamUrl = `${comboProvider.baseUrl.replace(/\/+$/, '')}/chat/completions`;
         const { header: comboAuth, apiKeyName: comboKeyName } = await resolveAccessToken(comboProvider);
+        // TEMP DIAGNOSTIC
+        if (comboKeyName === 'Default') {
+          const ak = comboProvider?.apiKeys;
+          addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'error', latencyMs: 0, errorMessage: `[DIAG] apiKeys type=${Array.isArray(ak) ? 'array(' + ak.length + ')' : typeof ak}, strategy=${comboProvider.apiKeyStrategy}, firstEnabled=${Array.isArray(ak) ? (ak.filter((k:any)=>k.enabled!==false)[0]?.name ?? 'none') : 'n/a'}`, apiKeyName: 'Default' }).catch(() => {});
+        }
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs);
 
