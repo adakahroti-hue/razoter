@@ -1,7 +1,6 @@
-const CACHE_NAME = 'razoter-v1';
+const CACHE_NAME = 'razoter-v2';
 const STATIC_ASSETS = [
   '/',
-  '/dashboard',
   '/manifest.json',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png',
@@ -27,6 +26,13 @@ self.addEventListener('fetch', (event) => {
   // Skip API calls and non-GET requests
   if (event.request.url.includes('/api/') || event.request.method !== 'GET') {
     return;
+  }
+
+  // Never cache HTML navigations (dashboard) — always fetch fresh so new deploys show immediately
+  if (event.request.mode === 'navigate') {
+    return event.respondWith(
+      fetch(event.request).catch(() => caches.match(event.request))
+    );
   }
 
   event.respondWith(
