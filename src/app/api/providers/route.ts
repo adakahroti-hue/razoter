@@ -98,30 +98,29 @@ export async function PUT(request: NextRequest) {
       delete updates.apiKey;
     }
 
-    // Handle apiKeys (multi) - merge new keys with existing ones
+    // Handle apiKeys (multi) — client array is authoritative for ORDER + NAMES.
+    // Fill in values for any key left empty/masked by matching existing name.
     if (updates.apiKeys && Array.isArray(updates.apiKeys)) {
-      const newKeys = updates.apiKeys.filter((k: any) => k && k.key && !k.key.includes('...'));
-      if (newKeys.length > 0) {
-        // Fetch existing provider to merge keys
+      const clientKeys = updates.apiKeys as Array<{ name?: string; key?: string; enabled?: boolean }>;
+      const hasRealKey = clientKeys.some(k => k && k.key && !k.key.includes('...'));
+      if (hasRealKey) {
         const existing = await getProvider(id);
-        if (existing && existing.apiKeys && existing.apiKeys.length > 0) {
-          // Merge: keep existing keys, add new ones (avoid duplicates by name)
-          const existingNames = new Set(existing.apiKeys.map((k: any) => k.name));
-          const merged = [...existing.apiKeys];
-          for (const nk of newKeys) {
-            if (!existingNames.has(nk.name)) {
-              merged.push({ name: nk.name, key: nk.key, enabled: nk.enabled ?? true });
-            } else {
-              // Update existing key with same name
-              const idx = merged.findIndex((k: any) => k.name === nk.name);
-              if (idx >= 0) merged[idx] = { name: nk.name, key: nk.key, enabled: nk.enabled ?? true };
-            }
+        const existingMap = new Map<string, any>();
+        if (existing?.apiKeys) for (const k of existing.apiKeys) existingMap.set(k.name, k);
+        const result: Array<{ name: string; key: string; enabled: boolean }> = [];
+        for (const ck of clientKeys) {
+          if (!ck || !ck.name) continue;
+          if (ck.key && !ck.key.includes('...')) {
+            result.push({ name: ck.name, key: ck.key, enabled: ck.enabled ?? true });
+          } else {
+            // empty/masked → keep existing value matched by name
+            const ex = existingMap.get(ck.name);
+            if (ex) result.push({ name: ck.name, key: ex.key, enabled: ck.enabled ?? ex.enabled ?? true });
           }
-          updates.apiKeys = merged;
         }
-        // If no existing keys, just use the new keys as-is
+        updates.apiKeys = result.length > 0 ? result : existing?.apiKeys ?? [];
       } else {
-        // All keys are masked = user didn't change any key. Don't overwrite.
+        // No real keys supplied → nothing changed → don't overwrite.
         delete updates.apiKeys;
       }
     }
