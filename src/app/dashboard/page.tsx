@@ -749,9 +749,9 @@ export default function Dashboard() {
         {/* Tabs */}
         <div className="tab-bar flex gap-1 rounded-lg p-1 overflow-x-auto flex-nowrap justify-center sm:justify-start">
           {(['providers', 'combos', 'logs', 'settings'] as const).map(tab => (
-            <button key={tab} aria-label={tab === 'providers' ? 'Providers' : tab === 'combos' ? 'Kombo' : tab === 'settings' ? 'Pengaturan' : 'Logs'} onClick={() => setActiveTab(tab)} className={`flex-1 sm:flex-none min-w-[3rem] px-3 sm:px-4 py-2.5 sm:py-2 rounded-md text-[15px] sm:text-[16px] font-semibold transition-colors whitespace-nowrap flex items-center justify-center gap-2 ${activeTab === tab ? 'tab-active shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+            <button key={tab} aria-label={tab === 'providers' ? 'Providers' : tab === 'combos' ? 'Gabung' : tab === 'settings' ? 'Pengaturan' : 'Logs'} onClick={() => setActiveTab(tab)} className={`flex-1 sm:flex-none min-w-[3rem] px-3 sm:px-4 py-2.5 sm:py-2 rounded-md text-[15px] sm:text-[16px] font-semibold transition-colors whitespace-nowrap flex items-center justify-center gap-2 ${activeTab === tab ? 'tab-active shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
               <NavIcon name={tab} active={activeTab === tab} size={19} />
-              <span className="hidden sm:inline">{tab === 'providers' ? 'Providers' : tab === 'combos' ? 'Kombo' : tab === 'settings' ? 'Pengaturan' : 'Logs'}</span>
+              <span className="hidden sm:inline">{tab === 'providers' ? 'Providers' : tab === 'combos' ? 'Gabung' : tab === 'settings' ? 'Pengaturan' : 'Logs'}</span>
             </button>
           ))}
         </div>
@@ -834,42 +834,41 @@ export default function Dashboard() {
           <div className="space-y-5">
             <div className="flex flex-wrap justify-between items-end gap-3">
               <div>
-                <h2 className="text-[23px] font-bold text-slate-900 tracking-tight">Combo Models</h2>
-                <p className="text-[13px] text-slate-500 mt-1 leading-relaxed max-w-xl">Buat model virtual dari gabungan beberapa provider. Pakai nama combo sebagai model di request.</p>
+                <h2 className="text-[23px] font-bold text-slate-900 tracking-tight">Gabung Models</h2>
+                <p className="text-[13px] text-slate-500 mt-1 leading-relaxed max-w-xl">Buat model virtual dari gabungan beberapa provider. Pakai nama gabungan sebagai model di request.</p>
               </div>
-              <button onClick={openComboModal} className="btn btn-primary text-[13.5px]">+ Buat Combo</button>
+              <button onClick={openComboModal} className="btn btn-primary text-[13.5px]">+ Buat Gabung</button>
             </div>
             {combos.length === 0 ? (
-              <div className="card text-center py-12 text-slate-400"><div className="text-4xl mb-2">🧩</div><p>Belum ada combo. Buat combo pertama!</p></div>
+              <div className="card text-center py-12 text-slate-400"><div className="text-4xl mb-2">🧩</div><p>Belum ada gabungan. Buat gabungan pertama!</p></div>
             ) : (
-              <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                 {combos.map(c => (
-                  <div key={c.id} className="card combo-card p-3.5">
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-semibold text-slate-900 text-[16px] leading-snug truncate flex-1">{c.name}</h3>
-                          {!c.enabled && <span className="chip" style={{opacity:0.8}}>disabled</span>}
-                          <span className={`chip ${c.enabled ? 'chip-cyan' : ''}`}>{c.items.length} models</span>
-                          <span className="chip">{c.strategy === 'round-robin' ? '🔄 Round Robin' : '🔀 Failover Priority'}</span>
-                          {c.enabled && <span className="chip chip-cyan status-on">● ON</span>}
-                        </div>
-                        <div className="flex flex-wrap gap-1.5 mt-2.5">
-                          {c.items.map((item, i) => (
-                            <span key={i} className="chip-model font-mono">
-                              <span className="prov">{item.providerName}</span>
-                              <span className="arrow">→</span>
-                              <span className="model">{item.model}</span>
-                            </span>
-                          ))}
-                        </div>
+                  <div key={c.id} className="card combo-card p-3 flex flex-col">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <h3 className="font-semibold text-slate-900 text-[15px] leading-snug truncate flex-1">{c.name}</h3>
+                        <button onClick={() => handleToggleCombo(c)} className={`chip ${c.enabled ? 'chip-cyan status-on' : ''} flex-shrink-0`}>{c.enabled ? '● ON' : '○ OFF'}</button>
                       </div>
-                      <button onClick={() => handleToggleCombo(c)} className={`chip ${c.enabled ? 'chip-cyan status-on' : ''} self-start flex-shrink-0`}>{c.enabled ? '● ON' : '○ OFF'}</button>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        <span className={`chip ${c.enabled ? 'chip-cyan' : ''}`}>{c.items.length} models</span>
+                        <span className="chip">{c.strategy === 'round-robin' ? '🔄 RR' : '🔀 Failover'}</span>
+                        {!c.enabled && <span className="chip" style={{opacity:0.8}}>disabled</span>}
+                      </div>
+                      <div className="flex flex-wrap gap-1 mt-2.5">
+                        {c.items.map((item, i) => (
+                          <span key={i} className="chip-model font-mono" title={`${item.providerName} → ${item.model}`}>
+                            <span className="prov">{item.providerName}</span>
+                            <span className="arrow">→</span>
+                            <span className="model truncate max-w-[7rem]">{item.model}</span>
+                          </span>
+                        ))}
+                      </div>
                     </div>
                     <hr className="combo-divider" />
                     <div className="flex gap-2">
                       <button onClick={() => openEditComboModal(c)} className="btn-xs btn-xs-edit flex-1">✏️ Edit</button>
-                      <button onClick={() => handleDeleteCombo(c.id)} className="btn-xs btn-xs-del flex-1">🗑️ Hapus</button>
+                      <button onClick={() => handleDeleteCombo(c.id)} className="btn-xs btn-xs-del flex-1">🗑️</button>
                     </div>
                   </div>
                 ))}
