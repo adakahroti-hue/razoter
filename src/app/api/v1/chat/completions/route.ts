@@ -363,6 +363,11 @@ export async function POST(request: NextRequest) {
       // Standard OpenAI-compatible provider
       const upstreamUrl = `${currentProvider.baseUrl.replace(/\/+$/, '')}/chat/completions`;
       const { header: authHeader, apiKeyName: stdAkName } = await resolveAccessToken(currentProvider);
+      // TEMP DIAGNOSTIC (provider-path)
+      if (stdAkName === 'Default') {
+        const ak = currentProvider?.apiKeys;
+        addLog({ providerId: currentProvider.id, providerName: currentProvider.name, model: selectedModel || requestedModel, status: 'error', latencyMs: 0, errorMessage: `[DIAG-P] apiKeys type=${Array.isArray(ak) ? 'array(' + ak.length + ')' : typeof ak}, strategy=${currentProvider.apiKeyStrategy}, firstEnabled=${Array.isArray(ak) ? (ak.filter((k:any)=>k.enabled!==false)[0]?.name ?? 'none') : 'n/a'}`, apiKeyName: 'Default' }).catch(() => {});
+      }
       lastAkName = stdAkName;
 
       const controller = new AbortController();
