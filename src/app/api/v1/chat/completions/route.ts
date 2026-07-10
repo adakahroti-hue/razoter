@@ -170,7 +170,9 @@ export async function POST(request: NextRequest) {
       if (!comboResult) break;
 
       const comboProvider = await getProvider(comboResult.providerId);
-      if (!comboProvider || !comboProvider.enabled) {
+      // Allow multi-key providers into combos even if globally disabled (keys are handled per-key)
+      const hasMultiKey = !!comboProvider?.apiKeys && comboProvider.apiKeys.filter(k => k.enabled !== false).length > 1;
+      if (!comboProvider || (!comboProvider.enabled && !hasMultiKey)) {
         comboTriedIndices.push(comboResult.itemIndex);
         continue;
       }
@@ -388,6 +390,7 @@ export async function POST(request: NextRequest) {
           // Intercept stream to extract token usage from last chunk, then update quota
           const reader = upstreamResponse.body.getReader();
           let lastUsage: number | undefined;
+          let estimatedChars = 0;
           const stream = new ReadableStream({
             async start(controller) {
               const decoder = new TextDecoder();
@@ -397,7 +400,6 @@ export async function POST(request: NextRequest) {
                   const { done, value } = await reader.read();
                   if (done) break;
                   buffer += decoder.decode(value, { stream: true });
-                  // Look for usage in chunks
                   const lines = buffer.split('\n');
                   buffer = lines.pop() || '';
                   for (const line of lines) {
@@ -405,27 +407,32 @@ export async function POST(request: NextRequest) {
                       try {
                         const json = JSON.parse(line.slice(6));
                         if (json.usage?.total_tokens) lastUsage = json.usage.total_tokens;
+                        // accumulate generated content for token estimation
+                        const delta = json.choices?.[0]?.delta?.content;
+                        if (typeof delta === 'string') estimatedChars += delta.length;
                       } catch {}
                     }
                   }
                   controller.enqueue(value);
                 }
-                // Process final buffer
                 const finalLines = buffer.split('\n');
                 for (const line of finalLines) {
                   if (line.startsWith('data: ') && line !== 'data: [DONE]') {
                     try {
                       const json = JSON.parse(line.slice(6));
                       if (json.usage?.total_tokens) lastUsage = json.usage.total_tokens;
+                      const delta = json.choices?.[0]?.delta?.content;
+                      if (typeof delta === 'string') estimatedChars += delta.length;
                     } catch {}
                   }
                 }
               } finally {
                 controller.close();
-                // Update quota and log with token usage after stream ends
-                if (lastUsage) {
+                // Prefer real usage; fall back to estimate (~4 chars/token) when upstream omits it
+                const usage = lastUsage ?? (estimatedChars > 0 ? Math.ceil(estimatedChars / 4) : undefined);
+                if (usage) {
                   import('@/lib/storage').then(({ incrementQuotaUsage }) =>
-                    incrementQuotaUsage(currentProvider!.id, lastUsage!, stdAkName).catch(() => {})
+                    incrementQuotaUsage(currentProvider!.id, usage, stdAkName).catch(() => {})
                   ).catch(() => {});
                 }
               }
@@ -439,7 +446,7 @@ export async function POST(request: NextRequest) {
             status: 'success',
             statusCode: 200,
             latencyMs,
-            tokensUsed: lastUsage,
+            tokensUsed: lastUsage ?? (estimatedChars > 0 ? Math.ceil(estimatedChars / 4) : undefined),
             apiKeyName: stdAkName,
           });
 

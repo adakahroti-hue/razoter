@@ -1263,7 +1263,7 @@ export default function Dashboard() {
                         <div className="flex-1">
                           <select className="input" value={item.providerId} onChange={e => updateComboItem(i, 'providerId', e.target.value)}>
                             <option value="">Pilih Provider...</option>
-                            {providers.filter(p => p.enabled).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            {providers.filter(p => p.enabled || (p.apiKeys && p.apiKeys.filter(k => k.enabled !== false).length > 1)).map(p => <option key={p.id} value={p.id}>{p.name}{p.enabled ? '' : ' (multi-key)'}</option>)}
                           </select>
                         </div>
                         <div className="flex-1">
