@@ -221,9 +221,9 @@ export async function POST(request: NextRequest) {
 
             // Intercept stream to extract token usage, then update quota
             const reader = upstreamResponse.body.getReader();
+            let lastUsage: number | undefined;
             const stream = new ReadableStream({
               async start(controller) {
-                let lastUsage: number | undefined;
                 const decoder = new TextDecoder();
                 let buffer = '';
                 try {
@@ -387,9 +387,9 @@ export async function POST(request: NextRequest) {
 
           // Intercept stream to extract token usage from last chunk, then update quota
           const reader = upstreamResponse.body.getReader();
+          let lastUsage: number | undefined;
           const stream = new ReadableStream({
             async start(controller) {
-              let lastUsage: number | undefined;
               const decoder = new TextDecoder();
               let buffer = '';
               try {
