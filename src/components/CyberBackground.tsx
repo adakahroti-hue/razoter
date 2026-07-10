@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 
 // Subtle blue vertical code flow + faint data dots / circuit traces.
-// Atmosphere only — low opacity, never covers content.
+// Atmosphere only — very low opacity, brighter in empty areas, never over content.
 const GLYPHS = '01<>{}[]#$%&*+=/\\|ABCDEF0123456789ｱｲｳｴｵｶｷｸｹｺ';
 
 export default function CyberBackground() {
@@ -32,17 +32,40 @@ export default function CyberBackground() {
       );
       ctx.fillStyle = '#050B18';
       ctx.fillRect(0, 0, width, height);
+
+      // static faint circuit traces + perspective grid
+      ctx.strokeStyle = 'rgba(53, 230, 255, 0.05)';
+      ctx.lineWidth = 1;
+      const step = 90;
+      for (let x = 0; x < width; x += step) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x + (x - width / 2) * 0.12, height);
+        ctx.stroke();
+      }
+      for (let y = height; y > 0; y -= step) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y + (y < height / 2 ? -20 : 20));
+        ctx.stroke();
+      }
+      // sparse node dots
+      ctx.fillStyle = 'rgba(53, 230, 255, 0.10)';
+      for (let i = 0; i < (width * height) / 26000; i++) {
+        ctx.beginPath();
+        ctx.arc(Math.random() * width, Math.random() * height, 1.1, 0, Math.PI * 2);
+        ctx.fill();
+      }
     };
 
     const rainColors = [
-      'rgba(53, 230, 255, 0.40)',
-      'rgba(0, 191, 255, 0.32)',
-      'rgba(53, 230, 255, 0.26)',
+      'rgba(53, 230, 255, 0.34)',
+      'rgba(0, 191, 255, 0.28)',
+      'rgba(53, 230, 255, 0.22)',
     ];
 
     const draw = () => {
-      // gentle fade → soft trailing tails
-      ctx.fillStyle = 'rgba(5, 11, 24, 0.10)';
+      ctx.fillStyle = 'rgba(5, 11, 24, 0.11)';
       ctx.fillRect(0, 0, width, height);
 
       ctx.font = `${fontSize}px 'JetBrains Mono', ui-monospace, monospace`;
@@ -54,22 +77,12 @@ export default function CyberBackground() {
         ctx.fillStyle = rainColors[(Math.random() * rainColors.length) | 0];
         ctx.fillText(ch, x, y);
         if (y > height && Math.random() > 0.975) drops[i] = 0;
-        drops[i] += 0.42;
-      }
-
-      // sparse data dots / circuit nodes
-      if (Math.random() > 0.6) {
-        const dx = Math.random() * width;
-        const dy = Math.random() * height;
-        ctx.fillStyle = 'rgba(53, 230, 255, 0.14)';
-        ctx.beginPath();
-        ctx.arc(dx, dy, 1.1, 0, Math.PI * 2);
-        ctx.fill();
+        drops[i] += 0.4;
       }
     };
 
     const tick = (t: number) => {
-      if (t - last > 60) {
+      if (t - last > 62) {
         draw();
         last = t;
       }
@@ -97,7 +110,7 @@ export default function CyberBackground() {
         height: '100%',
         zIndex: -10,
         pointerEvents: 'none',
-        opacity: 0.22,
+        opacity: 0.2,
       }}
     />
   );
