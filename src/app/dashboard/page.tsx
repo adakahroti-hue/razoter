@@ -634,13 +634,13 @@ export default function Dashboard() {
 
   // ─── Quota actions ───────────────────────────────
 
-  async function handleTestSingleModel(provider: Provider, model: string) {
-    const key = `${provider.id}:${model}`;
+  async function handleTestSingleModel(provider: Provider, model: string, apiKey?: string, apiKeyName?: string) {
+    const key = `${provider.id}:${apiKeyName ?? 'default'}:${model}`;
     setModelTestResults(prev => ({ ...prev, [key]: { status: 'testing' } }));
     try {
       const res = await api('/api/providers/test-model', {
         method: 'POST',
-        body: JSON.stringify({ baseUrl: provider.baseUrl, providerId: provider.id, model }),
+        body: JSON.stringify({ baseUrl: provider.baseUrl, providerId: provider.id, model, apiKey, apiKeyName }),
       });
       const data = await res.json();
       setModelTestResults(prev => ({
@@ -658,8 +658,18 @@ export default function Dashboard() {
     setTestingAllModels(provider.id);
     setModelTestResults({});
     const models = provider.selectedModels.length > 0 ? provider.selectedModels : provider.models;
-    for (const model of models) {
-      await handleTestSingleModel(provider, model);
+    // Determine the list of keys to test (respect multi-key order; single key falls back to main apiKey)
+    const keys: Array<{ name: string; key?: string }> = [];
+    if (provider.apiKeys && provider.apiKeys.length > 0) {
+      for (const k of provider.apiKeys) {
+        if (k.enabled !== false) keys.push({ name: k.name, key: k.key });
+      }
+    }
+    if (keys.length === 0) keys.push({ name: 'Default', key: provider.apiKey });
+    for (const k of keys) {
+      for (const model of models) {
+        await handleTestSingleModel(provider, model, k.key, k.name);
+      }
     }
     setTestingAllModels(null);
   }
@@ -795,26 +805,55 @@ export default function Dashboard() {
                       <span className="inline-flex items-center gap-1">🔑 <b className="font-semibold text-slate-700">{p.apiKeys?.length ?? 0}</b> key</span>
                       <span className="inline-flex items-center gap-1">🪙 <b className="font-semibold text-slate-700">{formatTokens(tokenByProvider[p.id] ?? 0)}</b> token</span>
                     </div>
-                    <div className="flex flex-wrap gap-1 mt-2 flex-1 content-start">
-                      {(p.selectedModels.length > 0 ? p.selectedModels : p.models).map(m => {
-                        const key = `${p.id}:${m}`;
-                        const result = modelTestResults[key];
-                        const statusIcon = result?.status === 'testing' ? '⏳' : result?.status === 'ok' ? '✅' : result?.status === 'fail' ? '❌' : null;
-                        const testedBg = result?.status === 'ok' ? 'bg-emerald-50 text-emerald-700' : result?.status === 'fail' ? 'bg-red-50 text-red-700' : 'text-slate-600';
-                        return (
-                          <span key={m} className={`group inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[12.5px] font-mono leading-relaxed ${testedBg}`}>
-                            {statusIcon && <span className="text-[10px]">{statusIcon}</span>}
-                            {m}
-                            {result?.status === 'ok' && result.latencyMs && <span className="text-[10px] opacity-70">{formatLatency(result.latencyMs)}</span>}
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleTestSingleModel(p, m); }}
-                              disabled={result?.status === 'testing'}
-                              className="ml-0.5 opacity-0 group-hover:opacity-100 hover:opacity-100 text-blue-400 hover:text-blue-300 transition-opacity"
-                              title="Test model ini"
-                            >🔍</button>
-                          </span>
-                        );
-                      })}
+                    <div className="flex flex-col gap-2 mt-2 flex-1 content-start">
+                      {/* Group model test results by API key */}
+                      {(() => {
+                        const modelsList = p.selectedModels.length > 0 ? p.selectedModels : p.models;
+                        // Build the key groups: from stored apiKeys (or single Default)
+                        const keyGroups: Array<{ name: string }> = [];
+                        if (p.apiKeys && p.apiKeys.length > 0) {
+                          for (const k of p.apiKeys) if (k.enabled !== false) keyGroups.push({ name: k.name });
+                        }
+                        if (keyGroups.length === 0) keyGroups.push({ name: 'Default' });
+                        return keyGroups.map(g => {
+                          const groupKey = `${p.id}:${g.name}:`;
+                          const groupResults = modelsList.filter(m => modelTestResults[`${groupKey}${m}`]);
+                          const hasAny = groupResults.length > 0;
+                          return (
+                            <div key={g.name} className="rounded-lg border border-slate-200/70 p-2">
+                              <div className="text-[11px] font-semibold text-slate-500 mb-1 flex items-center gap-1">
+                                🔑 {g.name}
+                                {hasAny && (
+                                  <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${groupResults.every(m => modelTestResults[`${groupKey}${m}`]?.status === 'ok') ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                    {groupResults.filter(m => modelTestResults[`${groupKey}${m}`]?.status === 'ok').length}/{groupResults.length} ok
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {modelsList.map(m => {
+                                  const rkey = `${groupKey}${m}`;
+                                  const result = modelTestResults[rkey];
+                                  const statusIcon = result?.status === 'testing' ? '⏳' : result?.status === 'ok' ? '✅' : result?.status === 'fail' ? '❌' : null;
+                                  const testedBg = result?.status === 'ok' ? 'bg-emerald-50 text-emerald-700' : result?.status === 'fail' ? 'bg-red-50 text-red-700' : 'text-slate-600';
+                                  return (
+                                    <span key={m} className={`group inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[12.5px] font-mono leading-relaxed ${testedBg}`}>
+                                      {statusIcon && <span className="text-[10px]">{statusIcon}</span>}
+                                      {m}
+                                      {result?.status === 'ok' && result.latencyMs && <span className="text-[10px] opacity-70">{formatLatency(result.latencyMs)}</span>}
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleTestSingleModel(p, m, p.apiKeys?.find(k => k.name === g.name)?.key, g.name); }}
+                                        disabled={result?.status === 'testing'}
+                                        className="ml-0.5 opacity-0 group-hover:opacity-100 hover:opacity-100 text-blue-400 hover:text-blue-300 transition-opacity"
+                                        title="Test model ini"
+                                      >🔍</button>
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
                     </div>
 
                     <hr className="card-divider" />

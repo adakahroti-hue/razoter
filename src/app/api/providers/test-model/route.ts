@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { baseUrl, apiKey, model, providerId } = body;
+    const { baseUrl, apiKey, apiKeyName, model, providerId } = body;
 
     if (!model) {
       return withCors(
@@ -35,7 +35,8 @@ export async function POST(request: NextRequest) {
     let refreshToken: string | undefined;
     let expiresAt: string | undefined;
     let providerName = 'Test';
-    let testAkName: string | undefined = '🔍 Tes Model';
+    // Use the caller-supplied key name when provided (per-key model testing)
+    let testAkName: string | undefined = apiKeyName || '🔍 Tes Model';
 
     if (providerId) {
       const provider = await getProvider(providerId);
@@ -48,7 +49,9 @@ export async function POST(request: NextRequest) {
       refreshToken = provider.chatgptRefreshToken;
       expiresAt = provider.chatgptExpiresAt;
       providerName = provider.name;
-      // testAkName stays '🔍 Tes Model' so logs are clearly labeled as model tests
+      // When the caller already supplied a specific key (per-key model test),
+      // use its name for logging; otherwise keep the generic test label.
+      if (apiKey) testAkName = apiKeyName || '🔍 Tes Model';
     }
 
     if (!resolvedBaseUrl) {
