@@ -441,8 +441,12 @@ body::before {
   background: linear-gradient(180deg, #00BFFF, #7DF0FF);
 }
 
-/* ─── Mono accents ──────────────────────── */
-.font-mono, code, pre { font-family: var(--font-mono); }
+/* ─── Mono accents (bolder + readable for technical text) ─── */
+.font-mono, code, pre {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  line-height: 1.5;
+}
 
 /* ─── Mobile ────────────────────────────── */
 @media (max-width: 640px) {

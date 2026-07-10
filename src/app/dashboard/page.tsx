@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { NavIcon } from '@/components/NavIcon';
+import RazoterLogo from '@/components/RazoterLogo';
 
 // ─── Types ─────────────────────────────────────────
 
@@ -730,13 +732,16 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen" style={{ background: 'radial-gradient(1200px 700px at 12% -10%, rgba(0,191,255,0.10), transparent 58%), radial-gradient(1000px 600px at 110% 6%, rgba(53,230,255,0.08), transparent 58%), radial-gradient(900px 700px at 50% 120%, rgba(0,153,204,0.07), transparent 60%), linear-gradient(180deg,#050B18 0%,#081426 100%)' }}>
       <header className="app-header sticky top-0 z-40 border-b">
-        <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg" style={{ background: 'linear-gradient(135deg,#0077A3,#35E6FF)', boxShadow: '0 4px 14px -4px rgba(0,191,255,0.5)' }}>⚡</div>
-            <h1 className="text-lg sm:text-xl font-bold text-slate-900">Razoter</h1><span className="text-xs text-slate-400">v2.2</span>
+        <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4">
+          <div className="flex items-center gap-[13px]">
+            <RazoterLogo size={42} />
+            <div className="flex items-baseline gap-2">
+              <h1 className="text-[23px] sm:text-[24px] font-bold text-slate-900 tracking-tight leading-none">Razoter</h1>
+              <span className="text-[13px] text-slate-400 font-medium leading-none">v2.2</span>
+            </div>
           </div>
           <div className="flex items-center gap-4">
-            <button onClick={handleLogout} className="text-sm text-slate-500 hover:text-red-600 transition-colors">Logout</button>
+            <button onClick={handleLogout} className="text-[14px] font-medium text-slate-500 hover:text-red-600 transition-colors">Logout</button>
           </div>
         </div>
       </header>
@@ -744,9 +749,9 @@ export default function Dashboard() {
         {/* Tabs */}
         <div className="tab-bar flex gap-1 rounded-lg p-1 overflow-x-auto flex-nowrap">
           {(['providers', 'combos', 'logs', 'settings'] as const).map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 min-w-[3rem] px-2 sm:px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${activeTab === tab ? 'tab-active shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-              <span className="sm:hidden">{tab === 'providers' ? '🔌' : tab === 'combos' ? '🧩' : tab === 'settings' ? '⚙️' : '📋'}</span>
-              <span className="hidden sm:inline">{tab === 'providers' ? '🔌 Providers' : tab === 'combos' ? '🧩 Kombo' : tab === 'settings' ? '⚙️ Pengaturan' : '📋 Logs'}</span>
+            <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 min-w-[3rem] px-2 sm:px-4 py-2 rounded-md text-[15px] sm:text-[16px] font-semibold transition-colors whitespace-nowrap flex items-center justify-center gap-2 ${activeTab === tab ? 'tab-active shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+              <NavIcon name={tab} active={activeTab === tab} size={18} />
+              <span>{tab === 'providers' ? 'Providers' : tab === 'combos' ? 'Kombo' : tab === 'settings' ? 'Pengaturan' : 'Logs'}</span>
             </button>
           ))}
         </div>
@@ -755,7 +760,7 @@ export default function Dashboard() {
         {activeTab === 'providers' && (
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold text-slate-900 tracking-tight">Providers</h2>
+              <h2 className="text-[23px] font-bold text-slate-900 tracking-tight">Providers</h2>
               <div className="flex gap-2">
                 <button onClick={() => setShowArchived(s => !s)} className={`text-xs px-2 py-1 rounded ${showArchived ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>📦 {showArchived ? 'Sembunyikan Arsip' : 'Tampilkan Arsip'}</button>
                 <button onClick={() => { resetProviderForm(); setShowProviderModal(true); }} className="btn btn-primary text-sm sm:text-base">+ Add Provider</button>
@@ -768,12 +773,12 @@ export default function Dashboard() {
                 {providers.map(p => (
                   <div key={p.id} className="card flex flex-col p-3 min-h-[264px]">
                     <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-slate-900 text-sm truncate flex-1">{p.name}</h3>
-                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${p.enabled ? 'bg-emerald-100 text-emerald-700 status-on' : 'bg-slate-200 text-slate-500'}`}>{p.enabled ? 'ON' : 'OFF'}</span>
-                      <button onClick={() => handleArchiveProvider(p)} className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-amber-50 text-amber-700 hover:bg-amber-100" title={p.archived ? 'Buka dari arsip' : 'Arsip'}>{p.archived ? 'Buka' : '📦 Arsip'}</button>
+                      <h3 className="font-semibold text-slate-900 text-[15px] leading-snug truncate flex-1">{p.name}</h3>
+                      <span className={`px-1.5 py-0.5 rounded-full text-[11px] font-semibold ${p.enabled ? 'bg-emerald-100 text-emerald-700 status-on' : 'bg-slate-200 text-slate-500'}`}>{p.enabled ? 'ON' : 'OFF'}</span>
+                      <button onClick={() => handleArchiveProvider(p)} className="text-[11px] px-1.5 py-0.5 rounded-full font-medium bg-amber-50 text-amber-700 hover:bg-amber-100" title={p.archived ? 'Buka dari arsip' : 'Arsip'}>{p.archived ? 'Buka' : '📦 Arsip'}</button>
                     </div>
-                    <div className="text-[11px] text-slate-500 mt-1 font-mono truncate" title={p.baseUrl}>{p.baseUrl}</div>
-                    <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500">
+                    <div className="text-[13px] text-slate-400 mt-1.5 font-mono truncate leading-relaxed" title={p.baseUrl}>{p.baseUrl}</div>
+                    <div className="flex items-center gap-3 mt-1.5 text-[12.5px] text-slate-500 leading-relaxed">
                       <span className="inline-flex items-center gap-1">🔑 <b className="font-semibold text-slate-700">{p.apiKeys?.length ?? 0}</b> key</span>
                       <span className="inline-flex items-center gap-1">🪙 <b className="font-semibold text-slate-700">{formatTokens(tokenByProvider[p.id] ?? 0)}</b> token</span>
                     </div>
@@ -784,7 +789,7 @@ export default function Dashboard() {
                         const statusIcon = result?.status === 'testing' ? '⏳' : result?.status === 'ok' ? '✅' : result?.status === 'fail' ? '❌' : null;
                         const testedBg = result?.status === 'ok' ? 'bg-emerald-50 text-emerald-700' : result?.status === 'fail' ? 'bg-red-50 text-red-700' : 'text-slate-600';
                         return (
-                          <span key={m} className={`group inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-mono ${testedBg}`}>
+                          <span key={m} className={`group inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[12.5px] font-mono leading-relaxed ${testedBg}`}>
                             {statusIcon && <span className="text-[10px]">{statusIcon}</span>}
                             {m}
                             {result?.status === 'ok' && result.latencyMs && <span className="text-[10px] opacity-70">{formatLatency(result.latencyMs)}</span>}
@@ -805,14 +810,14 @@ export default function Dashboard() {
                       <button
                         onClick={() => handleTestAllModels(p)}
                         disabled={testingAllModels === p.id}
-                        className="text-xs px-2 py-2 rounded-lg bg-blue-50 text-blue-400 hover:text-blue-300 border border-blue-300/40 hover:border-blue-300/70 transition-colors w-full font-medium"
+                        className="text-[13.5px] px-2 py-2 rounded-lg bg-blue-50 text-blue-400 hover:text-blue-300 border border-blue-300/40 hover:border-blue-300/70 transition-colors w-full font-medium"
                       >
                         {testingAllModels === p.id ? '⏳ Testing...' : '🧪 Cek Semua Model'}
                       </button>
 
                       <div className="grid grid-cols-2 gap-2 mt-2">
-                        <button onClick={() => openEditModal(p)} className="text-xs px-2 py-2 rounded-lg bg-slate-100 text-slate-700 hover:text-slate-900 hover:bg-slate-200 border border-slate-300/30 hover:border-blue-300/60 transition-colors font-medium">✏️ Edit</button>
-                        <button onClick={() => handleDeleteProvider(p.id)} className="text-xs px-2 py-2 rounded-lg bg-red-50 text-red-300 hover:text-red-200 hover:bg-red-100 border border-red-300/30 hover:border-red-300/60 transition-colors font-medium">🗑️ Hapus</button>
+                        <button onClick={() => openEditModal(p)} className="text-[13.5px] px-2 py-2 rounded-lg bg-slate-100 text-slate-700 hover:text-slate-900 hover:bg-slate-200 border border-slate-300/30 hover:border-blue-300/60 transition-colors font-medium">✏️ Edit</button>
+                        <button onClick={() => handleDeleteProvider(p.id)} className="text-[13.5px] px-2 py-2 rounded-lg bg-red-50 text-red-300 hover:text-red-200 hover:bg-red-100 border border-red-300/30 hover:border-red-300/60 transition-colors font-medium">🗑️ Hapus</button>
                       </div>
                     </div>
                   </div>
