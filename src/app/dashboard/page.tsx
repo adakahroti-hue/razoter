@@ -451,7 +451,7 @@ export default function Dashboard() {
     setEditingProvider(provider);
     setProviderForm({ name: provider.name, baseUrl: provider.baseUrl, apiKey: '' });
     const existingKeys = (provider.apiKeys && provider.apiKeys.length > 0)
-      ? provider.apiKeys.map(k => ({ name: k.name, key: '' }))
+      ? provider.apiKeys.map(k => ({ name: k.name, key: k.key }))
       : [{ name: 'Key 1', key: '' }];
     setProviderFormKeys(existingKeys);
     setProviderFormStrategy(provider.apiKeyStrategy || 'random');
