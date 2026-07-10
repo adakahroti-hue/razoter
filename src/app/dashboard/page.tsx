@@ -914,7 +914,7 @@ export default function Dashboard() {
                       <div key={k.id} className="flex items-center gap-2 bg-slate-50 rounded-lg p-2">
                         <div className="flex-1 min-w-0">
                           <span className="font-medium text-slate-700 text-sm">{k.name}</span>
-                          <code className="text-xs text-slate-500 font-mono ml-2">{k.key.slice(0, 8)}...{k.key.slice(-4)}</code>
+                          <code className="text-xs text-slate-600 font-mono ml-2 break-all">{k.key}</code>
                         </div>
                         <CopyButton text={k.key} />
                         <button onClick={() => handleDeleteApiKey(k.id)} className="text-xs px-1.5 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-100">🗑️</button>
@@ -1123,7 +1123,7 @@ export default function Dashboard() {
                               setProviderFormKeys(updated);
                             }} />
                             {isExisting && editingProvider!.apiKeys[idx] && (
-                              <p className="text-xs text-slate-400 mt-1">Current: {editingProvider!.apiKeys[idx].key.slice(0, 8)}...{editingProvider!.apiKeys[idx].key.slice(-4)}</p>
+                              <p className="text-xs text-slate-400 mt-1">Key saat ini (edit untuk mengubah):</p>
                             )}
                           </div>
                         </div>
