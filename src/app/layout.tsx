@@ -49,6 +49,7 @@ export default function RootLayout({
       </head>
       <body className={`${inter.className} ${jetbrainsMono.variable} antialiased`}>
         <CyberBackground />
+        <div className="carbon-layer" aria-hidden />
         <div className="hud-corner hud-tl" aria-hidden />
         <div className="hud-corner hud-br" aria-hidden />
         {children}

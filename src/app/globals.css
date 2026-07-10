@@ -243,6 +243,30 @@ body::before {
     repeating-linear-gradient(45deg, rgba(255, 77, 166, 0.022) 0 1px, transparent 1px 120px);
 }
 
+/* ─── Carbon-fiber weave overlay (subtle, above canvas, below content) ─── */
+.carbon-layer {
+  position: fixed;
+  inset: 0;
+  z-index: -4;
+  pointer-events: none;
+  background-image:
+    /* weave diagonal 1 →↘ */
+    repeating-linear-gradient(45deg,
+      rgba(53,230,255,0.025) 0 2px,
+      rgba(0,0,0,0.06) 2px 4px,
+      transparent 4px 7px),
+    /* weave diagonal 2 ↙← */
+    repeating-linear-gradient(-45deg,
+      rgba(53,230,255,0.025) 0 2px,
+      rgba(0,0,0,0.06) 2px 4px,
+      transparent 4px 7px);
+  background-size: 7px 7px, 7px 7px;
+  /* fade edges → keep readable center */
+  mask-image: radial-gradient(circle at 50% 40%, black 0%, rgba(0,0,0,0.35) 75%, transparent 100%);
+  -webkit-mask-image: radial-gradient(circle at 50% 40%, black 0%, rgba(0,0,0,0.35) 75%, transparent 100%);
+  opacity: 0.6;
+}
+
 /* ─── Components ─────────────────────────── */
 
 .card {
