@@ -19,9 +19,18 @@ export const metadata: Metadata = {
   title: "Razoter - OpenAI API Proxy & Router",
   description: "Merge multiple OpenAI-compatible API endpoints into one with automatic rotation",
   manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/icons/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", type: "image/x-icon" },
+      { url: "/icons/icon-192x192.png", type: "image/png", sizes: "192x192" },
+      { url: "/icons/icon-512x512.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: [{ url: "/icons/icon-192x192.png" }],
+  },
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
     title: "Razoter",
   },
 };
