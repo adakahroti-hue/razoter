@@ -529,21 +529,41 @@ body::before {
 
 /* ─── Mobile ────────────────────────────── */
 @media (max-width: 640px) {
+  main { padding-left: 0.875rem; padding-right: 0.875rem; }
+  .app-header .max-w-7xl { padding-left: 0.875rem; padding-right: 0.875rem; }
+  /* header tighter: smaller logo/name on phones, keep alignment */
+  .app-header h1 { font-size: 18px !important; }
+  .app-header .gap-\[13px\] { gap: 10px !important; }
+
   .modal-backdrop { align-items: flex-end; }
   .modal-backdrop .bg-white {
-    max-height: 90vh;
+    max-height: 92vh;
     border-radius: 1.5rem 1.5rem 0 0;
     margin: 0;
     width: 100%;
   }
   .btn { min-height: 44px; }
+  .btn-xs { min-height: 40px; }
   .input { font-size: 16px; }
+  /* tab bar: icon-only, centered, comfortable tap targets */
   .tab-bar {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    justify-content: center;
   }
   .tab-bar::-webkit-scrollbar { display: none; }
+  .tab-bar button {
+    min-width: 48px;
+    flex: 1 1 0;
+    padding-top: 0.65rem;
+    padding-bottom: 0.65rem;
+  }
+  /* cards: tighter padding, single/double column handled by grid utility */
+  .card { padding: 0.875rem; }
+  .combo-card { padding: 0.875rem; }
+  /* stack combo meta row on small screens */
+  .combo-card .sm\:flex-row { flex-direction: column; }
   .stat-row { flex-wrap: wrap; gap: 0.25rem 0.75rem; }
   .log-card {
     display: flex;

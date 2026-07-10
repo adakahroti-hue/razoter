@@ -747,11 +747,11 @@ export default function Dashboard() {
       </header>
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* Tabs */}
-        <div className="tab-bar flex gap-1 rounded-lg p-1 overflow-x-auto flex-nowrap">
+        <div className="tab-bar flex gap-1 rounded-lg p-1 overflow-x-auto flex-nowrap justify-center sm:justify-start">
           {(['providers', 'combos', 'logs', 'settings'] as const).map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 min-w-[3rem] px-2 sm:px-4 py-2 rounded-md text-[15px] sm:text-[16px] font-semibold transition-colors whitespace-nowrap flex items-center justify-center gap-2 ${activeTab === tab ? 'tab-active shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
-              <NavIcon name={tab} active={activeTab === tab} size={18} />
-              <span>{tab === 'providers' ? 'Providers' : tab === 'combos' ? 'Kombo' : tab === 'settings' ? 'Pengaturan' : 'Logs'}</span>
+            <button key={tab} aria-label={tab === 'providers' ? 'Providers' : tab === 'combos' ? 'Kombo' : tab === 'settings' ? 'Pengaturan' : 'Logs'} onClick={() => setActiveTab(tab)} className={`flex-1 sm:flex-none min-w-[3rem] px-3 sm:px-4 py-2.5 sm:py-2 rounded-md text-[15px] sm:text-[16px] font-semibold transition-colors whitespace-nowrap flex items-center justify-center gap-2 ${activeTab === tab ? 'tab-active shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+              <NavIcon name={tab} active={activeTab === tab} size={19} />
+              <span className="hidden sm:inline">{tab === 'providers' ? 'Providers' : tab === 'combos' ? 'Kombo' : tab === 'settings' ? 'Pengaturan' : 'Logs'}</span>
             </button>
           ))}
         </div>
