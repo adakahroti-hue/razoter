@@ -266,9 +266,18 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!token) return;
+    // Skip polling while tab is hidden to save network/Supabase load.
+    if (document.hidden) return;
     fetchData();
-    const interval = setInterval(fetchData, 15000);
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchData, 30000);
+    const onVisibility = () => {
+      if (!document.hidden) fetchData(); // refresh once when returning to tab
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [token, fetchData]);
 
   // ─── Auto-sync quotas with providers ───────────

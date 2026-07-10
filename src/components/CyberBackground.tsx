@@ -22,6 +22,22 @@ export default function CyberBackground() {
     let drops: number[] = [];
     let raf = 0;
     let last = 0;
+    let running = false;
+
+    // Respect "reduce motion" accessibility pref: keep static grid, no rain loop.
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    const start = () => {
+      if (running || reduceMotion) return;
+      running = true;
+      last = 0;
+      raf = requestAnimationFrame(tick);
+    };
+
+    const stop = () => {
+      running = false;
+      cancelAnimationFrame(raf);
+    };
 
     const resize = () => {
       width = canvas.width = window.innerWidth;
@@ -82,6 +98,7 @@ export default function CyberBackground() {
     };
 
     const tick = (t: number) => {
+      if (!running) return;
       if (t - last > 62) {
         draw();
         last = t;
@@ -91,11 +108,18 @@ export default function CyberBackground() {
 
     resize();
     window.addEventListener('resize', resize);
-    raf = requestAnimationFrame(tick);
+    // Pause rain while tab is hidden (saves CPU/battery); resume when visible.
+    const onVisibility = () => {
+      if (document.hidden) stop();
+      else start();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    start();
 
     return () => {
-      cancelAnimationFrame(raf);
+      stop();
       window.removeEventListener('resize', resize);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);
 
