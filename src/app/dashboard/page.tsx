@@ -808,7 +808,6 @@ export default function Dashboard() {
                     </div>
                     <div className="text-[13px] text-slate-400 mt-1.5 font-mono truncate leading-relaxed" title={p.baseUrl}>{p.baseUrl}</div>
                     <div className="flex items-center gap-3 mt-1.5 text-[12.5px] text-slate-500 leading-relaxed">
-                      <span className="inline-flex items-center gap-1"><IconKey size={13} className="text-slate-400" /> <b className="font-semibold text-slate-700">{p.apiKeys?.length ?? 0}</b> key</span>
                       <span className="inline-flex items-center gap-1"><IconCoin size={13} className="text-slate-400" /> <b className="font-semibold text-slate-700">{formatTokens(tokenByProvider[p.id] ?? 0)}</b> token</span>
                     </div>
                     <div className="flex flex-col gap-2 mt-2 flex-1 content-start">
@@ -905,7 +904,7 @@ export default function Dashboard() {
                   <div key={c.id} className="card combo-card p-3 flex flex-col">
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <h3 className="font-semibold text-slate-900 text-[15px] leading-snug truncate flex-1">{c.name}</h3>
+                        <h3 className="font-semibold text-green-600 text-[15px] leading-snug truncate flex-1">{c.name}</h3>
                         <button onClick={() => handleToggleCombo(c)} className={`chip ${c.enabled ? 'chip-cyan status-on' : ''} flex-shrink-0`}>{c.enabled ? '● ON' : '○ OFF'}</button>
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5 mt-2">
@@ -1081,6 +1080,32 @@ export default function Dashboard() {
                       <div className="font-semibold text-slate-900">ChatGPT Plus</div>
                       <div className="text-xs text-slate-500 mt-1">Login pakai akun ChatGPT Plus. Tanpa API key.</div>
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ─── Delete Provider Confirmation ──────── */}
+              {deleteTarget && (
+                <div className="fixed inset-0 bg-black/50 z-50 p-0 sm:p-4 flex flex-col sm:items-center sm:justify-center">
+                  <div className="flex-1 sm:flex-none" onClick={() => setDeleteTarget(null)} />
+                  <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full sm:max-w-sm">
+                    <div className="p-6 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-semibold text-slate-900">Konfirmasi Hapus</h3>
+                        <button onClick={() => setDeleteTarget(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+                      </div>
+                      <div className="flex items-start gap-3 p-3 rounded-lg bg-red-50 border border-red-100">
+                        <IconTrash size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
+                        <p className="text-sm text-slate-700">Yakin ingin menghapus provider <b className="font-semibold text-slate-900">{deleteTarget.name}</b>? Tindakan ini tidak bisa dibatalkan.</p>
+                      </div>
+                      <div className="flex gap-3 pt-2">
+                        <button onClick={() => setDeleteTarget(null)} className="btn btn-secondary flex-1">Batal</button>
+                        <button
+                          onClick={() => { const id = deleteTarget.id; setDeleteTarget(null); handleDeleteProvider(id); }}
+                          className="btn flex-1 bg-red-600 hover:bg-red-700 text-white"
+                        >Hapus</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
