@@ -243,7 +243,7 @@ body::before {
     repeating-linear-gradient(45deg, rgba(255, 77, 166, 0.022) 0 1px, transparent 1px 120px);
 }
 
-/* ─── Carbon-fiber weave overlay (subtle, above canvas, below content) ─── */
+/* ─── Carbon-fiber weave overlay (above canvas, below content) ─── */
 .carbon-layer {
   position: fixed;
   inset: 0;
@@ -252,18 +252,18 @@ body::before {
   background-image:
     /* weave diagonal 1 →↘ */
     repeating-linear-gradient(45deg,
-      rgba(53,230,255,0.11) 0 2px,
-      rgba(0,0,0,0.20) 2px 4px,
-      transparent 4px 10px),
+      rgba(53,230,255,0.22) 0 2px,
+      rgba(2,8,20,0.55) 2px 5px,
+      transparent 5px 11px),
     /* weave diagonal 2 ↙← */
     repeating-linear-gradient(-45deg,
-      rgba(53,230,255,0.11) 0 2px,
-      rgba(0,0,0,0.20) 2px 4px,
-      transparent 4px 10px);
-  background-size: 10px 10px, 10px 10px;
-  /* fade edges → keep readable center */
-  mask-image: radial-gradient(circle at 50% 38%, black 0%, rgba(0,0,0,0.7) 85%, transparent 100%);
-  -webkit-mask-image: radial-gradient(circle at 50% 38%, black 0%, rgba(0,0,0,0.7) 85%, transparent 100%);
+      rgba(53,230,255,0.22) 0 2px,
+      rgba(2,8,20,0.55) 2px 5px,
+      transparent 5px 11px);
+  background-size: 11px 11px, 11px 11px;
+  /* keep visible across most of screen, gentle vignette at edges only */
+  mask-image: radial-gradient(circle at 50% 40%, black 0%, rgba(0,0,0,0.85) 90%, transparent 100%);
+  -webkit-mask-image: radial-gradient(circle at 50% 40%, black 0%, rgba(0,0,0,0.85) 90%, transparent 100%);
   opacity: 1;
 }
 
