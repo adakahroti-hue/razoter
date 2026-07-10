@@ -1,128 +1,127 @@
 @import "tailwindcss";
 
 /* ============================================================
-   RAZOTER — Dark Cyber / Blue Matrix aesthetic
-   Tailwind palette overrides: remap default colors so the
-   existing JSX classes (slate-*, white, emerald-*, etc.)
-   automatically render in the cyber palette.
+   RAZOTER — Futuristic Blue Digital Matrix
+   Exact palette (override Tailwind defaults so existing JSX
+   classes auto-map to the cyber system):
+     Background : #050B18 / #081426
+     Surface   : #0D1B30 / #10243D
+     Primary   : #00BFFF
+     Accent    : #35E6FF
+     Text main : #F2F8FF
+     Text 2nd  : #8FA8C5
+     Border    : rgba(53,230,255,0.22)
    ============================================================ */
 
 @theme {
-  /* Base surfaces (dark navy / blue-black) */
-  --color-background: #05070f;
-  --color-foreground: #dbeafe;
+  /* ── Base ── */
+  --color-background: #050B18;
+  --color-foreground: #F2F8FF;
 
-  /* White -> cold glass surface */
-  --color-white: #0b1322;
+  /* White → solid dark surface */
+  --color-white: #0D1B30;
 
-  /* Slate scale → blue-tinted dark greys */
-  --color-slate-50:  #0c1322;
-  --color-slate-100: #111c30;
-  --color-slate-200: #1a2942;
-  --color-slate-300: #2a3c5a;
-  --color-slate-400: #5b7299;
-  --color-slate-500: #7d97bd;
-  --color-slate-600: #a4b9d8;
-  --color-slate-700: #c2d2ea;
-  --color-slate-800: #dbeafe;
-  --color-slate-900: #eaf2ff;
-  --color-slate-950: #f3f8ff;
+  /* ── Slate scale → blue-tinted dark greys (high contrast) ── */
+  --color-slate-50:  #0D1B30;
+  --color-slate-100: #10243D;
+  --color-slate-200: #16304E;
+  --color-slate-300: #24405F;
+  --color-slate-400: #6E89A8;
+  --color-slate-500: #8FA8C5;
+  --color-slate-600: #AFC2D6;
+  --color-slate-700: #DCE8F5;
+  --color-slate-800: #EEF5FF;
+  --color-slate-900: #F2F8FF;
+  --color-slate-950: #F8FBFF;
 
-  /* Indigo / violet → electric blue + cyan */
-  --color-indigo-300: #7dd3fc;
-  --color-indigo-400: #38bdf8;
-  --color-indigo-500: #22a8ee;
-  --color-indigo-600: #1f8fd6;
-  --color-indigo-700: #1c6fae;
+  /* ── Primary / Accent (blue) ── */
+  --color-blue-50:  #081426;
+  --color-blue-100: #0C2036;
+  --color-blue-200: #103048;
+  --color-blue-300: #1E6FA0;
+  --color-blue-400: #35E6FF;
+  --color-blue-500: #00BFFF;
+  --color-blue-600: #0099CC;
+  --color-blue-700: #0077A3;
+  --color-blue-800: #0A5C7A;
+  --color-blue-900: #081426;
 
-  /* Cyan accents */
-  --color-cyan-300: #67e8f9;
-  --color-cyan-400: #22d3ee;
-  --color-cyan-500: #06b6d4;
-  --color-cyan-600: #0891b2;
+  --color-cyan-300: #7DF0FF;
+  --color-cyan-400: #35E6FF;
+  --color-cyan-500: #00BFFF;
+  --color-cyan-600: #00A6E0;
 
-  /* Blue */
-  --color-blue-50:  #0a1830;
-  --color-blue-100: #0f2547;
-  --color-blue-200: #163a66;
-  --color-blue-300: #2b6fb0;
-  --color-blue-400: #3b9fe6;
-  --color-blue-500: #38bdf8;
-  --color-blue-600: #1f8fd6;
-  --color-blue-700: #1769a8;
-  --color-blue-800: #134f80;
-  --color-blue-900: #0f3a5e;
+  --color-indigo-300: #7DF0FF;
+  --color-indigo-400: #35E6FF;
+  --color-indigo-500: #00BFFF;
+  --color-indigo-600: #0099CC;
+  --color-indigo-700: #0077A3;
 
-  /* Emerald (ON / success) → cyan-leaning, no green */
-  --color-emerald-50:  #07242b;
-  --color-emerald-100: #0a323a;
-  --color-emerald-200: #0f4b56;
-  --color-emerald-300: #67e8f9;
-  --color-emerald-400: #22d3ee;
-  --color-emerald-500: #06b6d4;
-  --color-emerald-600: #0891b2;
-  --color-emerald-700: #67e8f9;
-  --color-emerald-800: #a5f3fc;
+  /* ── Active / success → cyan-turquoise (no green) ── */
+  --color-emerald-50:  #06222B;
+  --color-emerald-100: #0A313D;
+  --color-emerald-200: #0F4A5A;
+  --color-emerald-300: #35E6FF;
+  --color-emerald-400: #00D4F0;
+  --color-emerald-500: #00BFFF;
+  --color-emerald-600: #00A6E0;
+  --color-emerald-700: #7DF0FF;
+  --color-emerald-800: #AEF6FF;
 
-  /* Green (legacy) → map to cyan so there is zero green */
-  --color-green-50:  #07242b;
-  --color-green-400: #22d3ee;
-  --color-green-500: #06b6d4;
-  --color-green-600: #22d3ee;
-  --color-green-700: #67e8f9;
-  --color-green-800: #a5f3fc;
+  --color-green-50:  #06222B;
+  --color-green-400: #00BFFF;
+  --color-green-500: #00BFFF;
+  --color-green-600: #35E6FF;
+  --color-green-700: #7DF0FF;
+  --color-green-800: #AEF6FF;
 
-  /* Red (error / delete) */
-  --color-red-50:  #2a0d12;
-  --color-red-100: #3d1118;
-  --color-red-200: #5b1822;
-  --color-red-300: #f87171;
-  --color-red-400: #fb7185;
-  --color-red-500: #ef4444;
-  --color-red-600: #f87171;
-  --color-red-700: #fca5a5;
+  /* ── Archive → dark amber ── */
+  --color-amber-50:  #1F1705;
+  --color-amber-100: #2E2108;
+  --color-amber-200: #42300C;
+  --color-amber-300: #C9962E;
+  --color-amber-400: #D9A441;
+  --color-amber-500: #C9962E;
+  --color-amber-600: #E6B95C;
+  --color-amber-700: #EBC56E;
 
-  /* Amber (warning / archive) */
-  --color-amber-50:  #2a1d05;
-  --color-amber-100: #3d2b08;
-  --color-amber-300: #fbbf24;
-  --color-amber-400: #fbbf24;
-  --color-amber-500: #f59e0b;
-  --color-amber-600: #fcd34d;
-  --color-amber-700: #fcd34d;
+  /* ── Danger → dark maroon red ── */
+  --color-red-50:  #2A0C12;
+  --color-red-100: #3A1118;
+  --color-red-200: #5A1A24;
+  --color-red-300: #C96272;
+  --color-red-400: #D97585;
+  --color-red-500: #B23A48;
+  --color-red-600: #D97585;
+  --color-red-700: #ECB0BA;
 
-  /* Primary / accent (used by .card hover, gradients) */
-  --color-primary: #22d3ee;
-  --color-primary-hover: #67e8f9;
-  --color-accent: #38bdf8;
-  --color-accent2: #818cf8;
+  --color-primary: #00BFFF;
+  --color-primary-hover: #35E6FF;
+  --color-accent: #35E6FF;
+  --color-accent2: #7DF0FF;
 
-  --color-card: rgba(13, 22, 40, 0.55);
-  --color-card-border: rgba(56, 189, 248, 0.22);
-  --color-muted: #7d97bd;
+  --color-card: rgba(13, 27, 48, 0.82);
+  --color-card-border: rgba(53, 230, 255, 0.22);
+  --color-muted: #8FA8C5;
 
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
 
 :root {
-  --background: #05070f;
-  --foreground: #dbeafe;
-  --glow-1: #22d3ee;
-  --glow-2: #38bdf8;
-  --glow-3: #818cf8;
-  --cyber-grid: rgba(56, 189, 248, 0.05);
+  --background: #050B18;
+  --foreground: #F2F8FF;
+  --glow: rgba(53, 230, 255, 0.5);
+  --grid: rgba(53, 230, 255, 0.045);
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 body {
   background:
-    radial-gradient(1100px 620px at 8% -12%, rgba(34, 211, 238, 0.10), transparent 60%),
-    radial-gradient(900px 520px at 108% 4%, rgba(56, 130, 246, 0.12), transparent 60%),
-    radial-gradient(1000px 700px at 50% 118%, rgba(129, 140, 248, 0.10), transparent 60%),
-    linear-gradient(180deg, #060912 0%, #05070f 100%);
+    radial-gradient(1200px 700px at 12% -10%, rgba(0, 191, 255, 0.10), transparent 58%),
+    radial-gradient(1000px 600px at 110% 6%, rgba(53, 230, 255, 0.08), transparent 58%),
+    radial-gradient(900px 700px at 50% 120%, rgba(0, 153, 204, 0.07), transparent 60%),
+    linear-gradient(180deg, #050B18 0%, #081426 100%);
   background-attachment: fixed;
   color: var(--foreground);
   font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -131,7 +130,7 @@ body {
   overflow-x: hidden;
 }
 
-/* ─── Cyber grid + scanline overlays (fixed, behind content) ─── */
+/* ─── Atmosphere: grid + data dots + circuit lines (fixed, subtle) ─── */
 body::before {
   content: "";
   position: fixed;
@@ -139,13 +138,16 @@ body::before {
   z-index: -9;
   pointer-events: none;
   background-image:
-    linear-gradient(var(--cyber-grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--cyber-grid) 1px, transparent 1px);
-  background-size: 44px 44px;
-  mask-image: radial-gradient(circle at 50% 40%, black 0%, rgba(0,0,0,0.35) 80%);
-  -webkit-mask-image: radial-gradient(circle at 50% 40%, black 0%, rgba(0,0,0,0.35) 80%);
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+    radial-gradient(rgba(53, 230, 255, 0.10) 1px, transparent 1.4px),
+    repeating-linear-gradient(45deg, rgba(53, 230, 255, 0.018) 0 1px, transparent 1px 26px);
+  background-size: 46px 46px, 46px 46px, 46px 46px, 100% 100%;
+  mask-image: radial-gradient(circle at 50% 38%, black 0%, rgba(0,0,0,0.35) 85%);
+  -webkit-mask-image: radial-gradient(circle at 50% 38%, black 0%, rgba(0,0,0,0.35) 85%);
 }
 
+/* ─── Soft scanline ─── */
 body::after {
   content: "";
   position: fixed;
@@ -154,66 +156,62 @@ body::after {
   pointer-events: none;
   background: repeating-linear-gradient(
     0deg,
-    rgba(56, 189, 248, 0.035) 0px,
-    rgba(56, 189, 248, 0.035) 1px,
+    rgba(53, 230, 255, 0.022) 0px,
+    rgba(53, 230, 255, 0.022) 1px,
     transparent 2px,
     transparent 4px
   );
-  opacity: 0.5;
-  animation: scan 8s linear infinite;
+  opacity: 0.6;
+  animation: scan 9s linear infinite;
 }
 
-@keyframes scan {
-  0% { transform: translateY(0); }
-  100% { transform: translateY(4px); }
-}
+@keyframes scan { 0% { transform: translateY(0); } 100% { transform: translateY(4px); } }
 
 /* ─── Components ─────────────────────────── */
 
 .card {
   background: var(--color-card);
-  backdrop-filter: blur(16px) saturate(140%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(130%);
+  -webkit-backdrop-filter: blur(14px) saturate(130%);
   border: 1px solid var(--color-card-border);
-  border-radius: 16px;
+  border-radius: 14px;
   padding: 1rem;
   box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.4),
-    0 8px 30px -14px rgba(34, 211, 238, 0.22),
-    inset 0 1px 0 rgba(125, 211, 252, 0.06);
+    0 1px 2px rgba(0, 0, 0, 0.45),
+    0 10px 30px -16px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(53, 230, 255, 0.05);
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .card:hover {
   transform: translateY(-2px);
-  border-color: rgba(34, 211, 238, 0.45);
+  border-color: rgba(53, 230, 255, 0.42);
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.5),
-    0 18px 48px -16px rgba(34, 211, 238, 0.35),
-    inset 0 1px 0 rgba(125, 211, 252, 0.1);
+    0 18px 44px -18px rgba(0, 0, 0, 0.75),
+    0 0 22px -10px rgba(53, 230, 255, 0.35),
+    inset 0 1px 0 rgba(53, 230, 255, 0.08);
 }
 
 .input {
   width: 100%;
   padding: 0.6rem 0.8rem;
-  border: 1px solid rgba(56, 189, 248, 0.22);
+  border: 1px solid rgba(53, 230, 255, 0.2);
   border-radius: 10px;
   font-size: 0.875rem;
-  color: #eaf2ff;
-  background: rgba(8, 14, 26, 0.7);
+  color: #F2F8FF;
+  background: rgba(8, 20, 38, 0.9);
   backdrop-filter: blur(8px);
   outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .input:focus {
-  border-color: #22d3ee;
-  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.2);
+  border-color: #35E6FF;
+  box-shadow: 0 0 0 3px rgba(53, 230, 255, 0.16);
 }
 
-.input::placeholder {
-  color: #5b7299;
-}
+.input::placeholder { color: #6E89A8; }
 
 .btn {
   display: inline-flex;
@@ -232,114 +230,93 @@ body::after {
   overflow: hidden;
 }
 
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-primary {
-  background: linear-gradient(135deg, #0891b2 0%, #22d3ee 50%, #3b9fe6 100%);
+  background: linear-gradient(135deg, #0099CC 0%, #00BFFF 50%, #35E6FF 100%);
   background-size: 180% 180%;
-  color: #04121a;
-  box-shadow: 0 4px 16px -4px rgba(34, 211, 238, 0.55);
+  color: #03121F;
+  box-shadow: 0 4px 16px -4px rgba(0, 191, 255, 0.5);
   animation: gradient-shift 6s ease infinite;
 }
 
 .btn-primary:hover:not(:disabled) {
-  box-shadow: 0 8px 26px -6px rgba(34, 211, 238, 0.7);
+  box-shadow: 0 8px 26px -6px rgba(0, 191, 255, 0.65);
   transform: translateY(-1px);
 }
 
 .btn-secondary {
-  background: rgba(13, 22, 40, 0.7);
-  color: #c2d2ea;
-  border: 1px solid rgba(56, 189, 248, 0.25);
+  background: rgba(13, 27, 48, 0.85);
+  color: #DCE8F5;
+  border: 1px solid rgba(53, 230, 255, 0.22);
   backdrop-filter: blur(8px);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: rgba(17, 28, 48, 0.9);
-  border-color: rgba(34, 211, 238, 0.45);
-  color: #eaf2ff;
+  background: rgba(16, 36, 61, 0.95);
+  border-color: rgba(53, 230, 255, 0.45);
+  color: #F2F8FF;
 }
 
 /* ─── Modal dialogs (override bg-white) ─── */
 .bg-white {
-  border: 1px solid rgba(56, 189, 248, 0.28) !important;
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid rgba(53, 230, 255, 0.22) !important;
+  backdrop-filter: blur(20px) saturate(130%);
+  -webkit-backdrop-filter: blur(20px) saturate(130%);
   box-shadow:
-    0 0 0 1px rgba(34, 211, 238, 0.08),
-    0 24px 70px -20px rgba(0, 0, 0, 0.8),
-    0 0 60px -10px rgba(34, 211, 238, 0.22);
+    0 0 0 1px rgba(53, 230, 255, 0.06),
+    0 26px 70px -20px rgba(0, 0, 0, 0.82),
+    0 0 50px -12px rgba(53, 230, 255, 0.18);
 }
 
-/* ─── Scrollbar ─────────────────────────── */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #1f6fae, #22d3ee);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #22d3ee, #67e8f9);
-}
-
-/* ─── Headings / mono accents ───────────── */
-.font-mono {
-  font-family: var(--font-mono);
-}
-
-/* ─── Tab bar (override bg-slate-100 p-1) ─── */
+/* ─── Futuristic control bar (nav tabs) ─── */
 .tab-bar {
-  background: rgba(13, 22, 40, 0.6) !important;
-  border: 1px solid rgba(56, 189, 248, 0.15);
+  background: rgba(13, 27, 48, 0.6) !important;
+  border: 1px solid rgba(53, 230, 255, 0.16);
+  border-radius: 12px;
 }
 
 .tab-bar .tab-active {
-  background: linear-gradient(135deg, rgba(34, 211, 238, 0.18), rgba(59, 130, 246, 0.18)) !important;
-  color: #eaf2ff !important;
-  border: 1px solid rgba(34, 211, 238, 0.4);
-  box-shadow: 0 0 14px -4px rgba(34, 211, 238, 0.5);
+  background: linear-gradient(180deg, rgba(0, 191, 255, 0.16), rgba(53, 230, 255, 0.10)) !important;
+  color: #F2F8FF !important;
+  border: 1px solid rgba(53, 230, 255, 0.5) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(53, 230, 255, 0.45),
+    0 0 16px -4px rgba(53, 230, 255, 0.5);
 }
 
-/* ─── Mobile Responsive ─────────────────── */
+/* ─── Scrollbar ─────────────────────────── */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #0077A3, #35E6FF);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #00BFFF, #7DF0FF);
+}
+
+/* ─── Mono accents ──────────────────────── */
+.font-mono, code, pre { font-family: var(--font-mono); }
+
+/* ─── Mobile ────────────────────────────── */
 @media (max-width: 640px) {
-  .modal-backdrop {
-    align-items: flex-end;
-  }
-  .modal-backdrop .modal-content {
+  .modal-backdrop { align-items: flex-end; }
+  .modal-backdrop .bg-white {
     max-height: 90vh;
     border-radius: 1.5rem 1.5rem 0 0;
     margin: 0;
     width: 100%;
   }
-  .btn {
-    min-height: 44px;
-  }
-  .input {
-    font-size: 16px;
-  }
+  .btn { min-height: 44px; }
+  .input { font-size: 16px; }
   .tab-bar {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
   }
-  .tab-bar::-webkit-scrollbar {
-    display: none;
-  }
-  .stat-row {
-    flex-wrap: wrap;
-    gap: 0.25rem 0.75rem;
-  }
+  .tab-bar::-webkit-scrollbar { display: none; }
+  .stat-row { flex-wrap: wrap; gap: 0.25rem 0.75rem; }
   .log-card {
     display: flex;
     flex-direction: column;
@@ -355,11 +332,8 @@ body::after {
   }
 }
 
-/* Desktop: keep table, hide cards */
 @media (min-width: 641px) {
-  .log-card-mobile {
-    display: none !important;
-  }
+  .log-card-mobile { display: none !important; }
 }
 
 /* ─── Animations ──────────────────────── */
@@ -367,21 +341,13 @@ body::after {
   0%, 100% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
 }
-
 @keyframes pulse-dot {
   0%, 100% { opacity: 0.4; }
   50% { opacity: 1; }
 }
-
-.pulse-dot {
-  animation: pulse-dot 1.5s infinite;
-}
-
+.pulse-dot { animation: pulse-dot 1.5s infinite; }
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
-
-.card {
-  animation: fade-in 0.35s ease both;
-}
+.card { animation: fade-in 0.35s ease both; }
