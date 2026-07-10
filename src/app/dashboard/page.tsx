@@ -801,7 +801,7 @@ export default function Dashboard() {
                 {providers.map(p => (
                   <div key={p.id} className="card flex flex-col p-3 min-h-[264px]">
                     <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-slate-900 text-[15px] leading-snug truncate flex-1">{p.name}</h3>
+                      <h3 className="font-semibold text-yellow-500 text-[15px] leading-snug truncate flex-1">{p.name}</h3>
                       <span className={`px-1.5 py-0.5 rounded-full text-[11px] font-semibold ${p.enabled ? 'bg-emerald-100 text-emerald-700 status-on' : 'bg-slate-200 text-slate-500'}`}>{p.enabled ? 'ON' : 'OFF'}</span>
                       <button onClick={() => handleArchiveProvider(p)} className="text-[11px] px-1.5 py-0.5 rounded-full font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 inline-flex items-center gap-1" title={p.archived ? 'Buka dari arsip' : 'Arsip'}>{p.archived ? 'Buka' : <><IconArchive size={12} /> Arsip</>}</button>
                     </div>
@@ -827,7 +827,7 @@ export default function Dashboard() {
                           return (
                             <div key={g.name} className="rounded-lg border border-slate-200/70 p-2">
                               <div className="text-[11px] font-semibold text-slate-500 mb-1 flex items-center gap-1">
-                                <IconKey size={12} className="text-slate-400" /> {g.name}
+                                <IconKey size={12} className="text-yellow-500" /> {g.name}
                                 {hasAny && (
                                   <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${groupResults.every(m => modelTestResults[`${groupKey}${m}`]?.status === 'ok') ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
                                     {groupResults.filter(m => modelTestResults[`${groupKey}${m}`]?.status === 'ok').length}/{groupResults.length} ok
@@ -970,7 +970,7 @@ export default function Dashboard() {
                     {apiKeys.map(k => (
                       <div key={k.id} className="flex items-center gap-2 bg-slate-50 rounded-lg p-2">
                         <div className="flex-1 min-w-0">
-                          <span className="font-medium text-slate-700 text-sm">{k.name}</span>
+                          <span className="font-medium text-yellow-600 text-sm">{k.name}</span>
                           <code className="text-xs text-slate-600 font-mono ml-2 break-all">{k.key}</code>
                         </div>
                         <CopyButton text={k.key} />
