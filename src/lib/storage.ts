@@ -28,6 +28,7 @@ function dbToProvider(row: any): Provider {
     apiKeyStrategy: row.api_key_strategy ?? 'random',
     priority: row.priority,
     enabled: row.enabled,
+    archived: row.archived ?? false,
     healthStatus: row.health_status ?? 'unknown',
     lastHealthCheck: row.last_health_check ?? null,
     totalRequests: row.request_count ?? 0,
@@ -88,17 +89,33 @@ export function checkRateLimit(ip: string): { allowed: boolean; limit: number; r
 
 // ─── Providers ────────────────────────────────────────────
 
-export async function getProviders(): Promise<Provider[]> {
-  const { data, error } = await supabase
+export async function getProviders(includeArchived = false): Promise<Provider[]> {
+  let query = supabase
     .from('providers')
     .select('*')
     .order('priority', { ascending: true });
+  if (!includeArchived) query = query.eq('archived', false);
+
+  const { data, error } = await query;
 
   if (error) {
     console.error('Supabase getProviders error:', error);
     return [];
   }
   return (data ?? []).map(dbToProvider);
+}
+
+export async function archiveProvider(id: string, archived: boolean): Promise<boolean> {
+  const { error } = await supabase
+    .from('providers')
+    .update({ archived })
+    .eq('id', id);
+
+  if (error) {
+    console.error('Supabase archiveProvider error:', error);
+    return false;
+  }
+  return true;
 }
 
 export async function getProvider(id: string): Promise<Provider | undefined> {
@@ -221,6 +238,7 @@ export async function getEnabledProviders(): Promise<Provider[]> {
     .from('providers')
     .select('*')
     .eq('enabled', true)
+    .eq('archived', false)
     .order('priority', { ascending: true });
 
   if (error) {

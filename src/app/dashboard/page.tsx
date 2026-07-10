@@ -15,6 +15,7 @@ interface Provider {
   apiKeyStrategy?: 'random' | 'failover-priority' | 'round-robin';
   priority: number;
   enabled: boolean;
+  archived?: boolean;
   healthStatus: string;
   lastHealthCheck: string | null;
   totalRequests: number;
@@ -150,6 +151,7 @@ export default function Dashboard() {
   const [providerFormStrategy, setProviderFormStrategy] = useState<'random' | 'failover-priority' | 'round-robin'>('random');
   const [providerType, setProviderType] = useState<'custom' | 'chatgpt_plus' | null>(null);
   const [discoveredModels, setDiscoveredModels] = useState<string[]>([]);
+  const [modelSearch, setModelSearch] = useState('');
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
   const [testingConnection, setTestingConnection] = useState(false);
   const [testResult, setTestResult] = useState<any>(null);
@@ -158,7 +160,8 @@ export default function Dashboard() {
   const [newKeyName, setNewKeyName] = useState('');
   const [generatedKey, setGeneratedKey] = useState('');
 
-  // Combo form
+  // Show archived providers toggle
+  const [showArchived, setShowArchived] = useState(false);
   const [showComboModal, setShowComboModal] = useState(false);
   const [editingCombo, setEditingCombo] = useState<Combo | null>(null);
   const [comboForm, setComboForm] = useState({ name: '', strategy: 'failover-priority' as ComboStrategy });
@@ -181,28 +184,48 @@ export default function Dashboard() {
   const [chatgptDeviceId, setChatgptDeviceId] = useState('');
   const [chatgptError, setChatgptError] = useState('');
 
-  // ─── API helper ──────────────────────────────────
-
-  const api = useCallback(async (url: string, options: RequestInit = {}) => {
+  // ─── API helper ──────────────────────────────
+  const API_TIMEOUT_MS = 30000;
+  const api = useCallback(async (url: string, options: RequestInit = {}, retry = 1) => {
     const t = token || getToken();
-    const res = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(t ? { Authorization: `Bearer ${t}` } : {}),
-        ...(options.headers || {}),
-      },
-    });
-    if (res.status === 401) { clearToken(); setTokenState(null); throw new Error('Unauthorized'); }
-    return res;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(t ? { Authorization: `Bearer ${t}` } : {}),
+          ...(options.headers || {}),
+        },
+      });
+      if (res.status === 401) { clearTimeout(timeoutId); clearToken(); setTokenState(null); throw new Error('Unauthorized'); }
+      return res;
+    } catch (err: any) {
+      // Retry once on network/timeout errors (but not on 401)
+      if (retry > 0 && err?.name !== 'AbortError' && !(err instanceof DOMException && err.name === 'AbortError')) {
+        clearTimeout(timeoutId);
+        return api(url, options, retry - 1);
+      }
+      if (err?.name === 'AbortError') {
+        clearTimeout(timeoutId);
+        throw new Error('Network timeout — server terlalu lama merespons');
+      }
+      clearTimeout(timeoutId);
+      throw new Error('Network error — periksa koneksi internet Anda');
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }, [token]);
 
   // ─── Data fetching ───────────────────────────────
 
   const fetchData = useCallback(async () => {
     try {
+      const providersUrl = '/api/providers' + (showArchived ? '?archived=true' : '');
       const [provRes, logRes, statsRes, configRes, keysRes, combosRes, quotasRes] = await Promise.all([
-        api('/api/providers'),
+        api(providersUrl),
         api('/api/logs?limit=50'),
         api('/api/stats'),
         api('/api/config'),
@@ -256,7 +279,8 @@ export default function Dashboard() {
           }
         }
         if (created > 0) {
-          console.log(`[Auto-sync] Created ${created} missing quota card(s)`);
+          const msg = '[Auto-sync] Created ' + created + ' missing quota card(s)';
+          console.log(msg);
           fetchData();
         }
       } catch (e) {
@@ -390,7 +414,18 @@ export default function Dashboard() {
 
   async function handleDeleteProvider(id: string) {
     if (!confirm('Hapus provider ini?')) return;
-    try { await api(`/api/providers?id=${id}`, { method: 'DELETE' }); fetchData(); } catch {}
+    const url = `/api/providers?id=${id}`;
+    try { await api(url, { method: 'DELETE' }); fetchData(); } catch {}
+  }
+
+  async function handleArchiveProvider(provider: Provider) {
+    const action = provider.archived ? 'tampilkan kembali' : 'arsipkan';
+    if (!confirm(`Yakin ingin ${action} provider "${provider.name}"?`)) return;
+    const archiveUrl = `/api/providers?id=${provider.id}&action=archive&archived=${!provider.archived}`;
+    try {
+      await api(archiveUrl, { method: 'DELETE' });
+      fetchData();
+    } catch {}
   }
 
   async function handleToggleProvider(provider: Provider) {
@@ -414,7 +449,7 @@ export default function Dashboard() {
   function resetProviderForm() {
     setProviderForm({ name: '', baseUrl: '', apiKey: '' });
     setProviderFormKeys([{ name: 'Key 1', key: '' }]);
-    setDiscoveredModels([]); setSelectedModels([]); setTestResult(null); setEditingProvider(null);
+    setDiscoveredModels([]); setSelectedModels([]); setModelSearch(''); setTestResult(null); setEditingProvider(null);
     setProviderType(null);
     setChatgptStep('idle'); setChatgptUserCode(''); setChatgptDeviceId(''); setChatgptError('');
   }
@@ -485,7 +520,8 @@ export default function Dashboard() {
 
   async function handleDeleteApiKey(id: string) {
     if (!confirm('Hapus API key ini?')) return;
-    try { await api(`/api/api-keys?id=${id}`, { method: 'DELETE' }); fetchData(); } catch {}
+    const url = `/api/api-keys?id=${id}`;
+    try { await api(url, { method: 'DELETE' }); fetchData(); } catch {}
   }
 
   // ─── Combo actions ───────────────────────────────
@@ -560,7 +596,8 @@ export default function Dashboard() {
 
   async function handleDeleteCombo(id: string) {
     if (!confirm('Hapus combo ini?')) return;
-    try { await api(`/api/combos?id=${id}`, { method: 'DELETE' }); fetchData(); } catch {}
+    const url = `/api/combos?id=${id}`;
+    try { await api(url, { method: 'DELETE' }); fetchData(); } catch {}
   }
 
   async function handleToggleCombo(combo: Combo) {
@@ -620,7 +657,8 @@ export default function Dashboard() {
 
   async function handleDeleteQuota(id: string) {
     if (!confirm('Hapus quota ini?')) return;
-    try { await api(`/api/quotas?id=${id}`, { method: 'DELETE' }); fetchData(); } catch {}
+    const url = `/api/quotas?id=${id}`;
+    try { await api(url, { method: 'DELETE' }); fetchData(); } catch {}
   }
 
   function formatTokens(tokens: number): string {
@@ -652,15 +690,19 @@ export default function Dashboard() {
 
   const BASE_URL = 'https://razoter.vercel.app/api/v1';
 
-  // ─── Login screen ────────────────────────────────
+  // ─── Login screen ──────────────────────────────
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="pulse-dot text-4xl">⏳</div></div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.1), rgba(6,182,212,0.1))' }}><div className="pulse-dot text-4xl">⏳</div></div>;
 
   if (!token) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <form onSubmit={handleLogin} className="card w-full max-w-sm space-y-4">
-          <div className="text-center"><h1 className="text-2xl font-bold text-slate-900">Razoter</h1><p className="text-sm text-slate-500 mt-1">Dashboard Login</p></div>
+      <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(6,182,212,0.10) 50%, rgba(139,92,246,0.10) 100%)' }}>
+        <form onSubmit={handleLogin} className="card w-full max-w-sm space-y-4" style={{ animation: 'fade-in 0.4s ease both' }}>
+          <div className="text-center">
+            <div className="w-14 h-14 mx-auto mb-3 rounded-2xl flex items-center justify-center text-2xl" style={{ background: 'linear-gradient(135deg,#6366f1,#06b6d4)', boxShadow: '0 8px 24px -6px rgba(99,102,241,0.5)' }}>⚡</div>
+            <h1 className="text-2xl font-bold text-slate-900">Razoter</h1>
+            <p className="text-sm text-slate-500 mt-1">Dashboard Login</p>
+          </div>
           {loginError && <div className="bg-red-50 text-red-700 px-3 py-2 rounded-lg text-sm">{loginError}</div>}
           <input type="text" placeholder="Username" className="input" value={loginForm.username} onChange={e => setLoginForm(f => ({ ...f, username: e.target.value }))} />
           <input type="password" placeholder="Password" className="input" value={loginForm.password} onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))} />
@@ -673,16 +715,18 @@ export default function Dashboard() {
   // ─── Dashboard ───────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 sm:py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3"><h1 className="text-lg sm:text-xl font-bold text-slate-900">Razoter</h1><span className="text-xs text-slate-400">v2.2</span></div>
+    <div className="min-h-screen" style={{ background: 'radial-gradient(1200px 600px at 8% -10%, rgba(99,102,241,0.12), transparent), radial-gradient(1000px 500px at 110% 0%, rgba(6,182,212,0.10), transparent), radial-gradient(900px 600px at 50% 120%, rgba(139,92,246,0.10), transparent), linear-gradient(180deg,#f8faff,#eef2ff)' }}>
+      <header className="sticky top-0 z-40 backdrop-blur-xl border-b" style={{ background: 'rgba(255,255,255,0.6)', borderColor: 'rgba(148,163,184,0.25)' }}>
+        <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg" style={{ background: 'linear-gradient(135deg,#6366f1,#06b6d4)', boxShadow: '0 4px 14px -4px rgba(99,102,241,0.5)' }}>⚡</div>
+            <h1 className="text-lg sm:text-xl font-bold text-slate-900">Razoter</h1><span className="text-xs text-slate-400">v2.2</span>
+          </div>
           <div className="flex items-center gap-4">
-            <button onClick={handleLogout} className="text-sm text-slate-500 hover:text-red-600">Logout</button>
+            <button onClick={handleLogout} className="text-sm text-slate-500 hover:text-red-600 transition-colors">Logout</button>
           </div>
         </div>
       </header>
-
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* Tabs */}
         <div className="flex gap-1 bg-slate-100 rounded-lg p-1 overflow-x-auto flex-nowrap">
@@ -699,7 +743,10 @@ export default function Dashboard() {
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-semibold text-slate-900">Providers</h2>
-              <button onClick={() => { resetProviderForm(); setShowProviderModal(true); }} className="btn btn-primary text-sm sm:text-base">+ Add Provider</button>
+              <div className="flex gap-2">
+                <button onClick={() => setShowArchived(s => !s)} className={`text-xs px-2 py-1 rounded ${showArchived ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>📦 {showArchived ? 'Sembunyikan Arsip' : 'Tampilkan Arsip'}</button>
+                <button onClick={() => { resetProviderForm(); setShowProviderModal(true); }} className="btn btn-primary text-sm sm:text-base">+ Add Provider</button>
+              </div>
             </div>
             {providers.length === 0 ? (
               <div className="card text-center py-12 text-slate-400"><div className="text-4xl mb-2">🔌</div><p>Belum ada provider. Tambah provider pertama!</p></div>
@@ -712,22 +759,9 @@ export default function Dashboard() {
                         <div className="flex items-center gap-2">
                           <h3 className="font-semibold text-slate-900">{p.name}</h3>
                           {!p.enabled && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-200 text-slate-500">disabled</span>}
+                          {p.archived && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-200 text-amber-800">📦 arsip</span>}
                         </div>
                         <div className="text-xs text-slate-400 mt-1 font-mono truncate">{p.baseUrl}</div>
-                        {((p.apiKeys && p.apiKeys.length > 0) || p.apiKey) && (
-                          <div className="flex flex-wrap gap-1 mt-2">
-                            {p.apiKeys && p.apiKeys.length > 0 ? p.apiKeys.map((ak, idx) => (
-                              <span key={idx} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono ${ak.enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400 line-through'}`}>
-                                <span className="text-xs font-medium px-1 rounded bg-emerald-100 text-emerald-600 mr-0.5">{ak.name}</span>
-                                {ak.key.slice(0, 8)}...{ak.key.slice(-4)}
-                              </span>
-                            )) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono bg-emerald-50 text-emerald-700">
-                                {p.apiKey.slice(0, 8)}...{p.apiKey.slice(-4)}
-                              </span>
-                            )}
-                          </div>
-                        )}
                         <div className="flex flex-wrap gap-1 mt-2">
                           {(p.selectedModels.length > 0 ? p.selectedModels : p.models).map(m => {
                             const key = `${p.id}:${m}`;
@@ -747,7 +781,6 @@ export default function Dashboard() {
                               </span>
                             );
                           })}
-                          {p.selectedModels.length < p.models.length && <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-400 text-xs">+{p.models.length - p.selectedModels.length} more</span>}
                         </div>
 
                       </div>
@@ -755,6 +788,7 @@ export default function Dashboard() {
                         <div className="flex gap-2">
                           <button onClick={() => handleToggleProvider(p)} className={`text-xs px-2 py-1 rounded ${p.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{p.enabled ? 'ON' : 'OFF'}</button>
                           <button onClick={() => openEditModal(p)} className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200">Edit</button>
+                          <button onClick={() => handleArchiveProvider(p)} className="text-xs px-2 py-1 rounded bg-amber-50 text-amber-700 hover:bg-amber-100">📦 {p.archived ? 'Tampilkan' : 'Arsip'}</button>
                           <button onClick={() => handleDeleteProvider(p.id)} className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100">Hapus</button>
                         </div>
                         <button
@@ -1267,13 +1301,25 @@ export default function Dashboard() {
                       <button onClick={() => setSelectedModels([])} className="text-xs text-slate-500 hover:text-slate-700">Hapus Semua</button>
                     </div>
                   </div>
+                  <input
+                    type="text"
+                    value={modelSearch}
+                    onChange={e => setModelSearch(e.target.value)}
+                    placeholder="Cari model... (mis. gpt, claude)"
+                    className="input mb-2"
+                  />
                   <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
-                    {discoveredModels.map(model => (
+                    {discoveredModels
+                      .filter(m => m.toLowerCase().includes(modelSearch.toLowerCase().trim()))
+                      .map(model => (
                       <label key={model} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-50 cursor-pointer">
                         <input type="checkbox" checked={selectedModels.includes(model)} onChange={() => toggleModel(model)} className="rounded border-slate-300 text-green-600" />
                         <span className="text-sm font-mono text-slate-700">{model}</span>
                       </label>
                     ))}
+                    {discoveredModels.filter(m => m.toLowerCase().includes(modelSearch.toLowerCase().trim())).length === 0 && (
+                      <div className="px-3 py-4 text-center text-xs text-slate-400">Tidak ada model cocok "{modelSearch}"</div>
+                    )}
                   </div>
                 </div>
               )}

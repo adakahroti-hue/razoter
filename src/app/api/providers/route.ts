@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyDashboardAuth } from '@/lib/auth';
-import { getProviders, getProvider, addProvider, updateProvider, deleteProvider, addQuota } from '@/lib/storage';
+import { getProviders, getProvider, addProvider, updateProvider, deleteProvider, addQuota, archiveProvider } from '@/lib/storage';
 import { withCors, handleCorsPreflight } from '@/lib/cors';
 
 export async function OPTIONS() {
@@ -12,7 +12,8 @@ export async function GET(request: NextRequest) {
     return withCors(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
   }
 
-  const providers = await getProviders();
+  const includeArchived = request.nextUrl.searchParams.get('archived') === 'true';
+  const providers = await getProviders(includeArchived);
   // Mask API keys in response
   const maskKey = (k?: string) =>
     k && k.length >= 12 ? `${k.slice(0, 8)}...${k.slice(-4)}` : (k ? `${k.slice(0, 2)}...` : '');
@@ -156,6 +157,17 @@ export async function DELETE(request: NextRequest) {
   const id = request.nextUrl.searchParams.get('id');
   if (!id) {
     return withCors(NextResponse.json({ error: 'Missing provider id' }, { status: 400 }));
+  }
+
+  // Archive / unarchive action (soft hide) — keeps data, just hides from active list
+  const action = request.nextUrl.searchParams.get('action');
+  if (action === 'archive') {
+    const archived = request.nextUrl.searchParams.get('archived') !== 'false';
+    const ok = await archiveProvider(id, archived);
+    if (!ok) {
+      return withCors(NextResponse.json({ error: 'Provider not found' }, { status: 404 }));
+    }
+    return withCors(NextResponse.json({ success: true, archived }));
   }
 
   const deleted = await deleteProvider(id);
