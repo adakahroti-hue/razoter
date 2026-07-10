@@ -11,9 +11,15 @@ export async function OPTIONS() {
 }
 
 function getClientIp(request: NextRequest): string {
+  const xff = request.headers.get('x-forwarded-for');
+  if (xff) {
+    // x-forwarded-for can be "client, proxy1, proxy2" — take the leftmost (original client)
+    const first = xff.split(',')[0]?.trim();
+    if (first) return first;
+  }
   return (
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
     request.headers.get('x-real-ip') ||
+    request.headers.get('cf-connecting-ip') ||
     '127.0.0.1'
   );
 }
@@ -80,7 +86,7 @@ async function resolveAccessToken(provider: any, triedKeyNames?: Set<string>): P
       return {
         header: `Bearer ${r.accessToken}`,
         refreshed: r.refreshed,
-        newTokens: r.refreshed ? { apiKey: r.accessToken, chatgptRefreshToken: r.refreshToken, chatgptExpiresAt: r.expiresAt } : undefined,
+        newTokens: r.refreshed ? { chatgptRefreshToken: r.refreshToken, chatgptExpiresAt: r.expiresAt } : undefined,
         apiKeyName: ak.name,
       };
     } catch (refreshErr: any) {
@@ -522,7 +528,9 @@ export async function POST(request: NextRequest) {
         apiKeyName: stdAkName,
       });
 
-      if (statusCode >= 400 && statusCode < 500) {
+      // Only short-circuit on client-auth errors (401/403). Other 4xx from upstream
+      // (e.g. 400 model not found, 404) should fall through to provider failover.
+      if (statusCode === 401 || statusCode === 403) {
         return withCors(NextResponse.json(errorBody, { status: statusCode }));
       }
 

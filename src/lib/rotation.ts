@@ -3,20 +3,31 @@ import { getEnabledProviders, getRoundRobinIndex, incrementRoundRobinIndex } fro
 
 // ─── Model selection ──────────────────────────────────
 
+// In-memory round-robin index for model selection (not persisted across cold starts)
+const modelRoundRobinIndex = new Map<string, number>();
+
 /**
  * Pick a model from the provider's selectedModels array.
  * If the request specifies a model that's in the provider's selectedModels, use that.
- * Otherwise, round-robin through selectedModels.
+ * Otherwise, round-robin through selectedModels for even load distribution.
  */
 export function pickModel(provider: Provider, requestedModel?: string): string {
   const available = provider.selectedModels.length > 0 ? provider.selectedModels : provider.models;
-  
+
   if (available.length === 0) {
     return requestedModel || '';
   }
 
-  // Otherwise pick the first available model
-  return available[0];
+  // Explicit model request — use it if available
+  if (requestedModel && available.includes(requestedModel)) {
+    return requestedModel;
+  }
+
+  // Round-robin through available models
+  const idx = modelRoundRobinIndex.get(provider.id) ?? 0;
+  const pick = available[idx % available.length];
+  modelRoundRobinIndex.set(provider.id, idx + 1);
+  return pick;
 }
 
 // ─── Provider selection ───────────────────────────────

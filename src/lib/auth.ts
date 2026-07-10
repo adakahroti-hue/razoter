@@ -4,9 +4,16 @@ import { supabase } from './supabase';
 import bcrypt from 'bcryptjs';
 import { SignJWT, jwtVerify } from 'jose';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'razoter-jwt-secret-change-me-in-production'
-);
+let _jwtSecret: Uint8Array | null = null;
+function getJwtSecret(): Uint8Array {
+  if (_jwtSecret) return _jwtSecret;
+  const raw = process.env.JWT_SECRET;
+  if (!raw) {
+    throw new Error('FATAL: JWT_SECRET environment variable is not set. Refusing to start with a hardcoded secret.');
+  }
+  _jwtSecret = new TextEncoder().encode(raw);
+  return _jwtSecret;
+}
 
 // ─── Password hashing ─────────────────────────────────
 
@@ -25,12 +32,12 @@ export async function generateToken(userId: string): Promise<string> {
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('24h')
-    .sign(JWT_SECRET);
+    .sign(getJwtSecret());
 }
 
 export async function verifyToken(token: string): Promise<{ userId: string } | null> {
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecret());
     return { userId: payload.userId as string };
   } catch {
     return null;
@@ -112,35 +119,45 @@ export async function getUserById(id: string): Promise<{ id: string; username: s
 }
 
 // ─── API Key auth (kept for proxy endpoint) ───────────
+import { timingSafeEqual } from 'crypto';
+
+// Cache config key + api key existence to avoid 2 DB hits per proxy request
+let cachedRazoterKey: string | null = null;
+let cachedApiKeys = new Set<string>();
+let cacheExpiry = 0;
+const CACHE_TTL = 30_000; // 30s
+
+async function refreshKeyCache(): Promise<void> {
+  if (Date.now() < cacheExpiry) return;
+  try {
+    const config = await getConfig();
+    cachedRazoterKey = config.razoterApiKey;
+    const { data } = await supabase
+      .from('api_keys')
+      .select('key');
+    cachedApiKeys = new Set((data || []).map((k: any) => k.key).filter(Boolean));
+    cacheExpiry = Date.now() + CACHE_TTL;
+  } catch {
+    // keep stale cache on error
+  }
+}
 
 export async function verifyApiKey(request: NextRequest): Promise<boolean> {
   const authHeader = request.headers.get('authorization');
-
   if (!authHeader) return false;
 
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (!token) return false;
 
-  // Check against the main config key first
-  try {
-    const config = await getConfig();
-    if (token === config.razoterApiKey) return true;
-  } catch {
-    // Config load failed, continue to DB check
+  await refreshKeyCache();
+
+  // Constant-time comparison against cached keys
+  const candidates = cachedRazoterKey ? [cachedRazoterKey, ...cachedApiKeys] : [...cachedApiKeys];
+  for (const key of candidates) {
+    if (key.length === token.length && timingSafeEqual(Buffer.from(key), Buffer.from(token))) {
+      return true;
+    }
   }
-
-  // Check against api_keys table
-  try {
-    const { data } = await supabase
-      .from('api_keys')
-      .select('id')
-      .eq('key', token)
-      .limit(1)
-      .maybeSingle();
-    if (data) return true;
-  } catch {
-    // DB error, fall through
-  }
-
   return false;
 }
 
@@ -199,8 +216,7 @@ export async function ensureDefaultAdmin(): Promise<void> {
     console.log('Creating default admin user...');
     const result = await createUser('admin', 'admin123');
     if (result) {
-      console.log('Default admin user created. Username: admin, Password: admin123');
-      console.log('⚠️  Please change the default password after first login!');
+      console.log('Default admin user created. Username: admin. CHANGE THE PASSWORD AFTER FIRST LOGIN.');
     } else {
       console.log('Could not create default admin user (table may not exist yet).');
     }

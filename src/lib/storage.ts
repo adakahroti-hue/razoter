@@ -18,7 +18,7 @@ function dbToProvider(row: any): Provider {
     id: row.id,
     name: row.name,
     baseUrl: row.base_url,
-    apiKey: row.api_key,
+    apiKey: row.api_key ?? '',
     authType: row.auth_type ?? 'api_key',
     chatgptRefreshToken: row.chatgpt_refresh_token ?? undefined,
     chatgptExpiresAt: row.chatgpt_expires_at ?? undefined,
@@ -234,11 +234,14 @@ export async function updateProviderStats(providerId: string, success: boolean, 
   const provider = await getProvider(providerId);
   if (!provider) return;
 
-  const newRequestCount = provider.totalRequests + 1;
-  const newErrorCount = provider.errorCount + (success ? 0 : 1);
-  const newAvgLatency = Math.round(
-    (provider.avgLatencyMs * provider.totalRequests + latencyMs) / newRequestCount
-  );
+  const prevCount = provider.totalRequests || 0;
+  const newRequestCount = prevCount + 1;
+  const newErrorCount = (provider.errorCount || 0) + (success ? 0 : 1);
+
+  // Guard against divide-by-zero on first request
+  const newAvgLatency = prevCount === 0
+    ? latencyMs
+    : Math.round((provider.avgLatencyMs * prevCount + latencyMs) / newRequestCount);
 
   const errorRate = newErrorCount / newRequestCount;
   let healthStatus: string;
@@ -701,13 +704,15 @@ export async function incrementQuotaUsage(providerId: string, tokens: number, ap
       .eq('id', data.id);
   } else if (apiKeyName) {
     // No entry for this api_key_name — try provider-level entry (api_key_name = '' or null)
-    const { data: fallback } = await supabase
+    // Avoid .or() empty-string filter (broken in PostgREST); fetch and filter in code.
+    const { data: candidates } = await supabase
       .from('quotas')
       .select('id, current_usage, api_key_name')
-      .eq('provider_id', providerId)
-      .or('api_key_name.is.null,api_key_name.eq.')
-      .limit(1)
-      .maybeSingle();
+      .eq('provider_id', providerId);
+
+    const fallback = (candidates || []).find(
+      (q: any) => q.api_key_name === null || q.api_key_name === ''
+    );
 
     if (fallback) {
       await supabase
@@ -730,7 +735,13 @@ export async function checkQuotaLimit(providerId: string, apiKeyName?: string): 
     queryBuilder = queryBuilder.eq('api_key_name', apiKeyName);
   }
 
-  const { data } = await queryBuilder.limit(1).maybeSingle();
+  const { data, error } = await queryBuilder.limit(1).maybeSingle();
+
+  // DB error: fail closed (block request) rather than silently bypassing quota.
+  if (error) {
+    console.error('Supabase checkQuotaLimit error:', error);
+    return false;
+  }
 
   if (!data || !data.monthly_limit || data.monthly_limit === 0) return true; // no limit
   return (data.current_usage ?? 0) < data.monthly_limit;

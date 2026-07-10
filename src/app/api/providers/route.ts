@@ -14,12 +14,15 @@ export async function GET(request: NextRequest) {
 
   const providers = await getProviders();
   // Mask API keys in response
+  const maskKey = (k?: string) =>
+    k && k.length >= 12 ? `${k.slice(0, 8)}...${k.slice(-4)}` : (k ? `${k.slice(0, 2)}...` : '');
+
   const masked = providers.map(p => ({
     ...p,
-    apiKey: p.apiKey ? p.apiKey.slice(0, 8) + '...' + p.apiKey.slice(-4) : '',
+    apiKey: maskKey(p.apiKey),
     apiKeys: (p.apiKeys || []).map((ak: any) => ({
       ...ak,
-      key: ak.key ? ak.key.slice(0, 8) + '...' + ak.key.slice(-4) : '',
+      key: maskKey(ak.key),
     })),
   }));
   
