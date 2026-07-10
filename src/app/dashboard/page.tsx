@@ -1117,7 +1117,7 @@ export default function Dashboard() {
                             )}
                           </div>
                           <div>
-                            <input type="text" className="input w-full text-sm font-mono" placeholder={isExisting ? 'Leave blank to keep current key' : 'sk-...'} value={fk.key} onChange={e => {
+                            <input type="text" className="input w-full text-sm font-mono" placeholder={isExisting ? 'Kosongkan untuk mempertahankan key saat ini' : 'Masukkan API key lengkap'} value={fk.key} onChange={e => {
                               const updated = [...providerFormKeys];
                               updated[idx] = { ...updated[idx], key: e.target.value };
                               setProviderFormKeys(updated);
