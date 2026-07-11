@@ -804,12 +804,10 @@ export default function Dashboard() {
                     <div className="flex items-center gap-2">
                       <h3 className="font-semibold text-yellow-500 text-[15px] leading-snug truncate flex-1">{p.name}</h3>
                       <span className={`px-1.5 py-0.5 rounded-full text-[11px] font-semibold ${p.enabled ? 'bg-emerald-100 text-emerald-700 status-on' : 'bg-slate-200 text-slate-500'}`}>{p.enabled ? 'ON' : 'OFF'}</span>
+                      <span className="inline-flex items-center gap-1 text-[11px] text-slate-500"><IconCoin size={12} className="text-slate-400" /> <b className="font-semibold text-slate-700">{formatTokens(tokenByProvider[p.id] ?? 0)}</b></span>
                       <button onClick={() => handleArchiveProvider(p)} className="text-[11px] px-1.5 py-0.5 rounded-full font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 inline-flex items-center gap-1" title={p.archived ? 'Buka dari arsip' : 'Arsip'}>{p.archived ? 'Buka' : <><IconArchive size={12} /> Arsip</>}</button>
                     </div>
                     <div className="text-[13px] text-slate-400 mt-1.5 font-mono truncate leading-relaxed" title={p.baseUrl}>{p.baseUrl}</div>
-                    <div className="flex items-center gap-3 mt-1.5 text-[12.5px] text-slate-500 leading-relaxed">
-                      <span className="inline-flex items-center gap-1"><IconCoin size={13} className="text-slate-400" /> <b className="font-semibold text-slate-700">{formatTokens(tokenByProvider[p.id] ?? 0)}</b> token</span>
-                    </div>
                     <div className="flex flex-col gap-2 mt-2 flex-1 content-start">
                       {/* Group model test results by API key */}
                       {(() => {
