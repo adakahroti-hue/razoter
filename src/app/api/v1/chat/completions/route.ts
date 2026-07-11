@@ -63,8 +63,17 @@ function pickApiKey(provider: any, triedKeyNames?: Set<string>, forcedKeyName?: 
         // Use per-provider round-robin index
         const providerRoundRobinKey = `apikey_rr_${provider.id}`;
         const idx = apiKeyRoundRobinIndex.get(providerRoundRobinKey) ?? 0;
-        const pick = enabled[idx % enabled.length];
-        apiKeyRoundRobinIndex.set(providerRoundRobinKey, idx + 1);
+        let pick = enabled[idx % enabled.length];
+        // If this key was already tried (inner retry), advance to next untried
+        if (triedKeyNames && triedKeyNames.size > 0) {
+          let guard = 0;
+          while (triedKeyNames.has(pick.name) && guard < enabled.length) {
+            apiKeyRoundRobinIndex.set(providerRoundRobinKey, (apiKeyRoundRobinIndex.get(providerRoundRobinKey) ?? 0) + 1);
+            pick = enabled[apiKeyRoundRobinIndex.get(providerRoundRobinKey)! % enabled.length];
+            guard++;
+          }
+        }
+        apiKeyRoundRobinIndex.set(providerRoundRobinKey, (apiKeyRoundRobinIndex.get(providerRoundRobinKey) ?? 0) + 1);
         return { key: pick.key, name: pick.name };
       }
       // Default: random
@@ -341,10 +350,12 @@ export async function POST(request: NextRequest) {
   }
 
   const triedIds = new Set<string>();
+  const triedKeyNames = new Map<string, Set<string>>(); // providerId -> tried key names
   let currentProvider = await selectProvider(config.mode);
   let lastError: any = null;
 
   for (let attempt = 0; attempt < config.maxRetries && currentProvider; attempt++) {
+    const providerTriedKeys = triedKeyNames.get(currentProvider.id) || new Set<string>();
     triedIds.add(currentProvider.id);
     const attemptStart = Date.now();
 
@@ -364,7 +375,7 @@ export async function POST(request: NextRequest) {
       const isChatgptPlus = currentProvider.authType === 'chatgpt_plus';
 
       if (isChatgptPlus) {
-        const { header: authHeader, refreshed, newTokens, apiKeyName: akName } = await resolveAccessToken(currentProvider);
+        const { header: authHeader, refreshed, newTokens, apiKeyName: akName } = await resolveAccessToken(currentProvider, providerTriedKeys);
         lastAkName = akName;
         if (refreshed && newTokens) {
           import('@/lib/storage').then(({ updateProvider }) =>
@@ -387,7 +398,7 @@ export async function POST(request: NextRequest) {
 
       // Standard OpenAI-compatible provider
       const upstreamUrl = `${currentProvider.baseUrl.replace(/\/+$/, '')}/chat/completions`;
-      const { header: authHeader, apiKeyName: stdAkName } = await resolveAccessToken(currentProvider);
+      const { header: authHeader, apiKeyName: stdAkName } = await resolveAccessToken(currentProvider, providerTriedKeys);
       lastAkName = stdAkName;
 
       const controller = new AbortController();
@@ -601,9 +612,29 @@ export async function POST(request: NextRequest) {
       lastError = { message: isTimeout ? 'Request timed out' : error.message };
     }
 
-    const next = await getNextProvider(config.mode, currentProvider.id, triedIds);
-    if (!next) break;
-    currentProvider = next;
+    // Track tried key for this provider (for multi-key failover)
+    const lastKey = lastAkName;
+    if (lastKey && lastKey !== 'Default') {
+      if (!triedKeyNames.has(currentProvider.id)) {
+        triedKeyNames.set(currentProvider.id, new Set());
+      }
+      triedKeyNames.get(currentProvider.id)!.add(lastKey);
+    }
+
+    // Decide: retry same provider with next key, or failover to next provider
+    const enabledKeysHere = (currentProvider.apiKeys || []).filter((k: any) => k.enabled !== false);
+    const triedHere = triedKeyNames.get(currentProvider.id) || new Set();
+    const hasMoreKeys = enabledKeysHere.length > triedHere.size;
+
+    if (hasMoreKeys) {
+      // Same provider, next key (DON'T advance provider / DON'T add to triedIds again)
+      continue;
+    } else {
+      // All keys exhausted for this provider → failover to next provider
+      const next = await getNextProvider(config.mode, currentProvider.id, triedIds);
+      if (!next) break;
+      currentProvider = next;
+    }
   }
 
   const errorResponse = {

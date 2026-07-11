@@ -54,7 +54,7 @@ function dbToConfig(row: any): AppConfig {
   return {
     mode: row.mode ?? 'failover',
     razoterApiKey: row.razoter_api_key ?? (process.env.RAZOTER_API_KEY || 'razoter-default-key-change-me'),
-    maxRetries: row.max_retries ?? 3,
+    maxRetries: row.max_retries ?? 20,
     timeoutMs: row.timeout_ms ?? 30000,
   };
 }
@@ -342,7 +342,7 @@ export async function getConfig(): Promise<AppConfig> {
     return {
       mode: 'failover',
       razoterApiKey: process.env.RAZOTER_API_KEY || 'razoter-default-key-change-me',
-      maxRetries: 3,
+      maxRetries: 20,
       timeoutMs: 30000,
     };
   }
