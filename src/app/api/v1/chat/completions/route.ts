@@ -190,7 +190,8 @@ export async function POST(request: NextRequest) {
       const comboStart = Date.now();
       try {
         if (comboProvider.authType === 'chatgpt_plus') {
-          const { header: comboAuth, refreshed, newTokens, apiKeyName: comboKeyName } = await resolveAccessToken(comboProvider, undefined, comboResult.apiKeyName);
+          const { header: comboAuth, refreshed, newTokens, apiKeyName } = await resolveAccessToken(comboProvider, undefined, comboResult.apiKeyName);
+          comboKeyName = apiKeyName;
           if (refreshed && newTokens) {
             import('@/lib/storage').then(({ updateProvider }) =>
               updateProvider(comboProvider!.id, newTokens as any)
@@ -210,11 +211,8 @@ export async function POST(request: NextRequest) {
         }
 
         const upstreamUrl = `${comboProvider.baseUrl.replace(/\/+$/, '')}/chat/completions`;
-        const { header: comboAuth, apiKeyName: comboKeyName } = await resolveAccessToken(comboProvider, undefined, comboResult.apiKeyName);
-        if (comboKeyName === 'Default') {
-          const ak = comboProvider?.apiKeys;
-          addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'success', latencyMs: 0, errorMessage: `[D] src=combo forced=${comboResult.apiKeyName ?? ''} akType=${Array.isArray(ak) ? 'arr(' + ak.length + ')' : typeof ak} strat=${comboProvider.apiKeyStrategy}`, apiKeyName: 'Default' }).catch(() => {});
-        }
+        const { header: comboAuth, apiKeyName } = await resolveAccessToken(comboProvider, undefined, comboResult.apiKeyName);
+        comboKeyName = apiKeyName;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs);
 
@@ -369,10 +367,6 @@ export async function POST(request: NextRequest) {
       // Standard OpenAI-compatible provider
       const upstreamUrl = `${currentProvider.baseUrl.replace(/\/+$/, '')}/chat/completions`;
       const { header: authHeader, apiKeyName: stdAkName } = await resolveAccessToken(currentProvider);
-      if (stdAkName === 'Default') {
-        const ak = currentProvider?.apiKeys;
-        addLog({ providerId: currentProvider.id, providerName: currentProvider.name, model: selectedModel || requestedModel, status: 'success', latencyMs: 0, errorMessage: `[D] src=provider akType=${Array.isArray(ak) ? 'arr(' + ak.length + ')' : typeof ak} strat=${currentProvider.apiKeyStrategy}`, apiKeyName: 'Default' }).catch(() => {});
-      }
       lastAkName = stdAkName;
 
       const controller = new AbortController();
