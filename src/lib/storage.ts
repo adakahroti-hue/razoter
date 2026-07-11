@@ -629,10 +629,17 @@ export async function resolveComboModel(
   const strategy = (data.strategy as Combo['strategy']) ?? 'failover-priority';
 
   if (strategy === 'round-robin') {
+    const tried = new Set(triedIndices ?? []);
     const idx = comboRoundRobinIndex.get(modelName) ?? 0;
-    const nextIdx = idx % items.length;
-    comboRoundRobinIndex.set(modelName, idx + 1);
-    return { providerId: items[nextIdx].providerId, model: items[nextIdx].model, itemIndex: nextIdx, apiKeyName: items[nextIdx].apiKeyName };
+    // Try each item starting from round-robin index, skip already-tried ones
+    for (let offset = 0; offset < items.length; offset++) {
+      const nextIdx = (idx + offset) % items.length;
+      if (!tried.has(nextIdx)) {
+        comboRoundRobinIndex.set(modelName, nextIdx + 1);
+        return { providerId: items[nextIdx].providerId, model: items[nextIdx].model, itemIndex: nextIdx, apiKeyName: items[nextIdx].apiKeyName };
+      }
+    }
+    return null; // all items exhausted
   } else {
     // failover-priority: try items in order, skip already-tried ones
     const tried = new Set(triedIndices ?? []);

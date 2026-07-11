@@ -82,8 +82,9 @@ const apiKeyRoundRobinIndex = new Map<string, number>();
  *  triedKeyNames: names of keys already tried (for failover-priority multi-key failover).
  *  forcedKeyName: when set (combo item specifies a key), pick that exact key. */
 async function resolveAccessToken(provider: any, triedKeyNames?: Set<string>, forcedKeyName?: string): Promise<{ header: string; refreshed: boolean; newTokens?: any; apiKeyName: string }> {
+  // Always pick key ONCE to avoid double-increment for round-robin
+  const ak = pickApiKey(provider, triedKeyNames, forcedKeyName);
   if (provider.authType === 'chatgpt_plus' && provider.chatgptRefreshToken && provider.chatgptExpiresAt) {
-    const ak = pickApiKey(provider, triedKeyNames, forcedKeyName);
     try {
       const r = await getValidAccessToken(
         ak.key,
@@ -109,8 +110,7 @@ async function resolveAccessToken(provider: any, triedKeyNames?: Set<string>, fo
       });
     }
   }
-  const fallback = pickApiKey(provider, triedKeyNames, forcedKeyName);
-  return { header: `Bearer ${fallback.key}`, refreshed: false, apiKeyName: fallback.name };
+  return { header: `Bearer ${ak.key}`, refreshed: false, apiKeyName: ak.name };
 }
 
 export async function POST(request: NextRequest) {
@@ -170,7 +170,8 @@ export async function POST(request: NextRequest) {
   // ─── Combo resolution (with internal failover) ────────
   if (requestedModel) {
     const comboTriedIndices: number[] = [];
-    const maxComboAttempts = 5;
+    const comboTriedKeyNames = new Map<string, Set<string>>(); // providerId -> tried key names
+    const maxComboAttempts = 20;
 
     for (let comboAttempt = 0; comboAttempt < maxComboAttempts; comboAttempt++) {
       const comboResult = await resolveComboModel(requestedModel, comboTriedIndices);
@@ -190,7 +191,7 @@ export async function POST(request: NextRequest) {
       const comboStart = Date.now();
       try {
         if (comboProvider.authType === 'chatgpt_plus') {
-          const { header: comboAuth, refreshed, newTokens, apiKeyName } = await resolveAccessToken(comboProvider, undefined, comboResult.apiKeyName);
+          const { header: comboAuth, refreshed, newTokens, apiKeyName } = await resolveAccessToken(comboProvider, comboTriedKeyNames.get(comboProvider.id), comboResult.apiKeyName);
           comboKeyName = apiKeyName;
           if (refreshed && newTokens) {
             import('@/lib/storage').then(({ updateProvider }) =>
@@ -211,7 +212,7 @@ export async function POST(request: NextRequest) {
         }
 
         const upstreamUrl = `${comboProvider.baseUrl.replace(/\/+$/, '')}/chat/completions`;
-        const { header: comboAuth, apiKeyName } = await resolveAccessToken(comboProvider, undefined, comboResult.apiKeyName);
+        const { header: comboAuth, apiKeyName } = await resolveAccessToken(comboProvider, comboTriedKeyNames.get(comboProvider.id), comboResult.apiKeyName);
         comboKeyName = apiKeyName;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs);
@@ -290,14 +291,34 @@ export async function POST(request: NextRequest) {
         let parsedError = errText;
         try { parsedError = JSON.parse(errText)?.error?.message || errText; } catch {}
         await updateProviderStats(comboProvider.id, false, latencyMs);
-        await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'retry', statusCode: upstreamResponse.status, latencyMs, errorMessage: parsedError + '. Combo failover -> next item.', apiKeyName: comboKeyName });
+        await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'retry', statusCode: upstreamResponse.status, latencyMs, errorMessage: parsedError + (comboResult.apiKeyName ? '. Combo failover -> next item.' : '. Key failed, trying next.'), apiKeyName: comboKeyName });
       } catch (err: any) {
         const latencyMs = Date.now() - comboStart;
         await updateProviderStats(comboProvider.id, false, latencyMs);
-        await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'retry', latencyMs, errorMessage: err.message + '. Combo failover -> next item.', apiKeyName: comboKeyName });
+        await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'retry', latencyMs, errorMessage: err.message + (comboResult.apiKeyName ? '. Combo failover -> next item.' : '. Key failed, trying next.'), apiKeyName: comboKeyName });
       }
 
-      comboTriedIndices.push(comboResult.itemIndex);
+      // Track tried key for this provider (only if not pinned — pinned keys don't retry same item)
+      if (!comboResult.apiKeyName && comboKeyName && comboKeyName !== 'Default') {
+        if (!comboTriedKeyNames.has(comboProvider.id)) {
+          comboTriedKeyNames.set(comboProvider.id, new Set());
+        }
+        comboTriedKeyNames.get(comboProvider.id)!.add(comboKeyName);
+      }
+
+      // Decide: retry same item with next key, or combo failover to next item
+      const triedKeys = comboTriedKeyNames.get(comboProvider.id) || new Set();
+      const enabledKeys = (comboProvider.apiKeys || []).filter((k: any) => k.enabled !== false);
+      const hasMoreKeys = !comboResult.apiKeyName && enabledKeys.length > triedKeys.size;
+
+      if (hasMoreKeys) {
+        // Same combo item, retry with next key (DON'T push to comboTriedIndices)
+        continue;
+      } else {
+        // All keys exhausted for this item (or key was pinned) → combo failover to next item
+        comboTriedIndices.push(comboResult.itemIndex);
+        comboTriedKeyNames.delete(comboProvider.id); // reset for potential future use of same provider
+      }
     }
 
     return withCors(
