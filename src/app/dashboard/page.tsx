@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { NavIcon } from '@/components/NavIcon';
 import RazoterLogo from '@/components/RazoterLogo';
 import {
-  IconCopy, IconArchive, IconKey, IconCoin, IconSearch, IconCheck, IconCross,
+  IconCopy, IconKey, IconCoin, IconSearch, IconCheck, IconCross,
   IconClock, IconFlask, IconPencil, IconTrash, IconSync, IconRoute, IconPlus,
   IconWarning, IconPlug, IconChart, IconSpinner, IconSpinnerLg,
 } from '@/components/AppIcon';
@@ -176,14 +176,11 @@ export default function Dashboard() {
   const [newKeyName, setNewKeyName] = useState('');
   const [generatedKey, setGeneratedKey] = useState('');
 
-  // Show archived providers toggle
-  const [showArchived, setShowArchived] = useState(false);
+  // Model testing
   const [showComboModal, setShowComboModal] = useState(false);
   const [editingCombo, setEditingCombo] = useState<Combo | null>(null);
   const [comboForm, setComboForm] = useState({ name: '', strategy: 'failover-priority' as ComboStrategy });
   const [comboItems, setComboItems] = useState<ComboItem[]>([]);
-
-  // Model testing
   const [modelTestResults, setModelTestResults] = useState<Record<string, { status: 'idle' | 'testing' | 'ok' | 'fail'; latencyMs?: number; error?: string }>>({});
   const [testingAllModels, setTestingAllModels] = useState<string | null>(null); // providerId when testing all
 
@@ -239,7 +236,7 @@ export default function Dashboard() {
 
   const fetchData = useCallback(async () => {
     try {
-      const providersUrl = '/api/providers' + (showArchived ? '?archived=true' : '');
+      const providersUrl = '/api/providers';
       const [provRes, logRes, statsRes, configRes, keysRes, combosRes] = await Promise.all([
         api(providersUrl),
         api('/api/logs?limit=50'),
@@ -450,16 +447,6 @@ export default function Dashboard() {
   async function handleDeleteProvider(id: string) {
     const url = `/api/providers?id=${id}`;
     try { await api(url, { method: 'DELETE' }); fetchData(); } catch {}
-  }
-
-  async function handleArchiveProvider(provider: Provider) {
-    const action = provider.archived ? 'tampilkan kembali' : 'arsipkan';
-    if (!confirm(`Yakin ingin ${action} provider "${provider.name}"?`)) return;
-    const archiveUrl = `/api/providers?id=${provider.id}&action=archive&archived=${!provider.archived}`;
-    try {
-      await api(archiveUrl, { method: 'DELETE' });
-      fetchData();
-    } catch {}
   }
 
   async function handleToggleProvider(provider: Provider) {
@@ -791,7 +778,6 @@ export default function Dashboard() {
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
               <h2 className="text-[23px] font-bold text-slate-900 tracking-tight">Providers</h2>
               <div className="flex gap-2 w-full sm:w-auto">
-                <button onClick={() => setShowArchived(s => !s)} className={`flex-1 sm:flex-none text-[13px] px-3 py-2.5 rounded-lg font-medium whitespace-nowrap flex items-center justify-center gap-1.5 ${showArchived ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}><IconArchive size={14} />{showArchived ? 'Sembunyikan Arsip' : 'Tampilkan Arsip'}</button>
                 <button onClick={() => { resetProviderForm(); setShowProviderModal(true); }} className="btn btn-primary flex-1 sm:flex-none text-[13.5px] justify-center">+ Add Provider</button>
               </div>
             </div>
@@ -805,7 +791,6 @@ export default function Dashboard() {
                       <h3 className="font-semibold text-yellow-500 text-[15px] leading-snug truncate flex-1">{p.name}</h3>
                       <span className={`px-1.5 py-0.5 rounded-full text-[11px] font-semibold ${p.enabled ? 'bg-emerald-100 text-emerald-700 status-on' : 'bg-slate-200 text-slate-500'}`}>{p.enabled ? 'ON' : 'OFF'}</span>
                       <span className="inline-flex items-center gap-1 text-[11px] text-slate-500"><IconCoin size={12} className="text-slate-400" /> <b className="font-semibold text-slate-700">{formatTokens(tokenByProvider[p.id] ?? 0)}</b></span>
-                      <button onClick={() => handleArchiveProvider(p)} className="text-[11px] px-1.5 py-0.5 rounded-full font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 inline-flex items-center gap-1" title={p.archived ? 'Buka dari arsip' : 'Arsip'}>{p.archived ? 'Buka' : <><IconArchive size={12} /> Arsip</>}</button>
                     </div>
                     <div className="text-[13px] text-slate-400 mt-1.5 font-mono truncate leading-relaxed" title={p.baseUrl}>{p.baseUrl}</div>
                     <div className="flex flex-col gap-2 mt-2 flex-1 content-start">

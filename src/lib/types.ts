@@ -14,7 +14,6 @@ export interface Provider {
   selectedModels: string[];
   priority: number;
   enabled: boolean;
-  archived: boolean;
   healthStatus: 'healthy' | 'degraded' | 'down' | 'unknown';
   lastHealthCheck: string | null;
   totalRequests: number;
