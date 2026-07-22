@@ -6,8 +6,23 @@ import { withCors, handleCorsPreflight, corsHeaders } from '@/lib/cors';
 import { getValidAccessToken } from '@/lib/chatgpt-auth';
 import { handleChatgptPlusRequest } from '@/lib/chatgpt-proxy';
 
+// Allow enough wall-clock time for combo failover across several slow items.
+// Without this, Vercel can kill the function mid-failover and the user only
+// sees a generic failure even though later combo items might still work.
+export const maxDuration = 300;
+export const runtime = 'nodejs';
+
 export async function OPTIONS() {
   return handleCorsPreflight();
+}
+
+/** Per-item timeout for Gabung failover.
+ *  Full config.timeoutMs (often 30s) is too slow when several items fail in a row —
+ *  the whole request dies before reaching a healthy later item. */
+function comboItemTimeoutMs(configTimeoutMs: number): number {
+  const raw = Number(configTimeoutMs) || 30000;
+  // Cap at 12s per combo item so a chain of 5 failing items finishes ~1 minute.
+  return Math.max(5000, Math.min(raw, 12000));
 }
 
 function getClientIp(request: NextRequest): string {
@@ -184,6 +199,8 @@ export async function POST(request: NextRequest) {
     const comboTriedKeyNames = new Map<string, Set<string>>(); // providerId -> tried key names
     const maxComboAttempts = 20;
     let comboMatched = false;
+    const comboLastErrors: string[] = [];
+    const itemTimeoutMs = comboItemTimeoutMs(config.timeoutMs);
 
     for (let comboAttempt = 0; comboAttempt < maxComboAttempts; comboAttempt++) {
       const comboResult = await resolveComboModel(requestedModel, comboTriedIndices);
@@ -195,7 +212,43 @@ export async function POST(request: NextRequest) {
       const hasMultiKey = !!comboProvider?.apiKeys && comboProvider.apiKeys.filter(k => k.enabled !== false).length > 1;
       if (!comboProvider || (!comboProvider.enabled && !hasMultiKey)) {
         comboTriedIndices.push(comboResult.itemIndex);
+        comboLastErrors.push(`item#${comboResult.itemIndex + 1}: provider missing/disabled`);
         continue;
+      }
+
+      // If this combo item pins a specific API key, skip immediately when that key is missing/disabled.
+      // Do NOT silently fall back to another key — that hides misconfiguration and burns time.
+      if (comboResult.apiKeyName) {
+        const keys = Array.isArray(comboProvider.apiKeys) ? comboProvider.apiKeys : [];
+        const pinned = keys.find((k: any) => k?.name === comboResult.apiKeyName);
+        if (!pinned) {
+          comboTriedIndices.push(comboResult.itemIndex);
+          comboLastErrors.push(`${comboProvider.name}/${comboResult.model} @ ${comboResult.apiKeyName}: key not found`);
+          await addLog({
+            providerId: comboProvider.id,
+            providerName: comboProvider.name,
+            model: comboResult.model,
+            status: 'retry',
+            latencyMs: 0,
+            errorMessage: `Pinned API key '${comboResult.apiKeyName}' not found. Combo failover -> next item.`,
+            apiKeyName: comboResult.apiKeyName,
+          }).catch(() => {});
+          continue;
+        }
+        if (pinned.enabled === false) {
+          comboTriedIndices.push(comboResult.itemIndex);
+          comboLastErrors.push(`${comboProvider.name}/${comboResult.model} @ ${comboResult.apiKeyName}: key disabled`);
+          await addLog({
+            providerId: comboProvider.id,
+            providerName: comboProvider.name,
+            model: comboResult.model,
+            status: 'retry',
+            latencyMs: 0,
+            errorMessage: `Pinned API key '${comboResult.apiKeyName}' is disabled. Combo failover -> next item.`,
+            apiKeyName: comboResult.apiKeyName,
+          }).catch(() => {});
+          continue;
+        }
       }
 
       body.model = comboResult.model;
@@ -228,7 +281,8 @@ export async function POST(request: NextRequest) {
         const { header: comboAuth, apiKeyName } = await resolveAccessToken(comboProvider, comboTriedKeyNames.get(comboProvider.id), comboResult.apiKeyName);
         comboKeyName = apiKeyName;
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs);
+        // Shorter per-item timeout so failover can still reach later healthy items.
+        const timeoutId = setTimeout(() => controller.abort(), itemTimeoutMs);
 
         const upstreamResponse = await fetch(upstreamUrl, {
           method: 'POST',
@@ -303,12 +357,18 @@ export async function POST(request: NextRequest) {
         const errText = await upstreamResponse.text();
         let parsedError = errText;
         try { parsedError = JSON.parse(errText)?.error?.message || errText; } catch {}
+        comboLastErrors.push(`${comboProvider.name}/${comboResult.model} @ ${comboKeyName}: ${parsedError}`);
         await updateProviderStats(comboProvider.id, false, latencyMs);
         await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'retry', statusCode: upstreamResponse.status, latencyMs, errorMessage: parsedError + (comboResult.apiKeyName ? '. Combo failover -> next item.' : '. Key failed, trying next.'), apiKeyName: comboKeyName });
       } catch (err: any) {
         const latencyMs = Date.now() - comboStart;
+        const isAbort = err?.name === 'AbortError' || /aborted/i.test(String(err?.message || ''));
+        const errMsg = isAbort
+          ? `Timeout after ${itemTimeoutMs}ms`
+          : (err?.message || String(err));
+        comboLastErrors.push(`${comboProvider.name}/${comboResult.model} @ ${comboKeyName}: ${errMsg}`);
         await updateProviderStats(comboProvider.id, false, latencyMs);
-        await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'retry', latencyMs, errorMessage: err.message + (comboResult.apiKeyName ? '. Combo failover -> next item.' : '. Key failed, trying next.'), apiKeyName: comboKeyName });
+        await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'retry', latencyMs, errorMessage: errMsg + (comboResult.apiKeyName ? '. Combo failover -> next item.' : '. Key failed, trying next.'), apiKeyName: comboKeyName });
       }
 
       // Track tried key for this provider (only if not pinned — pinned keys don't retry same item)
@@ -337,9 +397,15 @@ export async function POST(request: NextRequest) {
     // Only hard-fail if this model WAS a Gabung combo.
     // If no combo matched, fall through to normal provider routing.
     if (comboMatched) {
+      const detail = comboLastErrors.slice(-5).join(' | ') || 'all items exhausted or provider disabled';
       return withCors(
         NextResponse.json(
-          { error: { message: `Combo model '${requestedModel}' failed: all items exhausted or provider disabled.`, type: 'server_error' } },
+          {
+            error: {
+              message: `Combo model '${requestedModel}' failed: ${detail}`,
+              type: 'server_error',
+            },
+          },
           { status: 502 }
         )
       );
