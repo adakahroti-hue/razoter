@@ -1258,21 +1258,17 @@ export default function Dashboard() {
                     <th className="px-4 py-2 text-slate-500 font-medium">Model</th>
                     <th className="px-4 py-2 text-slate-500 font-medium">API Key</th>
                     <th className="px-4 py-2 text-slate-500 font-medium">Token</th>
-                    <th className="px-4 py-2 text-slate-500 font-medium">Request</th>
-                    <th className="px-4 py-2 text-slate-500 font-medium">Sukses</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(stats?.tokenByModelAndKey?.length ?? 0) === 0 ? (
-                    <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">Belum ada data token</td></tr>
+                    <tr><td colSpan={3} className="px-4 py-8 text-center text-slate-400">Belum ada data token</td></tr>
                   ) : (
                     (stats?.tokenByModelAndKey ?? []).slice(0, 50).map((row, i) => (
                       <tr key={`${row.model}-${row.apiKeyName}-${i}`} className="border-t border-slate-100">
                         <td className="px-4 py-2 font-mono text-xs text-slate-700">{row.model}</td>
                         <td className="px-4 py-2 font-mono text-xs text-yellow-600">{row.apiKeyName}</td>
                         <td className="px-4 py-2 font-semibold text-slate-800">{formatTokens(row.tokens)}</td>
-                        <td className="px-4 py-2 text-slate-600">{row.requests}</td>
-                        <td className="px-4 py-2 text-slate-600">{row.successes}</td>
                       </tr>
                     ))
                   )}
@@ -1287,9 +1283,8 @@ export default function Dashboard() {
                     <div key={`${row.model}-${row.apiKeyName}-m-${i}`} className="p-3">
                       <div className="font-mono text-xs text-slate-700 truncate">{row.model}</div>
                       <div className="font-mono text-xs text-yellow-600 mt-0.5">{row.apiKeyName}</div>
-                      <div className="flex items-center justify-between mt-1 text-xs">
+                      <div className="mt-1 text-xs">
                         <span className="font-semibold text-slate-800 inline-flex items-center gap-1"><IconCoin size={12} className="text-amber-500" />{formatTokens(row.tokens)}</span>
-                        <span className="text-slate-500">{row.successes}/{row.requests} ok</span>
                       </div>
                     </div>
                   ))
