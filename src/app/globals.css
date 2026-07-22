@@ -702,19 +702,78 @@ body::before {
   .btn { min-height: 44px; }
   .btn-xs { min-height: 40px; }
   .input { font-size: 16px; }
-  /* tab bar: icon-only, centered, comfortable tap targets */
+  /* tab bar: sticky bottom menu on phones only — desktop stays top bar */
+  .dashboard-main {
+    padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+  }
   .tab-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 45;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
-    justify-content: center;
+    justify-content: space-around;
+    gap: 0.15rem;
+    margin: 0;
+    padding: 0.4rem 0.35rem calc(0.4rem + env(safe-area-inset-bottom, 0px));
+    border-radius: 16px 16px 0 0;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    background: rgba(8, 18, 34, 0.92) !important;
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    box-shadow:
+      0 -8px 28px -16px rgba(0, 0, 0, 0.75),
+      0 -1px 0 rgba(53, 230, 255, 0.18);
   }
   .tab-bar::-webkit-scrollbar { display: none; }
+  .tab-bar .tab-item,
   .tab-bar button {
-    min-width: 48px;
+    min-width: 0;
     flex: 1 1 0;
-    padding-top: 0.65rem;
-    padding-bottom: 0.65rem;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.4rem 0.15rem 0.35rem;
+    min-height: 54px;
+    border-radius: 12px;
+    font-size: 10px !important;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+  .tab-bar .tab-label {
+    display: inline !important;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tab-bar .tab-badge {
+    position: absolute;
+    top: 4px;
+    right: 8px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    line-height: 1;
+  }
+  .tab-bar .tab-item,
+  .tab-bar button {
+    position: relative;
+  }
+  .tab-bar .tab-active::after {
+    left: 22%;
+    right: 22%;
+    bottom: 2px;
   }
   /* cards: tighter padding, single/double column handled by grid utility */
   .card { padding: 0.875rem; }

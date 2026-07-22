@@ -825,27 +825,24 @@ export default function Dashboard() {
         <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4">
           <div className="flex items-center gap-[13px]">
             <RazoterLogo size={42} />
-            <div className="flex items-baseline gap-2">
-              <h1 className="text-[23px] sm:text-[24px] font-bold text-slate-900 tracking-tight leading-none">Razoter</h1>
-              <span className="text-[13px] text-slate-400 font-medium leading-none">v2.2</span>
-            </div>
+            <h1 className="text-[23px] sm:text-[24px] font-bold text-slate-900 tracking-tight leading-none">Razoter</h1>
           </div>
           <div className="flex items-center gap-4">
             <button onClick={handleLogout} className="text-[14px] font-medium text-slate-500 hover:text-red-600 transition-colors">Logout</button>
           </div>
         </div>
       </header>
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
-        {/* Tabs */}
+      <main className="dashboard-main max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
+        {/* Tabs — bottom sticky menu on mobile, top bar on desktop */}
         <div className="tab-bar flex gap-1 rounded-lg p-1 overflow-x-auto flex-nowrap justify-center sm:justify-start">
           {(['providers', 'combos', 'archive', 'logs', 'settings'] as const).map(tab => {
             const label = tab === 'providers' ? 'Providers' : tab === 'combos' ? 'Gabung' : tab === 'archive' ? 'Arsip' : tab === 'settings' ? 'Dokumentasi' : 'Logs';
             return (
-              <button key={tab} aria-label={label} onClick={() => setActiveTab(tab)} className={`flex-1 sm:flex-none min-w-[3rem] px-3 sm:px-4 py-2.5 sm:py-2 rounded-md text-[15px] sm:text-[16px] font-semibold transition-colors whitespace-nowrap flex items-center justify-center gap-2 ${activeTab === tab ? 'tab-active shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+              <button key={tab} aria-label={label} onClick={() => setActiveTab(tab)} className={`tab-item flex-1 sm:flex-none min-w-[3rem] px-3 sm:px-4 py-2.5 sm:py-2 rounded-md text-[15px] sm:text-[16px] font-semibold transition-colors whitespace-nowrap flex items-center justify-center gap-2 ${activeTab === tab ? 'tab-active shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
                 <NavIcon name={tab} active={activeTab === tab} size={19} />
-                <span className="hidden sm:inline">{label}</span>
+                <span className="tab-label hidden sm:inline">{label}</span>
                 {tab === 'archive' && archivedProviders.length > 0 && (
-                  <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold">{archivedProviders.length}</span>
+                  <span className="tab-badge text-[11px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold">{archivedProviders.length}</span>
                 )}
               </button>
             );
@@ -956,7 +953,6 @@ export default function Dashboard() {
             <div className="flex flex-wrap justify-between items-end gap-3">
               <div>
                 <h2 className="text-[23px] font-bold text-slate-900 tracking-tight">Gabung Models</h2>
-                <p className="text-[13px] text-slate-500 mt-1 leading-relaxed max-w-xl">Buat model virtual dari gabungan beberapa provider. Nama gabungan muncul di <code className="text-slate-700">/api/v1/models</code> dan dipakai sebagai <code className="text-slate-700">model</code> di request.</p>
               </div>
               <button onClick={openComboModal} className="btn btn-primary text-[13.5px]">+ Buat Gabung</button>
             </div>
