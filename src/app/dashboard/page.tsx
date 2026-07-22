@@ -1273,52 +1273,6 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="card overflow-hidden">
-              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-800">Token by Model + API Key</h3>
-                <span className="text-[11px] text-slate-400">urut token tertinggi</span>
-              </div>
-              {/* Desktop table */}
-              <table className="w-full text-sm hidden sm:table">
-                <thead>
-                  <tr className="bg-slate-50 text-left">
-                    <th className="px-4 py-2 text-slate-500 font-medium">Model</th>
-                    <th className="px-4 py-2 text-slate-500 font-medium">API Key</th>
-                    <th className="px-4 py-2 text-slate-500 font-medium">Token</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(stats?.tokenByModelAndKey?.length ?? 0) === 0 ? (
-                    <tr><td colSpan={3} className="px-4 py-8 text-center text-slate-400">Belum ada data token</td></tr>
-                  ) : (
-                    (stats?.tokenByModelAndKey ?? []).slice(0, 50).map((row, i) => (
-                      <tr key={`${row.model}-${row.apiKeyName}-${i}`} className="border-t border-slate-100">
-                        <td className="px-4 py-2 font-mono text-xs text-slate-700">{row.model}</td>
-                        <td className="px-4 py-2 font-mono text-xs text-yellow-600">{row.apiKeyName}</td>
-                        <td className="px-4 py-2 font-semibold text-slate-800">{formatTokens(row.tokens)}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-              {/* Mobile cards */}
-              <div className="sm:hidden divide-y divide-slate-100">
-                {(stats?.tokenByModelAndKey?.length ?? 0) === 0 ? (
-                  <div className="px-4 py-8 text-center text-slate-400 text-sm">Belum ada data token</div>
-                ) : (
-                  (stats?.tokenByModelAndKey ?? []).slice(0, 30).map((row, i) => (
-                    <div key={`${row.model}-${row.apiKeyName}-m-${i}`} className="p-3">
-                      <div className="font-mono text-xs text-slate-700 truncate">{row.model}</div>
-                      <div className="font-mono text-xs text-yellow-600 mt-0.5">{row.apiKeyName}</div>
-                      <div className="mt-1 text-xs">
-                        <span className="font-semibold text-slate-800 inline-flex items-center gap-1"><IconCoin size={12} className="text-amber-500" />{formatTokens(row.tokens)}</span>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
           </div>
         )}
 
