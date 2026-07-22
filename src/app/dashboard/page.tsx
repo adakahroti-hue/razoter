@@ -437,7 +437,7 @@ export default function Dashboard() {
         }
       }
       if (apiKeysPayload.length > 0) body.apiKeys = apiKeysPayload;
-      body.apiKeyStrategy = providerFormStrategy;
+      // Strategy selection lives in Gabung tab — don't overwrite provider strategy from this modal
       // Backward compat: first real (non-masked) key
       const firstRealKey = validNewKeys.length > 0 ? validNewKeys[0].key : '';
       if (firstRealKey) body.apiKey = firstRealKey;
@@ -1358,27 +1358,6 @@ export default function Dashboard() {
                     })}
                   </div>
                   <button type="button" onClick={() => setProviderFormKeys(prev => [...prev, { name: `Key ${prev.length + 1}`, key: '' }])} className="mt-2 text-sm font-medium text-green-600 hover:text-green-800">+ Tambah Key</button>
-
-                  {/* API Key Strategy */}
-                  {providerFormKeys.length > 1 && (
-                    <div className="mt-3 pt-3 border-t border-slate-200">
-                      <label className="text-sm text-slate-600 mb-2 block inline-flex items-center gap-1.5"><IconKey size={14} className="text-slate-400" /> Strategi Pemilihan API Key</label>
-                      <div className="grid grid-cols-1 gap-2">
-                        <button type="button" onClick={() => setProviderFormStrategy('random')} className={`p-2 rounded-lg border-2 text-left text-sm transition-colors ${providerFormStrategy === 'random' ? 'border-green-500 bg-green-50' : 'border-slate-200 hover:border-slate-300'}`}>
-                          <span className="font-medium text-slate-900 inline-flex items-center gap-1.5"><IconSync size={13} className="text-slate-400" /> Random</span>
-                          <span className="block text-xs text-slate-500 mt-0.5">Pick random key setiap request</span>
-                        </button>
-                        <button type="button" onClick={() => setProviderFormStrategy('failover-priority')} className={`p-2 rounded-lg border-2 text-left text-sm transition-colors ${providerFormStrategy === 'failover-priority' ? 'border-green-500 bg-green-50' : 'border-slate-200 hover:border-slate-300'}`}>
-                          <span className="font-medium text-slate-900 inline-flex items-center gap-1.5"><IconRoute size={13} className="text-slate-400" /> Failover Priority</span>
-                          <span className="block text-xs text-slate-500 mt-0.5">Pakai key pertama, jika gagal ke key berikutnya</span>
-                        </button>
-                        <button type="button" onClick={() => setProviderFormStrategy('round-robin')} className={`p-2 rounded-lg border-2 text-left text-sm transition-colors ${providerFormStrategy === 'round-robin' ? 'border-green-500 bg-green-50' : 'border-slate-200 hover:border-slate-300'}`}>
-                          <span className="font-medium text-slate-900 inline-flex items-center gap-1.5"><IconSync size={13} className="text-slate-400" /> Round Robin</span>
-                          <span className="block text-xs text-slate-500 mt-0.5">Rotasi berurutan ke semua key secara merata</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
               <div className="border-t border-slate-200 pt-4">
@@ -1438,6 +1417,32 @@ export default function Dashboard() {
                       <div className="px-3 py-4 text-center text-xs text-slate-400">Tidak ada model cocok "{modelSearch}"</div>
                     )}
                   </div>
+
+                  {/* Selected models summary — below the picker */}
+                  {selectedModels.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-slate-100">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-sm font-medium text-slate-700">Model terpilih ({selectedModels.length})</label>
+                        <button type="button" onClick={() => setSelectedModels([])} className="text-xs text-slate-500 hover:text-slate-700">Kosongkan</button>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {selectedModels.map(model => (
+                          <span key={model} className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-mono">
+                            {model}
+                            <button
+                              type="button"
+                              onClick={() => toggleModel(model)}
+                              className="text-emerald-600/70 hover:text-red-500 leading-none"
+                              title="Hapus dari pilihan"
+                              aria-label={`Hapus ${model}`}
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               <div className="flex gap-3 pt-2">
