@@ -6,7 +6,7 @@ import RazoterLogo from '@/components/RazoterLogo';
 import {
   IconCopy, IconKey, IconCoin, IconSearch, IconCheck, IconCross,
   IconClock, IconFlask, IconPencil, IconTrash, IconSync, IconRoute, IconPlus,
-  IconWarning, IconPlug, IconChart, IconSpinner, IconSpinnerLg, IconArchive, IconRestore,
+  IconWarning, IconPlug, IconChart, IconSpinner, IconSpinnerLg, IconArchive, IconRestore, IconLogout,
 } from '@/components/AppIcon';
 
 // ─── Types ─────────────────────────────────────────
@@ -822,19 +822,26 @@ export default function Dashboard() {
             <h1 className="text-[23px] sm:text-[24px] font-bold text-slate-900 tracking-tight leading-none">Razoter</h1>
           </div>
           <div className="flex items-center gap-4">
-            <button onClick={handleLogout} className="text-[14px] font-medium text-slate-500 hover:text-red-600 transition-colors">Logout</button>
+            <button
+              onClick={handleLogout}
+              title="Logout"
+              aria-label="Logout"
+              className="w-9 h-9 rounded-lg text-slate-500 hover:text-red-500 hover:bg-red-50/10 border border-transparent hover:border-red-400/30 transition-colors inline-flex items-center justify-center"
+            >
+              <IconLogout size={18} />
+            </button>
           </div>
         </div>
       </header>
       <main className="dashboard-main max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
-        {/* Tabs — bottom sticky menu on mobile, top bar on desktop */}
-        <div className="tab-bar flex gap-1 rounded-lg p-1 overflow-x-auto flex-nowrap justify-center sm:justify-start">
+        {/* Tabs — full-width equal columns; bottom sticky menu on mobile */}
+        <div className="tab-bar flex w-full gap-1 rounded-lg p-1">
           {(['providers', 'combos', 'logs', 'archive', 'settings'] as const).map(tab => {
             const label = tab === 'providers' ? 'Providers' : tab === 'combos' ? 'Gabung' : tab === 'archive' ? 'Arsip' : tab === 'settings' ? 'Dokumentasi' : 'Logs';
             return (
-              <button key={tab} aria-label={label} onClick={() => setActiveTab(tab)} className={`tab-item flex-1 sm:flex-none min-w-[3rem] px-3 sm:px-4 py-2.5 sm:py-2 rounded-md text-[15px] sm:text-[16px] font-semibold transition-colors whitespace-nowrap flex items-center justify-center gap-2 ${activeTab === tab ? 'tab-active shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
-                <NavIcon name={tab} active={activeTab === tab} size={19} />
-                <span className="tab-label hidden sm:inline">{label}</span>
+              <button key={tab} aria-label={label} onClick={() => setActiveTab(tab)} className={`tab-item flex-1 min-w-0 px-1 sm:px-2 py-2.5 sm:py-2 rounded-md text-[13px] sm:text-[15px] font-semibold transition-colors flex items-center justify-center gap-1.5 sm:gap-2 ${activeTab === tab ? 'tab-active shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                <NavIcon name={tab} active={activeTab === tab} size={18} />
+                <span className="tab-label truncate">{label}</span>
                 {tab === 'archive' && archivedProviders.length > 0 && (
                   <span className="tab-badge text-[11px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold">{archivedProviders.length}</span>
                 )}

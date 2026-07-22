@@ -609,6 +609,16 @@ body::before {
   background: rgba(16, 36, 61, 0.55) !important;
   border: 1px solid rgba(53, 230, 255, 0.16);
   border-radius: var(--radius);
+  width: 100%;
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.tab-bar .tab-item,
+.tab-bar button {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .tab-bar .tab-active {
