@@ -1027,9 +1027,6 @@ export default function Dashboard() {
             <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:items-end">
               <div>
                 <h2 className="text-[23px] font-bold text-slate-900 tracking-tight">Arsip Providers</h2>
-                <p className="text-[13px] text-slate-500 mt-1 leading-relaxed max-w-2xl">
-                  Tempat simpan sementara settingan provider yang tidak aktif. Setting tetap utuh — bisa dikembalikan ke tab Providers kapan saja.
-                </p>
               </div>
               {archivedProviders.length > 0 && (
                 <span className="chip chip-cyan self-start sm:self-auto">{archivedProviders.length} tersimpan</span>
