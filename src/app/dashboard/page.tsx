@@ -835,7 +835,7 @@ export default function Dashboard() {
       <main className="dashboard-main max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* Tabs — bottom sticky menu on mobile, top bar on desktop */}
         <div className="tab-bar flex gap-1 rounded-lg p-1 overflow-x-auto flex-nowrap justify-center sm:justify-start">
-          {(['providers', 'combos', 'archive', 'logs', 'settings'] as const).map(tab => {
+          {(['providers', 'combos', 'logs', 'archive', 'settings'] as const).map(tab => {
             const label = tab === 'providers' ? 'Providers' : tab === 'combos' ? 'Gabung' : tab === 'archive' ? 'Arsip' : tab === 'settings' ? 'Dokumentasi' : 'Logs';
             return (
               <button key={tab} aria-label={label} onClick={() => setActiveTab(tab)} className={`tab-item flex-1 sm:flex-none min-w-[3rem] px-3 sm:px-4 py-2.5 sm:py-2 rounded-md text-[15px] sm:text-[16px] font-semibold transition-colors whitespace-nowrap flex items-center justify-center gap-2 ${activeTab === tab ? 'tab-active shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
@@ -861,7 +861,7 @@ export default function Dashboard() {
             {providers.length === 0 ? (
               <div className="card text-center py-12 text-slate-400"><div className="text-4xl mb-2">🔌</div><p>Belum ada provider. Tambah provider pertama!</p></div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {providers.map(p => (
                   <div key={p.id} className="card flex flex-col p-3 min-h-[264px]">
                     <div className="flex items-center gap-2">
@@ -1039,7 +1039,7 @@ export default function Dashboard() {
                 <p>Arsip kosong. Provider yang diarsipkan akan muncul di sini.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {archivedProviders.map(p => {
                   const modelsList = p.selectedModels?.length ? p.selectedModels : (p.models || []);
                   const keyCount = p.apiKeys?.filter(k => k.enabled !== false).length || 1;
