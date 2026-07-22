@@ -521,11 +521,10 @@ export async function resetLogsAndUsageCounters(): Promise<{
     );
     if (toReset.length > 0) {
       // Bulk update all non-zero rows
-      const { error: uErr, count } = await supabase
+      const { error: uErr } = await supabase
         .from('quotas')
         .update({ current_usage: 0 })
-        .gt('current_usage', 0)
-        .select('id', { count: 'exact', head: true });
+        .gt('current_usage', 0);
       if (uErr) {
         // Fallback: per-row update
         console.error('resetLogsAndUsageCounters bulk quota reset error:', uErr);
@@ -537,7 +536,7 @@ export async function resetLogsAndUsageCounters(): Promise<{
           if (!error) quotasReset += 1;
         }
       } else {
-        quotasReset = count ?? toReset.length;
+        quotasReset = toReset.length;
       }
     }
   }
