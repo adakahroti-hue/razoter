@@ -883,8 +883,27 @@ export default function Dashboard() {
                               >
                                 <div className="flex items-center gap-2">
                                   <h3 className="font-semibold text-yellow-500 text-[15px] leading-snug truncate flex-1">{p.name}</h3>
-                                  <span className={`px-1.5 py-0.5 rounded-full text-[11px] font-semibold ${p.enabled ? 'bg-emerald-100 text-emerald-700 status-on' : 'bg-slate-200 text-slate-500'}`}>{p.enabled ? 'ON' : 'OFF'}</span>
-                                  <span className="inline-flex items-center gap-1 text-[11px] text-slate-500"><IconCoin size={12} className="text-slate-400" /> <b className="font-semibold text-slate-700">{formatTokens(tokenByProvider[p.id] ?? 0)}</b></span>
+                                  <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleTestAllModels(p)}
+                                      disabled={testingAllModels === p.id}
+                                      title="Cek semua model"
+                                      aria-label="Cek semua model"
+                                      className="w-8 h-8 rounded-lg bg-blue-50 text-blue-400 hover:text-blue-300 border border-blue-300/40 hover:border-blue-300/70 transition-colors inline-flex items-center justify-center disabled:opacity-50"
+                                    >
+                                      {testingAllModels === p.id ? <IconSpinner size={14} className="text-blue-400" /> : <IconFlask size={14} />}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleArchiveProvider(p)}
+                                      title="Arsip"
+                                      aria-label="Arsip provider"
+                                      className="w-8 h-8 rounded-lg bg-amber-50 text-amber-700 hover:text-amber-800 hover:bg-amber-100 border border-amber-300/40 hover:border-amber-400/70 transition-colors inline-flex items-center justify-center"
+                                    >
+                                      <IconArchive size={14} />
+                                    </button>
+                                  </div>
                                   <span className={`text-[11px] text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}>▾</span>
                                 </div>
                                 <div className="text-[13px] text-slate-400 mt-1.5 font-mono truncate leading-relaxed" title={p.baseUrl}>{p.baseUrl}</div>
@@ -901,18 +920,8 @@ export default function Dashboard() {
                                   )}
                                 </div>
 
-                                {/* Icon-only actions always visible on overview */}
+                                {/* Icon-only secondary actions */}
                                 <div className="mt-3 flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleTestAllModels(p)}
-                                    disabled={testingAllModels === p.id}
-                                    title="Cek semua model"
-                                    aria-label="Cek semua model"
-                                    className="w-9 h-9 rounded-lg bg-blue-50 text-blue-400 hover:text-blue-300 border border-blue-300/40 hover:border-blue-300/70 transition-colors inline-flex items-center justify-center disabled:opacity-50"
-                                  >
-                                    {testingAllModels === p.id ? <IconSpinner size={15} className="text-blue-400" /> : <IconFlask size={15} />}
-                                  </button>
                                   <button
                                     type="button"
                                     onClick={() => openEditModal(p)}
@@ -921,15 +930,6 @@ export default function Dashboard() {
                                     className="w-9 h-9 rounded-lg bg-slate-100 text-slate-700 hover:text-slate-900 hover:bg-slate-200 border border-slate-300/30 hover:border-blue-300/60 transition-colors inline-flex items-center justify-center"
                                   >
                                     <IconPencil size={15} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleArchiveProvider(p)}
-                                    title="Arsip"
-                                    aria-label="Arsip provider"
-                                    className="w-9 h-9 rounded-lg bg-amber-50 text-amber-700 hover:text-amber-800 hover:bg-amber-100 border border-amber-300/40 hover:border-amber-400/70 transition-colors inline-flex items-center justify-center"
-                                  >
-                                    <IconArchive size={15} />
                                   </button>
                                   <button
                                     type="button"
