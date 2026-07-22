@@ -170,7 +170,7 @@ export default function Dashboard() {
 
   // Provider form
   const [providerForm, setProviderForm] = useState({ name: '', baseUrl: '', apiKey: '' });
-  const [providerFormKeys, setProviderFormKeys] = useState<Array<{name: string, key: string}>>([{ name: 'Key 1', key: '' }]);
+  const [providerFormKeys, setProviderFormKeys] = useState<Array<{name: string; key: string; enabled: boolean}>>([{ name: 'Key 1', key: '', enabled: true }]);
   const [providerFormStrategy, setProviderFormStrategy] = useState<'random' | 'failover-priority' | 'round-robin'>('random');
   const [providerType, setProviderType] = useState<'custom' | 'chatgpt_plus' | null>(null);
   const [discoveredModels, setDiscoveredModels] = useState<string[]>([]);
@@ -418,28 +418,16 @@ export default function Dashboard() {
       // Order + names are authoritative; backend fills any empty/masked value
       // from the existing stored key (matched by name).
       const apiKeysPayload: Array<{ name: string; key: string; enabled: boolean }> = [];
-      if (editingProvider && editingProvider.apiKeys && editingProvider.apiKeys.length > 0) {
-        for (let i = 0; i < providerFormKeys.length; i++) {
-          const fk = providerFormKeys[i];
-          if (!fk || !fk.name) continue;
-          // existing keys keep their stored enabled flag unless user toggled — we mirror form
-          apiKeysPayload.push({
-            name: fk.name,
-            key: fk.key, // full value (edit form is pre-filled), or '' if cleared
-            enabled: true,
-          });
-        }
-        // include any extra new keys appended beyond the original count
-        for (let i = providerFormKeys.length; i < providerFormKeys.length; i++) {
-          if (providerFormKeys[i].key && !providerFormKeys[i].key.includes('...')) {
-            apiKeysPayload.push({ name: providerFormKeys[i].name, key: providerFormKeys[i].key, enabled: true });
-          }
-        }
-      } else {
-        // New provider — all form keys are new
-        for (const fk of providerFormKeys) {
-          if (fk.key) apiKeysPayload.push({ name: fk.name, key: fk.key, enabled: true });
-        }
+      // Always send form order + enabled flags. Backend fills empty/masked key values by name.
+      for (const fk of providerFormKeys) {
+        if (!fk || !fk.name) continue;
+        // New providers need a real key value; edit may keep empty key to preserve existing secret.
+        if (!editingProvider && !fk.key) continue;
+        apiKeysPayload.push({
+          name: fk.name,
+          key: fk.key || '',
+          enabled: fk.enabled !== false,
+        });
       }
       if (apiKeysPayload.length > 0) body.apiKeys = apiKeysPayload;
       // Strategy selection lives in Gabung tab — don't overwrite provider strategy from this modal
@@ -510,10 +498,10 @@ export default function Dashboard() {
 
   function openEditModal(provider: Provider) {
     setEditingProvider(provider);
-    setProviderForm({ name: provider.name, baseUrl: provider.baseUrl, apiKey: '' });
+    setProviderForm({ name: provider.name, baseUrl: provider.baseUrl, apiKey: provider.apiKey });
     const existingKeys = (provider.apiKeys && provider.apiKeys.length > 0)
-      ? provider.apiKeys.map(k => ({ name: k.name, key: k.key }))
-      : [{ name: 'Key 1', key: '' }];
+      ? provider.apiKeys.map(k => ({ name: k.name, key: k.key, enabled: k.enabled !== false }))
+      : [{ name: 'Key 1', key: '', enabled: true }];
     setProviderFormKeys(existingKeys);
     setProviderFormStrategy(provider.apiKeyStrategy || 'random');
     setDiscoveredModels(provider.models);
@@ -524,7 +512,7 @@ export default function Dashboard() {
 
   function resetProviderForm() {
     setProviderForm({ name: '', baseUrl: '', apiKey: '' });
-    setProviderFormKeys([{ name: 'Key 1', key: '' }]);
+    setProviderFormKeys([{ name: 'Key 1', key: '', enabled: true }]);
     setDiscoveredModels([]); setSelectedModels([]); setModelSearch(''); setTestResult(null); setEditingProvider(null);
     setProviderType(null);
     setChatgptStep('idle'); setChatgptUserCode(''); setChatgptDeviceId(''); setChatgptError('');
@@ -1435,16 +1423,30 @@ export default function Dashboard() {
                   <div className="space-y-2 mt-1">
                     {providerFormKeys.map((fk, idx) => {
                       const isExisting = editingProvider && editingProvider.apiKeys && idx < editingProvider.apiKeys.length && !fk.key;
+                      const keyEnabled = fk.enabled !== false;
                       return (
-                        <div key={idx} className="flex flex-col gap-2 p-3 rounded-lg bg-slate-50 border border-slate-200">
-                          <div className="flex items-center justify-between">
+                        <div key={idx} className={`flex flex-col gap-2 p-3 rounded-lg border ${keyEnabled ? 'bg-slate-50 border-slate-200' : 'bg-slate-100/70 border-slate-200 opacity-75'}`}>
+                          <div className="flex items-center justify-between gap-2">
                             <input type="text" className="input flex-1 text-sm" placeholder="Nama key (e.g. Akun Utama, Akun Cadangan)" value={fk.name} onChange={e => {
                               const updated = [...providerFormKeys];
                               updated[idx] = { ...updated[idx], name: e.target.value };
                               setProviderFormKeys(updated);
                             }} />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = [...providerFormKeys];
+                                updated[idx] = { ...updated[idx], enabled: !keyEnabled };
+                                setProviderFormKeys(updated);
+                              }}
+                              className={`flex-shrink-0 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors ${keyEnabled ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-200 text-slate-500 border-slate-300'}`}
+                              title={keyEnabled ? 'Nonaktifkan API key ini' : 'Aktifkan API key ini'}
+                              aria-pressed={keyEnabled}
+                            >
+                              {keyEnabled ? 'ON' : 'OFF'}
+                            </button>
                             {providerFormKeys.length > 1 && (
-                              <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                              <div className="flex items-center gap-1 flex-shrink-0">
                                 <button type="button" aria-label="Pindah ke atas" disabled={idx === 0} onClick={() => {
                                   if (idx === 0) return;
                                   const updated = [...providerFormKeys];
@@ -1470,12 +1472,15 @@ export default function Dashboard() {
                             {isExisting && editingProvider!.apiKeys[idx] && (
                               <p className="text-xs text-slate-400 mt-1">Key saat ini (edit untuk mengubah):</p>
                             )}
+                            {!keyEnabled && (
+                              <p className="text-xs text-amber-600 mt-1">API key ini nonaktif — tidak dipakai di routing.</p>
+                            )}
                           </div>
                         </div>
                       );
                     })}
                   </div>
-                  <button type="button" onClick={() => setProviderFormKeys(prev => [...prev, { name: `Key ${prev.length + 1}`, key: '' }])} className="mt-2 text-sm font-medium text-green-600 hover:text-green-800">+ Tambah Key</button>
+                  <button type="button" onClick={() => setProviderFormKeys(prev => [...prev, { name: `Key ${prev.length + 1}`, key: '', enabled: true }])} className="mt-2 text-sm font-medium text-green-600 hover:text-green-800">+ Tambah Key</button>
                 </div>
               </div>
               <div className="border-t border-slate-200 pt-4">

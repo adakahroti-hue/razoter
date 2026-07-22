@@ -111,31 +111,37 @@ export async function PUT(request: NextRequest) {
       delete updates.apiKey;
     }
 
-    // Handle apiKeys (multi) — client array is authoritative for ORDER + NAMES.
+    // Handle apiKeys (multi) — client array is authoritative for ORDER + NAMES + enabled.
     // Fill in values for any key left empty/masked by matching existing name.
     if (updates.apiKeys && Array.isArray(updates.apiKeys)) {
       const clientKeys = updates.apiKeys as Array<{ name?: string; key?: string; enabled?: boolean }>;
-      const hasRealKey = clientKeys.some(k => k && k.key && !k.key.includes('...'));
-      if (hasRealKey) {
-        const existing = await getProvider(id);
-        const existingMap = new Map<string, any>();
-        if (existing?.apiKeys) for (const k of existing.apiKeys) existingMap.set(k.name, k);
-        const result: Array<{ name: string; key: string; enabled: boolean }> = [];
-        for (const ck of clientKeys) {
-          if (!ck || !ck.name) continue;
-          if (ck.key && !ck.key.includes('...')) {
+      const existing = await getProvider(id);
+      const existingMap = new Map<string, any>();
+      if (existing?.apiKeys) for (const k of existing.apiKeys) existingMap.set(k.name, k);
+
+      const result: Array<{ name: string; key: string; enabled: boolean }> = [];
+      for (const ck of clientKeys) {
+        if (!ck || !ck.name) continue;
+        if (ck.key && !ck.key.includes('...')) {
+          // New/changed secret provided
+          result.push({ name: ck.name, key: ck.key, enabled: ck.enabled ?? true });
+        } else {
+          // empty/masked → keep existing secret matched by name, but honor enabled toggle
+          const ex = existingMap.get(ck.name);
+          if (ex) {
+            result.push({
+              name: ck.name,
+              key: ex.key,
+              enabled: ck.enabled ?? ex.enabled ?? true,
+            });
+          } else if (ck.key && !ck.key.includes('...')) {
             result.push({ name: ck.name, key: ck.key, enabled: ck.enabled ?? true });
-          } else {
-            // empty/masked → keep existing value matched by name
-            const ex = existingMap.get(ck.name);
-            if (ex) result.push({ name: ck.name, key: ex.key, enabled: ck.enabled ?? ex.enabled ?? true });
           }
+          // brand-new key with empty secret is skipped
         }
-        updates.apiKeys = result.length > 0 ? result : existing?.apiKeys ?? [];
-      } else {
-        // No real keys supplied → nothing changed → don't overwrite.
-        delete updates.apiKeys;
       }
+      // Allow enabled-only updates even when no raw secrets were retyped.
+      updates.apiKeys = result.length > 0 ? result : existing?.apiKeys ?? [];
     }
 
     const updated = await updateProvider(id, updates);
