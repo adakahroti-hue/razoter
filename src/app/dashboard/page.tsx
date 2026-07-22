@@ -886,6 +886,15 @@ export default function Dashboard() {
                                   <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                                     <button
                                       type="button"
+                                      onClick={() => handleArchiveProvider(p)}
+                                      title="Arsip"
+                                      aria-label="Arsip provider"
+                                      className="w-8 h-8 rounded-lg bg-amber-50 text-amber-700 hover:text-amber-800 hover:bg-amber-100 border border-amber-300/40 hover:border-amber-400/70 transition-colors inline-flex items-center justify-center"
+                                    >
+                                      <IconArchive size={14} />
+                                    </button>
+                                    <button
+                                      type="button"
                                       onClick={() => handleTestAllModels(p)}
                                       disabled={testingAllModels === p.id}
                                       title="Cek semua model"
@@ -893,15 +902,6 @@ export default function Dashboard() {
                                       className="w-8 h-8 rounded-lg bg-blue-50 text-blue-400 hover:text-blue-300 border border-blue-300/40 hover:border-blue-300/70 transition-colors inline-flex items-center justify-center disabled:opacity-50"
                                     >
                                       {testingAllModels === p.id ? <IconSpinner size={14} className="text-blue-400" /> : <IconFlask size={14} />}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleArchiveProvider(p)}
-                                      title="Arsip"
-                                      aria-label="Arsip provider"
-                                      className="w-8 h-8 rounded-lg bg-amber-50 text-amber-700 hover:text-amber-800 hover:bg-amber-100 border border-amber-300/40 hover:border-amber-400/70 transition-colors inline-flex items-center justify-center"
-                                    >
-                                      <IconArchive size={14} />
                                     </button>
                                   </div>
                                   <span className={`text-[11px] text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}>▾</span>
@@ -920,25 +920,25 @@ export default function Dashboard() {
                                   )}
                                 </div>
 
-                                {/* Icon-only secondary actions */}
+                                {/* Secondary actions with text */}
                                 <div className="mt-3 flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                                   <button
                                     type="button"
                                     onClick={() => openEditModal(p)}
                                     title="Edit"
                                     aria-label="Edit provider"
-                                    className="w-9 h-9 rounded-lg bg-slate-100 text-slate-700 hover:text-slate-900 hover:bg-slate-200 border border-slate-300/30 hover:border-blue-300/60 transition-colors inline-flex items-center justify-center"
+                                    className="h-9 px-3 rounded-lg bg-slate-100 text-slate-700 hover:text-slate-900 hover:bg-slate-200 border border-slate-300/30 hover:border-blue-300/60 transition-colors inline-flex items-center justify-center gap-1.5 text-[13px] font-medium"
                                   >
-                                    <IconPencil size={15} />
+                                    <IconPencil size={15} /> Edit
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => setDeleteTarget(p)}
                                     title="Hapus permanen"
                                     aria-label="Hapus permanen"
-                                    className="w-9 h-9 rounded-lg bg-red-50/80 text-red-400 hover:text-red-300 hover:bg-red-100 border border-red-300/30 hover:border-red-300/60 transition-colors inline-flex items-center justify-center"
+                                    className="h-9 px-3 rounded-lg bg-red-50/80 text-red-400 hover:text-red-300 hover:bg-red-100 border border-red-300/30 hover:border-red-300/60 transition-colors inline-flex items-center justify-center gap-1.5 text-[13px] font-medium"
                                   >
-                                    <IconTrash size={15} />
+                                    <IconTrash size={15} /> Hapus
                                   </button>
                                 </div>
 
