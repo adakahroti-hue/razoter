@@ -920,14 +920,14 @@ export default function Dashboard() {
                                   )}
                                 </div>
 
-                                {/* Secondary actions with text */}
-                                <div className="mt-3 flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                {/* Secondary actions with text — full width 50:50 */}
+                                <div className="mt-3 grid grid-cols-2 gap-1.5" onClick={(e) => e.stopPropagation()}>
                                   <button
                                     type="button"
                                     onClick={() => openEditModal(p)}
                                     title="Edit"
                                     aria-label="Edit provider"
-                                    className="h-9 px-3 rounded-lg bg-slate-100 text-slate-700 hover:text-slate-900 hover:bg-slate-200 border border-slate-300/30 hover:border-blue-300/60 transition-colors inline-flex items-center justify-center gap-1.5 text-[13px] font-medium"
+                                    className="h-9 w-full px-3 rounded-lg bg-slate-100 text-slate-700 hover:text-slate-900 hover:bg-slate-200 border border-slate-300/30 hover:border-blue-300/60 transition-colors inline-flex items-center justify-center gap-1.5 text-[13px] font-medium"
                                   >
                                     <IconPencil size={15} /> Edit
                                   </button>
@@ -936,7 +936,7 @@ export default function Dashboard() {
                                     onClick={() => setDeleteTarget(p)}
                                     title="Hapus permanen"
                                     aria-label="Hapus permanen"
-                                    className="h-9 px-3 rounded-lg bg-red-50/80 text-red-400 hover:text-red-300 hover:bg-red-100 border border-red-300/30 hover:border-red-300/60 transition-colors inline-flex items-center justify-center gap-1.5 text-[13px] font-medium"
+                                    className="h-9 w-full px-3 rounded-lg bg-red-50/80 text-red-400 hover:text-red-300 hover:bg-red-100 border border-red-300/30 hover:border-red-300/60 transition-colors inline-flex items-center justify-center gap-1.5 text-[13px] font-medium"
                                   >
                                     <IconTrash size={15} /> Hapus
                                   </button>
