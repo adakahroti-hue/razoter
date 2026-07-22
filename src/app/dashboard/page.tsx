@@ -166,6 +166,7 @@ export default function Dashboard() {
   }, {});
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Provider | null>(null);
+  const [expandedProviderId, setExpandedProviderId] = useState<string | null>(null);
 
   // Provider form
   const [providerForm, setProviderForm] = useState({ name: '', baseUrl: '', apiKey: '' });
@@ -863,89 +864,112 @@ export default function Dashboard() {
               </div>
             </div>
             {providers.length === 0 ? (
-              <div className="card text-center py-12 text-slate-400"><div className="text-4xl mb-2">🔌</div><p>Belum ada provider. Tambah provider pertama!</p></div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {providers.map(p => (
-                  <div key={p.id} className="card flex flex-col p-3 min-h-[264px]">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-yellow-500 text-[15px] leading-snug truncate flex-1">{p.name}</h3>
-                      <span className={`px-1.5 py-0.5 rounded-full text-[11px] font-semibold ${p.enabled ? 'bg-emerald-100 text-emerald-700 status-on' : 'bg-slate-200 text-slate-500'}`}>{p.enabled ? 'ON' : 'OFF'}</span>
-                      <span className="inline-flex items-center gap-1 text-[11px] text-slate-500"><IconCoin size={12} className="text-slate-400" /> <b className="font-semibold text-slate-700">{formatTokens(tokenByProvider[p.id] ?? 0)}</b></span>
-                    </div>
-                    <div className="text-[13px] text-slate-400 mt-1.5 font-mono truncate leading-relaxed" title={p.baseUrl}>{p.baseUrl}</div>
-                    <div className="flex flex-col gap-2 mt-2 flex-1 content-start">
-                      {/* Group model test results by API key */}
-                      {(() => {
-                        const modelsList = p.selectedModels.length > 0 ? p.selectedModels : p.models;
-                        // Build the key groups: from stored apiKeys (or single Default)
-                        const keyGroups: Array<{ name: string }> = [];
-                        if (p.apiKeys && p.apiKeys.length > 0) {
-                          for (const k of p.apiKeys) if (k.enabled !== false) keyGroups.push({ name: k.name });
-                        }
-                        if (keyGroups.length === 0) keyGroups.push({ name: 'Default' });
-                        return keyGroups.map(g => {
-                          const groupKey = `${p.id}:${g.name}:`;
-                          const groupResults = modelsList.filter(m => modelTestResults[`${groupKey}${m}`]);
-                          const hasAny = groupResults.length > 0;
-                          return (
-                            <div key={g.name} className="rounded-lg border border-slate-200/70 p-2">
-                              <div className="text-[11px] font-semibold text-slate-500 mb-1 flex items-center gap-1">
-                                <IconKey size={12} className="text-yellow-500" /> {g.name}
-                                {hasAny && (
-                                  <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${groupResults.every(m => modelTestResults[`${groupKey}${m}`]?.status === 'ok') ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                                    {groupResults.filter(m => modelTestResults[`${groupKey}${m}`]?.status === 'ok').length}/{groupResults.length} ok
-                                  </span>
+                          <div className="card text-center py-12 text-slate-400"><div className="text-4xl mb-2">🔌</div><p>Belum ada provider. Tambah provider pertama!</p></div>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {providers.map(p => {
+                              const isExpanded = expandedProviderId === p.id;
+                              const modelsList = p.selectedModels.length > 0 ? p.selectedModels : p.models;
+                              const keyGroups: Array<{ name: string }> = [];
+                              if (p.apiKeys && p.apiKeys.length > 0) {
+                                for (const k of p.apiKeys) if (k.enabled !== false) keyGroups.push({ name: k.name });
+                              }
+                              if (keyGroups.length === 0) keyGroups.push({ name: 'Default' });
+                              return (
+                              <div
+                                key={p.id}
+                                className={`card flex flex-col p-3 cursor-pointer transition-all ${isExpanded ? 'ring-1 ring-cyan-400/30' : 'hover:border-cyan-400/25'}`}
+                                onClick={() => setExpandedProviderId(isExpanded ? null : p.id)}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <h3 className="font-semibold text-yellow-500 text-[15px] leading-snug truncate flex-1">{p.name}</h3>
+                                  <span className={`px-1.5 py-0.5 rounded-full text-[11px] font-semibold ${p.enabled ? 'bg-emerald-100 text-emerald-700 status-on' : 'bg-slate-200 text-slate-500'}`}>{p.enabled ? 'ON' : 'OFF'}</span>
+                                  <span className="inline-flex items-center gap-1 text-[11px] text-slate-500"><IconCoin size={12} className="text-slate-400" /> <b className="font-semibold text-slate-700">{formatTokens(tokenByProvider[p.id] ?? 0)}</b></span>
+                                  <span className={`text-[11px] text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}>▾</span>
+                                </div>
+                                <div className="text-[13px] text-slate-400 mt-1.5 font-mono truncate leading-relaxed" title={p.baseUrl}>{p.baseUrl}</div>
+
+                                {/* Compact summary chips */}
+                                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                                  <span className="chip inline-flex items-center gap-1"><IconKey size={11} className="text-yellow-500" /> {keyGroups.length} key</span>
+                                  <span className="chip">{modelsList.length} models</span>
+                                  {!isExpanded && modelsList.slice(0, 3).map(m => (
+                                    <span key={m} className="chip-model font-mono text-[11px] truncate max-w-[7rem]">{m}</span>
+                                  ))}
+                                  {!isExpanded && modelsList.length > 3 && (
+                                    <span className="chip text-[11px]">+{modelsList.length - 3}</span>
+                                  )}
+                                </div>
+
+                                {/* Expanded details */}
+                                {isExpanded && (
+                                  <>
+                                <div className="flex flex-col gap-2 mt-2 flex-1 content-start" onClick={(e) => e.stopPropagation()}>
+                                  {/* Group model test results by API key */}
+                                  {keyGroups.map(g => {
+                                      const groupKey = `${p.id}:${g.name}:`;
+                                      const groupResults = modelsList.filter(m => modelTestResults[`${groupKey}${m}`]);
+                                      const hasAny = groupResults.length > 0;
+                                      return (
+                                        <div key={g.name} className="rounded-lg border border-slate-200/70 p-2">
+                                          <div className="text-[11px] font-semibold text-slate-500 mb-1 flex items-center gap-1">
+                                            <IconKey size={12} className="text-yellow-500" /> {g.name}
+                                            {hasAny && (
+                                              <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${groupResults.every(m => modelTestResults[`${groupKey}${m}`]?.status === 'ok') ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                                {groupResults.filter(m => modelTestResults[`${groupKey}${m}`]?.status === 'ok').length}/{groupResults.length} ok
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div className="flex flex-wrap gap-1">
+                                            {modelsList.map(m => {
+                                              const rkey = `${groupKey}${m}`;
+                                              const result = modelTestResults[rkey];
+                                              const statusIcon = result?.status === 'testing' ? <IconSpinner size={11} className="text-slate-400" /> : result?.status === 'ok' ? <IconCheck size={11} className="text-emerald-600" /> : result?.status === 'fail' ? <IconCross size={11} className="text-red-500" /> : null;
+                                              const testedBg = result?.status === 'ok' ? 'bg-emerald-50 text-emerald-700' : result?.status === 'fail' ? 'bg-red-50 text-red-700' : 'text-slate-600';
+                                              return (
+                                                <span key={m} className={`group inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[12.5px] font-mono leading-relaxed ${testedBg}`}>
+                                                  {statusIcon && <span className="text-[10px]">{statusIcon}</span>}
+                                                  {m}
+                                                  {result?.status === 'ok' && result.latencyMs && <span className="text-[10px] opacity-70">{formatLatency(result.latencyMs)}</span>}
+                                                  <button
+                                                    onClick={(e) => { e.stopPropagation(); handleTestSingleModel(p, m, p.apiKeys?.find(k => k.name === g.name)?.key, g.name); }}
+                                                    disabled={result?.status === 'testing'}
+                                                    className="ml-0.5 opacity-0 group-hover:opacity-100 hover:opacity-100 text-blue-400 hover:text-blue-300 transition-opacity inline-flex items-center"
+                                                    title="Test model ini"
+                                                  ><IconSearch size={12} /></button>
+                                                </span>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                </div>
+
+                                <hr className="card-divider" />
+
+                                <div className="card-actions mt-1" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    onClick={() => handleTestAllModels(p)}
+                                    disabled={testingAllModels === p.id}
+                                    className="text-[13.5px] px-2 py-2 rounded-lg bg-blue-50 text-blue-400 hover:text-blue-300 border border-blue-300/40 hover:border-blue-300/70 transition-colors w-full font-medium"
+                                  >
+                                    {testingAllModels === p.id ? <span className="flex items-center justify-center gap-2"><IconSpinner size={14} className="text-blue-400" /> Testing...</span> : <span className="inline-flex items-center justify-center gap-1.5"><IconFlask size={14} /> Cek Semua Model</span>}
+                                  </button>
+
+                                  <div className="grid grid-cols-2 gap-2 mt-2">
+                                    <button onClick={() => openEditModal(p)} className="text-[13.5px] px-2 py-2 rounded-lg bg-slate-100 text-slate-700 hover:text-slate-900 hover:bg-slate-200 border border-slate-300/30 hover:border-blue-300/60 transition-colors font-medium inline-flex items-center justify-center gap-1.5"><IconPencil size={14} /> Edit</button>
+                                    <button onClick={() => handleArchiveProvider(p)} className="text-[13.5px] px-2 py-2 rounded-lg bg-amber-50 text-amber-700 hover:text-amber-800 hover:bg-amber-100 border border-amber-300/40 hover:border-amber-400/70 transition-colors font-medium inline-flex items-center justify-center gap-1.5"><IconArchive size={14} /> Arsip</button>
+                                  </div>
+                                  <button onClick={() => setDeleteTarget(p)} className="mt-2 text-[12.5px] px-2 py-1.5 rounded-lg bg-red-50/70 text-red-300 hover:text-red-200 hover:bg-red-100 border border-red-300/20 hover:border-red-300/50 transition-colors w-full font-medium inline-flex items-center justify-center gap-1.5"><IconTrash size={13} /> Hapus permanen</button>
+                                </div>
+                                  </>
                                 )}
                               </div>
-                              <div className="flex flex-wrap gap-1">
-                                {modelsList.map(m => {
-                                  const rkey = `${groupKey}${m}`;
-                                  const result = modelTestResults[rkey];
-                                  const statusIcon = result?.status === 'testing' ? <IconSpinner size={11} className="text-slate-400" /> : result?.status === 'ok' ? <IconCheck size={11} className="text-emerald-600" /> : result?.status === 'fail' ? <IconCross size={11} className="text-red-500" /> : null;
-                                  const testedBg = result?.status === 'ok' ? 'bg-emerald-50 text-emerald-700' : result?.status === 'fail' ? 'bg-red-50 text-red-700' : 'text-slate-600';
-                                  return (
-                                    <span key={m} className={`group inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[12.5px] font-mono leading-relaxed ${testedBg}`}>
-                                      {statusIcon && <span className="text-[10px]">{statusIcon}</span>}
-                                      {m}
-                                      {result?.status === 'ok' && result.latencyMs && <span className="text-[10px] opacity-70">{formatLatency(result.latencyMs)}</span>}
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); handleTestSingleModel(p, m, p.apiKeys?.find(k => k.name === g.name)?.key, g.name); }}
-                                        disabled={result?.status === 'testing'}
-                                        className="ml-0.5 opacity-0 group-hover:opacity-100 hover:opacity-100 text-blue-400 hover:text-blue-300 transition-opacity inline-flex items-center"
-                                        title="Test model ini"
-                                      ><IconSearch size={12} /></button>
-                                    </span>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          );
-                        });
-                      })()}
-                    </div>
-
-                    <hr className="card-divider" />
-
-                    <div className="card-actions mt-1">
-                      <button
-                        onClick={() => handleTestAllModels(p)}
-                        disabled={testingAllModels === p.id}
-                        className="text-[13.5px] px-2 py-2 rounded-lg bg-blue-50 text-blue-400 hover:text-blue-300 border border-blue-300/40 hover:border-blue-300/70 transition-colors w-full font-medium"
-                      >
-                        {testingAllModels === p.id ? <span className="flex items-center justify-center gap-2"><IconSpinner size={14} className="text-blue-400" /> Testing...</span> : <span className="inline-flex items-center justify-center gap-1.5"><IconFlask size={14} /> Cek Semua Model</span>}
-                      </button>
-
-                      <div className="grid grid-cols-2 gap-2 mt-2">
-                        <button onClick={() => openEditModal(p)} className="text-[13.5px] px-2 py-2 rounded-lg bg-slate-100 text-slate-700 hover:text-slate-900 hover:bg-slate-200 border border-slate-300/30 hover:border-blue-300/60 transition-colors font-medium inline-flex items-center justify-center gap-1.5"><IconPencil size={14} /> Edit</button>
-                        <button onClick={() => handleArchiveProvider(p)} className="text-[13.5px] px-2 py-2 rounded-lg bg-amber-50 text-amber-700 hover:text-amber-800 hover:bg-amber-100 border border-amber-300/40 hover:border-amber-400/70 transition-colors font-medium inline-flex items-center justify-center gap-1.5"><IconArchive size={14} /> Arsip</button>
-                      </div>
-                      <button onClick={() => setDeleteTarget(p)} className="mt-2 text-[12.5px] px-2 py-1.5 rounded-lg bg-red-50/70 text-red-300 hover:text-red-200 hover:bg-red-100 border border-red-300/20 hover:border-red-300/50 transition-colors w-full font-medium inline-flex items-center justify-center gap-1.5"><IconTrash size={13} /> Hapus permanen</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                              );
+                            })}
+                          </div>
+                        )}
 
             {/* Base URL & API Keys — moved to Pengaturan tab */}
           </div>
