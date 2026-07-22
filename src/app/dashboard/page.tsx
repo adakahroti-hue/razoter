@@ -843,8 +843,43 @@ export default function Dashboard() {
   }
 
   async function handleClearLogs() {
-    if (!confirm('Hapus semua logs?')) return;
-    try { await api('/api/logs', { method: 'DELETE' }); fetchData(); } catch {}
+    if (!confirm('Reset tab Logs?\n\nIni akan menghapus semua request log dan mereset semua angka token/penggunaan di tab Logs ke 0.\nLimit yang sudah diset tetap disimpan.')) return;
+    try {
+      const res = await api('/api/logs', { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || 'Gagal reset logs');
+        return;
+      }
+      // Clear local UI immediately so no stale numbers flash
+      setLogs([]);
+      setStats(prev => prev ? {
+        ...prev,
+        totalRequests: 0,
+        successCount: 0,
+        errorCount: 0,
+        successRate: 0,
+        avgLatency: 0,
+        totalTokens: 0,
+        providerBreakdown: (prev.providerBreakdown || []).map(b => ({
+          ...b,
+          requests: 0,
+          successes: 0,
+          errors: 0,
+          avgLatency: 0,
+          totalTokens: 0,
+        })),
+        tokenByProvider: [],
+        tokenByModel: [],
+        tokenByApiKey: [],
+        tokenByModelAndKey: [],
+        lifetimeTokenByApiKey: [],
+      } : null);
+      setQuotas(prev => prev.map(q => ({ ...q, currentUsage: 0 })));
+      await fetchData();
+    } catch {
+      alert('Network error saat reset logs');
+    }
   }
 
   // ─── UI helpers ──────────────────────────────────
@@ -1311,7 +1346,7 @@ export default function Dashboard() {
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-semibold text-slate-900">Request Logs</h2>
-              <button onClick={handleClearLogs} className="btn btn-secondary text-sm inline-flex items-center gap-1.5"><IconTrash size={14} /> Clear</button>
+              <button onClick={handleClearLogs} className="btn btn-secondary text-sm inline-flex items-center gap-1.5"><IconTrash size={14} /> Reset</button>
             </div>
 
             <div className="card overflow-hidden">

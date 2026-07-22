@@ -483,6 +483,88 @@ export async function clearLogs(): Promise<void> {
   }
 }
 
+/**
+ * Full Logs-tab reset:
+ * - wipe request_logs
+ * - zero quotas.current_usage (so Per API Key / limit usage starts over)
+ * - wipe lifetime token totals if table exists
+ *
+ * Does NOT delete quota limit settings (monthly_limit stays).
+ */
+export async function resetLogsAndUsageCounters(): Promise<{
+  logsCleared: boolean;
+  quotasReset: number;
+  lifetimeReset: boolean;
+}> {
+  let logsCleared = true;
+  let quotasReset = 0;
+  let lifetimeReset = false;
+
+  const { error: logErr } = await supabase
+    .from('request_logs')
+    .delete()
+    .neq('id', '00000000-0000-0000-0000-000000000000');
+  if (logErr) {
+    console.error('resetLogsAndUsageCounters clear logs error:', logErr);
+    logsCleared = false;
+  }
+
+  // Zero all quota usage counters (limits stay intact)
+  const { data: quotaRows, error: qErr } = await supabase
+    .from('quotas')
+    .select('id, current_usage');
+  if (qErr) {
+    console.error('resetLogsAndUsageCounters list quotas error:', qErr);
+  } else {
+    const toReset = (quotaRows || []).filter(
+      (r: { current_usage?: number | null }) => (r.current_usage ?? 0) !== 0
+    );
+    if (toReset.length > 0) {
+      // Bulk update all non-zero rows
+      const { error: uErr, count } = await supabase
+        .from('quotas')
+        .update({ current_usage: 0 })
+        .gt('current_usage', 0)
+        .select('id', { count: 'exact', head: true });
+      if (uErr) {
+        // Fallback: per-row update
+        console.error('resetLogsAndUsageCounters bulk quota reset error:', uErr);
+        for (const row of toReset as Array<{ id: string }>) {
+          const { error } = await supabase
+            .from('quotas')
+            .update({ current_usage: 0 })
+            .eq('id', row.id);
+          if (!error) quotasReset += 1;
+        }
+      } else {
+        quotasReset = count ?? toReset.length;
+      }
+    }
+  }
+
+  // Lifetime table (if present)
+  const ok = await ensureLifetimeTokenTable();
+  if (ok) {
+    const { error: lifeErr } = await supabase
+      .from('api_key_token_totals')
+      .delete()
+      .neq('api_key_name', '__never__');
+    if (lifeErr) {
+      // try zero instead of delete
+      const { error: zErr } = await supabase
+        .from('api_key_token_totals')
+        .update({ total_tokens: 0, total_requests: 0, updated_at: new Date().toISOString() })
+        .gt('total_tokens', -1);
+      if (zErr) console.error('resetLogsAndUsageCounters lifetime reset error:', zErr);
+      else lifetimeReset = true;
+    } else {
+      lifetimeReset = true;
+    }
+  }
+
+  return { logsCleared, quotasReset, lifetimeReset };
+}
+
 export async function getLogsCount(): Promise<number> {
   const { count, error } = await supabase
     .from('request_logs')
