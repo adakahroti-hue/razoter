@@ -604,6 +604,29 @@ body::before {
     0 0 50px -12px rgba(53, 230, 255, 0.18);
 }
 
+/* ─── Logout power button (Razoter red, soft cyan edge) ─── */
+.logout-power-btn {
+  color: #ff4d6d;
+  background: rgba(255, 55, 95, 0.08);
+  border: 1px solid rgba(255, 77, 109, 0.35);
+  box-shadow:
+    0 0 0 1px rgba(53, 230, 255, 0.04),
+    0 0 14px -6px rgba(255, 77, 109, 0.55);
+}
+.logout-power-btn:hover {
+  color: #ff6b86;
+  background: rgba(255, 55, 95, 0.16);
+  border-color: rgba(255, 95, 125, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(53, 230, 255, 0.08),
+    0 0 18px -4px rgba(255, 77, 109, 0.75),
+    0 0 12px -6px rgba(53, 230, 255, 0.25);
+}
+.logout-power-icon {
+  stroke: currentColor;
+  filter: drop-shadow(0 0 4px rgba(255, 77, 109, 0.55));
+}
+
 /* ─── Futuristic control bar (nav tabs) — slightly lighter than page ─── */
 .tab-bar {
   background: rgba(16, 36, 61, 0.55) !important;
