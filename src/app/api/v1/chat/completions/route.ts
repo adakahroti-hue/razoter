@@ -251,6 +251,28 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Pre-check quota for pinned key (or first enabled key) before spending timeout budget
+      {
+        const preKeyName = comboResult.apiKeyName
+          || (comboProvider.apiKeys || []).find((k: { enabled?: boolean; name: string }) => k.enabled !== false)?.name
+          || 'Default';
+        const withinComboQuota = await checkQuotaLimit(comboProvider.id, preKeyName, comboResult.model);
+        if (!withinComboQuota) {
+          comboTriedIndices.push(comboResult.itemIndex);
+          comboLastErrors.push(`${comboProvider.name}/${comboResult.model} @ ${preKeyName}: quota exceeded`);
+          await addLog({
+            providerId: comboProvider.id,
+            providerName: comboProvider.name,
+            model: comboResult.model,
+            status: 'retry',
+            latencyMs: 0,
+            errorMessage: `Quota exceeded for key '${preKeyName}'. Combo failover -> next item.`,
+            apiKeyName: preKeyName,
+          }).catch(() => {});
+          continue;
+        }
+      }
+
       body.model = comboResult.model;
 
       let comboKeyName = 'Default';
@@ -261,7 +283,7 @@ export async function POST(request: NextRequest) {
           comboKeyName = apiKeyName;
           if (refreshed && newTokens) {
             import('@/lib/storage').then(({ updateProvider }) =>
-              updateProvider(comboProvider!.id, newTokens as any)
+              updateProvider(comboProvider!.id, newTokens)
             ).catch(() => {});
           }
           const accessToken = comboAuth.replace('Bearer ', '');
@@ -272,7 +294,7 @@ export async function POST(request: NextRequest) {
           import('@/lib/storage').then(({ addLog, updateProviderStats, incrementQuotaUsage }) => {
             addLog({ providerId: comboProvider!.id, providerName: comboProvider!.name, model: comboResult.model, status: 'success', latencyMs, tokensUsed, apiKeyName: comboKeyName });
             updateProviderStats(comboProvider!.id, true, latencyMs);
-            incrementQuotaUsage(comboProvider!.id, tokensUsed || 0, comboKeyName).catch(() => {});
+            incrementQuotaUsage(comboProvider!.id, tokensUsed || 0, comboKeyName, comboResult.model).catch(() => {});
           }).catch(() => {});
           return cgptResp;
         }
@@ -330,7 +352,7 @@ export async function POST(request: NextRequest) {
                   const usage = lastUsage ?? (estimatedChars > 0 ? Math.ceil(estimatedChars / 4) : undefined);
                   if (usage) {
                     import('@/lib/storage').then(({ incrementQuotaUsage }) =>
-                      incrementQuotaUsage(comboProvider!.id, usage, comboKeyName).catch(() => {})
+                      incrementQuotaUsage(comboProvider!.id, usage, comboKeyName, comboResult.model).catch(() => {})
                     ).catch(() => {});
                   }
                   import('@/lib/storage').then(({ addLog }) =>
@@ -349,7 +371,7 @@ export async function POST(request: NextRequest) {
           await updateProviderStats(comboProvider.id, true, latencyMs);
           await addLog({ providerId: comboProvider.id, providerName: comboProvider.name, model: comboResult.model, status: 'success', statusCode: 200, latencyMs, tokensUsed: data.usage?.total_tokens, apiKeyName: comboKeyName });
           if (data.usage?.total_tokens) {
-            await incrementQuotaUsage(comboProvider.id, data.usage.total_tokens, comboKeyName);
+            await incrementQuotaUsage(comboProvider.id, data.usage.total_tokens, comboKeyName, comboResult.model);
           }
           return withCors(NextResponse.json(data, { status: 200 }));
         }
@@ -434,13 +456,6 @@ export async function POST(request: NextRequest) {
     const attemptStart = Date.now();
 
     // Check quota limit before trying this provider
-    const withinQuota = await checkQuotaLimit(currentProvider.id);
-    if (!withinQuota) {
-      const next = await getNextProvider(config.mode, currentProvider.id, triedIds);
-      if (next) { currentProvider = next; attempt--; continue; }
-      break;
-    }
-
     const selectedModel = pickModel(currentProvider, requestedModel);
     let lastAkName: string | undefined;
 
@@ -451,9 +466,23 @@ export async function POST(request: NextRequest) {
       if (isChatgptPlus) {
         const { header: authHeader, refreshed, newTokens, apiKeyName: akName } = await resolveAccessToken(currentProvider, providerTriedKeys);
         lastAkName = akName;
+        {
+          const withinQuota = await checkQuotaLimit(currentProvider.id, akName, selectedModel);
+          if (!withinQuota) {
+            if (!triedKeyNames.has(currentProvider.id)) triedKeyNames.set(currentProvider.id, new Set());
+            triedKeyNames.get(currentProvider.id)!.add(akName);
+            const enabledKeys = (currentProvider.apiKeys || []).filter((k: { enabled?: boolean }) => k.enabled !== false);
+            const tried = triedKeyNames.get(currentProvider.id)!;
+            if (enabledKeys.length > tried.size) { attempt--; continue; }
+            const next = await getNextProvider(config.mode, currentProvider.id, triedIds);
+            if (next) { currentProvider = next; attempt--; continue; }
+            lastError = { message: `Quota exceeded for key '${akName}'` };
+            break;
+          }
+        }
         if (refreshed && newTokens) {
           import('@/lib/storage').then(({ updateProvider }) =>
-            updateProvider(currentProvider!.id, newTokens as any)
+            updateProvider(currentProvider!.id, newTokens)
           ).catch(() => {});
         }
         const accessToken = authHeader.replace('Bearer ', '');
@@ -465,7 +494,7 @@ export async function POST(request: NextRequest) {
         import('@/lib/storage').then(({ addLog, updateProviderStats, incrementQuotaUsage }) => {
           addLog({ providerId: currentProvider!.id, providerName: currentProvider!.name, model: selectedModel || requestedModel, status: 'success', latencyMs, tokensUsed, apiKeyName: akName });
           updateProviderStats(currentProvider!.id, true, latencyMs);
-          incrementQuotaUsage(currentProvider!.id, tokensUsed || 0, akName).catch(() => {});
+          incrementQuotaUsage(currentProvider!.id, tokensUsed || 0, akName, selectedModel).catch(() => {});
         }).catch(() => {});
         return cgptResp;
       }
@@ -474,6 +503,21 @@ export async function POST(request: NextRequest) {
       const upstreamUrl = `${currentProvider.baseUrl.replace(/\/+$/, '')}/chat/completions`;
       const { header: authHeader, apiKeyName: stdAkName } = await resolveAccessToken(currentProvider, providerTriedKeys);
       lastAkName = stdAkName;
+
+      {
+        const withinQuota = await checkQuotaLimit(currentProvider.id, stdAkName, selectedModel);
+        if (!withinQuota) {
+          if (!triedKeyNames.has(currentProvider.id)) triedKeyNames.set(currentProvider.id, new Set());
+          triedKeyNames.get(currentProvider.id)!.add(stdAkName);
+          const enabledKeys = (currentProvider.apiKeys || []).filter((k: { enabled?: boolean }) => k.enabled !== false);
+          const tried = triedKeyNames.get(currentProvider.id)!;
+          if (enabledKeys.length > tried.size) { attempt--; continue; }
+          const next = await getNextProvider(config.mode, currentProvider.id, triedIds);
+          if (next) { currentProvider = next; attempt--; continue; }
+          lastError = { message: `Quota exceeded for key '${stdAkName}'` };
+          break;
+        }
+      }
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs);
@@ -553,7 +597,7 @@ export async function POST(request: NextRequest) {
                 const usage = lastUsage ?? (estimatedChars > 0 ? Math.ceil(estimatedChars / 4) : undefined);
                 if (usage) {
                   import('@/lib/storage').then(({ incrementQuotaUsage }) =>
-                    incrementQuotaUsage(currentProvider!.id, usage, stdAkName).catch(() => {})
+                    incrementQuotaUsage(currentProvider!.id, usage, stdAkName, selectedModel).catch(() => {})
                   ).catch(() => {});
                 }
                 // Log AFTER stream ends so token usage is captured
@@ -603,7 +647,7 @@ export async function POST(request: NextRequest) {
         });
 
         if (data.usage?.total_tokens) {
-          await incrementQuotaUsage(currentProvider.id, data.usage.total_tokens, stdAkName);
+          await incrementQuotaUsage(currentProvider.id, data.usage.total_tokens, stdAkName, selectedModel);
         }
 
         const res = NextResponse.json(data, { status: 200 });

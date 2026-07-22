@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyDashboardAuth } from '@/lib/auth';
-import { getLogs, getProviders } from '@/lib/storage';
-import { Stats } from '@/lib/types';
+import { getLogs, getProviders, getLifetimeTokenByApiKey } from '@/lib/storage';
+import { Stats, TokenAggRow } from '@/lib/types';
 import { withCors, handleCorsPreflight } from '@/lib/cors';
 
 export async function OPTIONS() {
@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
 
   const logs = await getLogs(500);
   const providers = await getProviders();
+  const lifetimeTokenByApiKey = await getLifetimeTokenByApiKey();
 
   const successCount = logs.filter(l => l.status === 'success').length;
   const errorCount = logs.filter(l => l.status === 'error' || l.status === 'timeout').length;
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest) {
   const providerMap = new Map<string, Agg>();
   const modelMap = new Map<string, Agg>();
   const apiKeyMap = new Map<string, Agg>();
-  const comboMap = new Map<string, Agg>(); // model + api key pair
+  const comboMap = new Map<string, Agg>();
   let totalTokensAll = 0;
 
   for (const l of logs) {
@@ -83,24 +84,30 @@ export async function GET(request: NextRequest) {
   }
 
   const sortByTokens = (a: Agg, b: Agg) => b.tokens - a.tokens || b.requests - a.requests;
-
-  const tokenByProvider = [...providerMap.values()].sort(sortByTokens);
-  const tokenByModel = [...modelMap.values()].sort(sortByTokens);
-  const tokenByApiKey = [...apiKeyMap.values()].sort(sortByTokens);
-  const tokenByModelAndKey = [...comboMap.values()]
+  const tokenByProvider = Array.from(providerMap.values()).sort(sortByTokens);
+  const tokenByModel = Array.from(modelMap.values()).sort(sortByTokens);
+  const tokenByModelAndKey = Array.from(comboMap.values())
     .map(row => {
       const [model, apiKeyName] = row.key.split('|||');
       return { model, apiKeyName, tokens: row.tokens, requests: row.requests, successes: row.successes };
     })
     .sort((a, b) => b.tokens - a.tokens || b.requests - a.requests);
 
-  const stats: Stats & {
-    totalTokens: number;
-    tokenByProvider: typeof tokenByProvider;
-    tokenByModel: typeof tokenByModel;
-    tokenByApiKey: typeof tokenByApiKey;
-    tokenByModelAndKey: typeof tokenByModelAndKey;
-  } = {
+  // Prefer lifetime totals when available; fall back to recent-window key totals.
+  let tokenByApiKey: TokenAggRow[] = lifetimeTokenByApiKey.length > 0
+    ? lifetimeTokenByApiKey
+    : Array.from(apiKeyMap.values()).sort(sortByTokens);
+
+  // Also merge recent keys that may not yet be in lifetime table
+  if (lifetimeTokenByApiKey.length > 0) {
+    const map = new Map(lifetimeTokenByApiKey.map(r => [r.key, { ...r }]));
+    for (const row of Array.from(apiKeyMap.values())) {
+      if (!map.has(row.key)) map.set(row.key, row);
+    }
+    tokenByApiKey = Array.from(map.values()).sort(sortByTokens);
+  }
+
+  const stats: Stats = {
     totalRequests,
     successCount,
     errorCount,
@@ -112,6 +119,7 @@ export async function GET(request: NextRequest) {
     tokenByModel,
     tokenByApiKey,
     tokenByModelAndKey,
+    lifetimeTokenByApiKey,
   };
 
   return withCors(NextResponse.json(stats));

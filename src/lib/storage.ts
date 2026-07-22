@@ -175,6 +175,11 @@ export async function addProvider(data: {
   selectedModels: string[];
   priority: number;
   enabled: boolean;
+  apiKeys?: Array<{ name: string; key: string; enabled: boolean }>;
+  apiKeyStrategy?: 'random' | 'failover-priority' | 'round-robin';
+  authType?: 'api_key' | 'chatgpt_plus';
+  chatgptRefreshToken?: string;
+  chatgptExpiresAt?: string;
 }): Promise<Provider> {
   const id = randomUUID();
   const now = new Date().toISOString();
@@ -184,11 +189,13 @@ export async function addProvider(data: {
     name: data.name,
     base_url: data.baseUrl,
     api_key: data.apiKey,
-    api_keys: Array.isArray((data as any).apiKeys) && (data as any).apiKeys.length > 0 ? (data as any).apiKeys : [{ name: 'Default', key: data.apiKey, enabled: true }],
-    api_key_strategy: (data as any).apiKeyStrategy ?? 'random',
-    auth_type: (data as any).authType ?? 'api_key',
-    chatgpt_refresh_token: (data as any).chatgptRefreshToken ?? null,
-    chatgpt_expires_at: (data as any).chatgptExpiresAt ?? null,
+    api_keys: Array.isArray(data.apiKeys) && data.apiKeys.length > 0
+      ? data.apiKeys
+      : [{ name: 'Default', key: data.apiKey, enabled: true }],
+    api_key_strategy: data.apiKeyStrategy ?? 'random',
+    auth_type: data.authType ?? 'api_key',
+    chatgpt_refresh_token: data.chatgptRefreshToken ?? null,
+    chatgpt_expires_at: data.chatgptExpiresAt ?? null,
     models: data.models,
     selected_models: data.selectedModels,
     model: data.selectedModels[0] || data.models[0] || '', // backward compat
@@ -215,14 +222,14 @@ export async function addProvider(data: {
 }
 
 export async function updateProvider(id: string, data: Partial<Provider>): Promise<Provider | null> {
-  const updateObj: Record<string, any> = {};
+  const updateObj: Record<string, unknown> = {};
   if (data.name !== undefined) updateObj.name = data.name;
   if (data.baseUrl !== undefined) updateObj.base_url = data.baseUrl;
   if (data.apiKey !== undefined) updateObj.api_key = data.apiKey;
-  if ((data as any).apiKeys !== undefined) updateObj.api_keys = (data as any).apiKeys;
-  if ((data as any).authType !== undefined) updateObj.auth_type = (data as any).authType;
-  if ((data as any).chatgptRefreshToken !== undefined) updateObj.chatgpt_refresh_token = (data as any).chatgptRefreshToken;
-  if ((data as any).chatgptExpiresAt !== undefined) updateObj.chatgpt_expires_at = (data as any).chatgptExpiresAt;
+  if (data.apiKeys !== undefined) updateObj.api_keys = data.apiKeys;
+  if (data.authType !== undefined) updateObj.auth_type = data.authType;
+  if (data.chatgptRefreshToken !== undefined) updateObj.chatgpt_refresh_token = data.chatgptRefreshToken;
+  if (data.chatgptExpiresAt !== undefined) updateObj.chatgpt_expires_at = data.chatgptExpiresAt;
   if (data.models !== undefined) updateObj.models = data.models;
   if (data.selectedModels !== undefined) {
     updateObj.selected_models = data.selectedModels;
@@ -232,7 +239,7 @@ export async function updateProvider(id: string, data: Partial<Provider>): Promi
   if (data.enabled !== undefined) updateObj.enabled = data.enabled;
   if (data.archived !== undefined) updateObj.archived = data.archived;
   if (data.healthStatus !== undefined) updateObj.health_status = data.healthStatus;
-  if ((data as any).apiKeyStrategy !== undefined) updateObj.api_key_strategy = (data as any).apiKeyStrategy;
+  if (data.apiKeyStrategy !== undefined) updateObj.api_key_strategy = data.apiKeyStrategy;
   if (data.lastHealthCheck !== undefined) updateObj.last_health_check = data.lastHealthCheck;
   if (data.totalRequests !== undefined) updateObj.request_count = data.totalRequests;
   if (data.errorCount !== undefined) updateObj.error_count = data.errorCount;
@@ -717,9 +724,13 @@ export async function addQuota(providerId: string, providerName: string, model: 
 }
 
 export async function updateQuota(id: string, updates: Partial<Quota>): Promise<Quota | null> {
-  const updateObj: Record<string, any> = {};
+  const updateObj: Record<string, unknown> = {};
   if (updates.monthlyLimit !== undefined) updateObj.monthly_limit = updates.monthlyLimit;
   if (updates.resetDay !== undefined) updateObj.reset_day = updates.resetDay;
+  if (updates.currentUsage !== undefined) updateObj.current_usage = updates.currentUsage;
+  if (updates.model !== undefined) updateObj.model = updates.model;
+  if (updates.apiKeyName !== undefined) updateObj.api_key_name = updates.apiKeyName;
+  if (updates.providerName !== undefined) updateObj.provider_name = updates.providerName;
 
   const { data, error } = await supabase
     .from('quotas')
@@ -750,67 +761,270 @@ export async function deleteQuota(id: string): Promise<boolean> {
   return (count ?? 0) > 0;
 }
 
-export async function incrementQuotaUsage(providerId: string, tokens: number, apiKeyName?: string): Promise<void> {
-  if (!tokens || tokens <= 0) return;
+type QuotaRow = {
+  id: string;
+  provider_id: string;
+  provider_name?: string;
+  model?: string | null;
+  api_key_name?: string | null;
+  monthly_limit?: number | null;
+  current_usage?: number | null;
+  reset_day?: number | null;
+};
 
-  // Find quota entry by provider_id AND api_key_name (if provided)
-  let queryBuilder = supabase
+async function listQuotasForProvider(providerId: string): Promise<QuotaRow[]> {
+  const { data, error } = await supabase
     .from('quotas')
-    .select('id, current_usage')
+    .select('id, provider_id, provider_name, model, api_key_name, monthly_limit, current_usage, reset_day')
     .eq('provider_id', providerId);
+  if (error) {
+    console.error('Supabase listQuotasForProvider error:', error);
+    return [];
+  }
+  return (data || []) as QuotaRow[];
+}
 
-  if (apiKeyName) {
-    queryBuilder = queryBuilder.eq('api_key_name', apiKeyName);
+function pickQuotaRows(
+  rows: QuotaRow[],
+  opts: { apiKeyName?: string; model?: string }
+): QuotaRow[] {
+  const apiKeyName = (opts.apiKeyName || '').trim();
+  const model = (opts.model || '').trim();
+
+  // Prefer exact (apiKey + model), then (apiKey + all models), then provider-level.
+  const exact = rows.filter(r =>
+    (r.api_key_name || '') === apiKeyName &&
+    (r.model || '') === model
+  );
+  if (exact.length) return exact;
+
+  if (model) {
+    const keyAllModels = rows.filter(r =>
+      (r.api_key_name || '') === apiKeyName &&
+      (!r.model || r.model === '')
+    );
+    if (keyAllModels.length) return keyAllModels;
   }
 
-  const { data } = await queryBuilder.limit(1).maybeSingle();
+  if (apiKeyName) {
+    const keyAny = rows.filter(r => (r.api_key_name || '') === apiKeyName);
+    if (keyAny.length) return keyAny;
+  }
 
-  if (data) {
-    await supabase
-      .from('quotas')
-      .update({ current_usage: (data.current_usage ?? 0) + tokens })
-      .eq('id', data.id);
-  } else if (apiKeyName) {
-    // No entry for this api_key_name — try provider-level entry (api_key_name = '' or null)
-    // Avoid .or() empty-string filter (broken in PostgREST); fetch and filter in code.
-    const { data: candidates } = await supabase
-      .from('quotas')
-      .select('id, current_usage, api_key_name')
-      .eq('provider_id', providerId);
+  // Provider-level fallbacks (empty api key name)
+  const providerLevel = rows.filter(r => !r.api_key_name || r.api_key_name === '');
+  if (model) {
+    const providerModel = providerLevel.filter(r => (r.model || '') === model);
+    if (providerModel.length) return providerModel;
+  }
+  return providerLevel.filter(r => !r.model || r.model === '');
+}
 
-    const fallback = (candidates || []).find(
-      (q: any) => q.api_key_name === null || q.api_key_name === ''
-    );
+export async function incrementQuotaUsage(
+  providerId: string,
+  tokens: number,
+  apiKeyName?: string,
+  model?: string
+): Promise<void> {
+  if (!tokens || tokens <= 0) return;
 
-    if (fallback) {
+  const rows = await listQuotasForProvider(providerId);
+  if (rows.length === 0) return;
+
+  // Increment every matching scoped quota row (key+model, key-all, provider-level if selected)
+  const targets = new Map<string, QuotaRow>();
+  for (const r of pickQuotaRows(rows, { apiKeyName, model })) targets.set(r.id, r);
+
+  // Always also bump exact key-level all-models row if present, so "limit per API key" stays accurate
+  // even when a model-specific row exists.
+  if (apiKeyName) {
+    for (const r of rows) {
+      if ((r.api_key_name || '') === apiKeyName && (!r.model || r.model === '')) {
+        targets.set(r.id, r);
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from(targets.values()).map(async (row) => {
       await supabase
         .from('quotas')
-        .update({ current_usage: (fallback.current_usage ?? 0) + tokens })
-        .eq('id', fallback.id);
-    }
-    // If still no entry, do nothing — no quota configured for this provider
+        .update({ current_usage: (row.current_usage ?? 0) + tokens })
+        .eq('id', row.id);
+    })
+  );
+
+  // Lifetime total per API key (independent of request_logs cleanup)
+  if (apiKeyName) {
+    await incrementLifetimeApiKeyTokens(apiKeyName, tokens).catch((e) => {
+      console.error('incrementLifetimeApiKeyTokens error:', e);
+    });
   }
 }
 
-export async function checkQuotaLimit(providerId: string, apiKeyName?: string): Promise<boolean> {
-  // Returns true if provider is within quota (or no quota set)
-  let queryBuilder = supabase
-    .from('quotas')
-    .select('monthly_limit, current_usage')
-    .eq('provider_id', providerId);
+/**
+ * Returns true if request is within quota (or no quota set).
+ * Checks most-specific scope first: apiKey+model → apiKey → provider.
+ * Any matching limited quota that is exhausted blocks the request.
+ */
+export async function checkQuotaLimit(
+  providerId: string,
+  apiKeyName?: string,
+  model?: string
+): Promise<boolean> {
+  const rows = await listQuotasForProvider(providerId);
+  // No rows → no limit configured
+  if (rows.length === 0) return true;
 
+  const candidates = pickQuotaRows(rows, { apiKeyName, model });
+  // Also include exact key-level all-models if present
   if (apiKeyName) {
-    queryBuilder = queryBuilder.eq('api_key_name', apiKeyName);
+    for (const r of rows) {
+      if ((r.api_key_name || '') === apiKeyName && (!r.model || r.model === '')) {
+        if (!candidates.some(c => c.id === r.id)) candidates.push(r);
+      }
+    }
   }
 
-  const { data, error } = await queryBuilder.limit(1).maybeSingle();
+  if (candidates.length === 0) return true;
 
-  // DB error: fail closed (block request) rather than silently bypassing quota.
-  if (error) {
-    console.error('Supabase checkQuotaLimit error:', error);
+  for (const row of candidates) {
+    const limit = row.monthly_limit ?? 0;
+    if (!limit || limit <= 0) continue; // unlimited
+    if ((row.current_usage ?? 0) >= limit) return false;
+  }
+  return true;
+}
+
+// ─── Lifetime token totals per API key ───────────────────
+// Stored separately so request_logs auto-trim (max 15) does not wipe totals.
+
+let lifetimeTableReady: Promise<boolean> | null = null;
+
+async function ensureLifetimeTokenTable(): Promise<boolean> {
+  if (lifetimeTableReady) return lifetimeTableReady;
+  lifetimeTableReady = (async () => {
+    // Probe table existence with a cheap select
+    const { error } = await supabase
+      .from('api_key_token_totals')
+      .select('api_key_name')
+      .limit(1);
+    if (!error) return true;
+    // Table missing → create via SQL if possible. PostgREST can't DDL, so we
+    // fall back to soft-disable and keep using quotas/current logs.
+    console.error('api_key_token_totals missing or inaccessible:', error.message);
     return false;
+  })();
+  return lifetimeTableReady;
+}
+
+export async function incrementLifetimeApiKeyTokens(apiKeyName: string, tokens: number): Promise<void> {
+  const name = (apiKeyName || '').trim();
+  if (!name || !tokens || tokens <= 0) return;
+  const ok = await ensureLifetimeTokenTable();
+  if (!ok) return;
+
+  const now = new Date().toISOString();
+  const { data: existing } = await supabase
+    .from('api_key_token_totals')
+    .select('api_key_name, total_tokens, total_requests')
+    .eq('api_key_name', name)
+    .maybeSingle();
+
+  if (existing) {
+    await supabase
+      .from('api_key_token_totals')
+      .update({
+        total_tokens: (existing.total_tokens ?? 0) + tokens,
+        total_requests: (existing.total_requests ?? 0) + 1,
+        updated_at: now,
+      })
+      .eq('api_key_name', name);
+  } else {
+    await supabase
+      .from('api_key_token_totals')
+      .insert({
+        api_key_name: name,
+        total_tokens: tokens,
+        total_requests: 1,
+        updated_at: now,
+      });
+  }
+}
+
+export async function getLifetimeTokenByApiKey(): Promise<Array<{ key: string; tokens: number; requests: number; successes: number }>> {
+  const ok = await ensureLifetimeTokenTable();
+  if (ok) {
+    const { data, error } = await supabase
+      .from('api_key_token_totals')
+      .select('api_key_name, total_tokens, total_requests')
+      .order('total_tokens', { ascending: false });
+    if (!error && data) {
+      return data.map((row: { api_key_name: string; total_tokens: number; total_requests: number }) => ({
+        key: row.api_key_name,
+        tokens: row.total_tokens ?? 0,
+        requests: row.total_requests ?? 0,
+        successes: row.total_requests ?? 0,
+      }));
+    }
   }
 
-  if (!data || !data.monthly_limit || data.monthly_limit === 0) return true; // no limit
-  return (data.current_usage ?? 0) < data.monthly_limit;
+  // Fallback: derive permanent-ish totals from quotas.current_usage (not wiped by log cleanup).
+  // Prefer key-level rows (model empty) and aggregate by api_key_name.
+  const { data: quotaRows, error: qErr } = await supabase
+    .from('quotas')
+    .select('api_key_name, model, current_usage');
+  if (qErr || !quotaRows) {
+    if (qErr) console.error('getLifetimeTokenByApiKey quota fallback error:', qErr);
+    return [];
+  }
+
+  const map = new Map<string, { key: string; tokens: number; requests: number; successes: number }>();
+  for (const row of quotaRows as Array<{ api_key_name?: string | null; model?: string | null; current_usage?: number | null }>) {
+    const key = (row.api_key_name || '').trim() || 'Default';
+    // Prefer all-models rows; if only model-specific exist, still count them.
+    const isAllModels = !row.model || row.model === '';
+    const prev = map.get(key) || { key, tokens: 0, requests: 0, successes: 0 };
+    if (isAllModels) {
+      // all-models row is authoritative for that key when present
+      prev.tokens = Math.max(prev.tokens, row.current_usage ?? 0);
+    } else if (prev.tokens === 0) {
+      prev.tokens += row.current_usage ?? 0;
+    }
+    map.set(key, prev);
+  }
+  return Array.from(map.values()).sort((a, b) => b.tokens - a.tokens);
+}
+
+/**
+ * Ensure a quota row exists for provider+apiKey (+ optional model).
+ * Used by dashboard auto-sync / limit UI.
+ */
+export async function ensureQuotaRow(
+  providerId: string,
+  providerName: string,
+  apiKeyName: string,
+  model: string = '',
+  monthlyLimit: number = 0,
+  resetDay: number = 1
+): Promise<Quota> {
+  const rows = await listQuotasForProvider(providerId);
+  const found = rows.find(r =>
+    (r.api_key_name || '') === (apiKeyName || '') &&
+    (r.model || '') === (model || '')
+  );
+  if (found) {
+    return {
+      id: found.id,
+      providerId: found.provider_id,
+      providerName: found.provider_name || providerName,
+      model: found.model ?? '',
+      apiKeyName: found.api_key_name ?? '',
+      monthlyLimit: found.monthly_limit ?? 0,
+      currentUsage: found.current_usage ?? 0,
+      resetDay: found.reset_day ?? 1,
+      createdAt: '',
+    };
+  }
+  return addQuota(providerId, providerName, model, monthlyLimit, resetDay, apiKeyName);
 }

@@ -120,9 +120,12 @@ export interface Stats {
   avgLatency: number;
   providerBreakdown: ProviderBreakdown[];
   totalTokens?: number;
+  tokenByProvider?: TokenAggRow[];
   tokenByModel?: TokenAggRow[];
   tokenByApiKey?: TokenAggRow[];
   tokenByModelAndKey?: TokenModelKeyRow[];
+  /** Lifetime totals (not limited by request_logs cleanup) */
+  lifetimeTokenByApiKey?: TokenAggRow[];
 }
 
 // ─── Rate limit ─────────────────────────────────────
@@ -141,7 +144,36 @@ export interface Quota {
   model: string;                // track per model ('' = all models)
   apiKeyName: string;           // track per API key name
   monthlyLimit: number;       // max tokens per month (0 = unlimited)
-  currentUsage: number;       // tokens used this month
+  currentUsage: number;       // tokens used this month / lifetime tracker
   resetDay: number;           // day of month to reset (1-28)
   createdAt: string;
+}
+
+/** Typed provider create payload (avoids `as any` cast soup). */
+export interface ProviderCreateInput {
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  models: string[];
+  selectedModels: string[];
+  priority: number;
+  enabled: boolean;
+  apiKeys?: Array<{ name: string; key: string; enabled: boolean }>;
+  apiKeyStrategy?: 'random' | 'failover-priority' | 'round-robin';
+  authType?: 'api_key' | 'chatgpt_plus';
+  chatgptRefreshToken?: string;
+  chatgptExpiresAt?: string;
+}
+
+export interface ProviderApiKey {
+  name: string;
+  key: string;
+  enabled: boolean;
+}
+
+export interface LifetimeTokenTotal {
+  apiKeyName: string;
+  totalTokens: number;
+  totalRequests: number;
+  updatedAt?: string;
 }

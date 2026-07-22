@@ -65,15 +65,16 @@ export async function POST(request: NextRequest) {
               apiKey: refreshed.accessToken,
               chatgptRefreshToken: refreshed.refreshToken,
               chatgptExpiresAt: refreshed.expiresAt,
-            } as any)
+            })
           ).catch(() => {});
         }
-      } catch (refreshErr: any) {
+      } catch (refreshErr: unknown) {
+        const msg = refreshErr instanceof Error ? refreshErr.message : 'Token refresh failed';
         return withCors(NextResponse.json({
           success: false,
           model,
           latencyMs: 0,
-          error: `Token refresh failed: ${refreshErr.message}`,
+          error: `Token refresh failed: ${msg}`,
         }));
       }
     }

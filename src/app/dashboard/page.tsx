@@ -108,6 +108,7 @@ interface Stats {
   tokenByModel?: Array<{ key: string; tokens: number; requests: number; successes: number }>;
   tokenByApiKey?: Array<{ key: string; tokens: number; requests: number; successes: number }>;
   tokenByModelAndKey?: Array<{ model: string; apiKeyName: string; tokens: number; requests: number; successes: number }>;
+  lifetimeTokenByApiKey?: Array<{ key: string; tokens: number; requests: number; successes: number }>;
 }
 
 // ─── Helpers ───────────────────────────────────────
@@ -244,7 +245,7 @@ export default function Dashboard() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [provRes, archRes, logRes, statsRes, configRes, keysRes, combosRes] = await Promise.all([
+      const [provRes, archRes, logRes, statsRes, configRes, keysRes, combosRes, quotasRes] = await Promise.all([
         api('/api/providers'),
         api('/api/providers?archived=true'),
         api('/api/logs?limit=200'),
@@ -252,6 +253,7 @@ export default function Dashboard() {
         api('/api/config'),
         api('/api/api-keys'),
         api('/api/combos'),
+        api('/api/quotas'),
       ]);
       if (provRes.ok) {
         const provs = await provRes.json();
@@ -276,6 +278,7 @@ export default function Dashboard() {
       if (configRes.ok) { const c = await configRes.json(); setConfig(c); }
       if (keysRes.ok) setApiKeys(await keysRes.json());
       if (combosRes.ok) setCombos(await combosRes.json());
+      if (quotasRes.ok) setQuotas(await quotasRes.json());
     } catch (e) { console.error('Fetch error:', e); }
   }, [api]);
 
@@ -304,7 +307,7 @@ export default function Dashboard() {
   // ─── Auto-sync quotas with providers ───────────
   // Silently create quota cards for any provider+apiKeyName combos missing
   useEffect(() => {
-    if (!providers.length || !quotas.length) return;
+    if (!providers.length) return;
     const asyncSync = async () => {
       try {
         let created = 0;
@@ -312,20 +315,27 @@ export default function Dashboard() {
           if (!provider.enabled) continue;
           const keys = provider.apiKeys || [{ name: 'Default', key: provider.apiKey, enabled: true }];
           for (const ak of keys) {
-            if (!ak.enabled) continue;
-            const hasQuota = quotas.some(q => q.providerId === provider.id && q.apiKeyName === ak.name);
+            if (ak.enabled === false) continue;
+            const hasQuota = quotas.some(q => q.providerId === provider.id && q.apiKeyName === ak.name && (!q.model || q.model === ''));
             if (!hasQuota) {
               await api('/api/quotas', {
                 method: 'POST',
-                body: JSON.stringify({ providerId: provider.id, providerName: provider.name, model: '', monthlyLimit: 0, resetDay: 1, apiKeyName: ak.name }),
+                body: JSON.stringify({
+                  ensure: true,
+                  providerId: provider.id,
+                  providerName: provider.name,
+                  model: '',
+                  monthlyLimit: 0,
+                  resetDay: 1,
+                  apiKeyName: ak.name,
+                }),
               });
               created++;
             }
           }
         }
         if (created > 0) {
-          const msg = '[Auto-sync] Created ' + created + ' missing quota card(s)';
-          console.log(msg);
+          console.log('[Auto-sync] Created ' + created + ' missing quota card(s)');
           fetchData();
         }
       } catch (e) {
@@ -760,6 +770,66 @@ export default function Dashboard() {
     try { await api(url, { method: 'DELETE' }); fetchData(); } catch {}
   }
 
+  function findQuota(providerId: string, apiKeyName: string, model: string = ''): Quota | undefined {
+    return quotas.find(q =>
+      q.providerId === providerId &&
+      (q.apiKeyName || '') === (apiKeyName || '') &&
+      (q.model || '') === (model || '')
+    );
+  }
+
+  async function handleSaveLimit(opts: {
+    provider: Provider;
+    apiKeyName: string;
+    model?: string;
+    monthlyLimit: number;
+  }) {
+    const model = opts.model || '';
+    const existing = findQuota(opts.provider.id, opts.apiKeyName, model);
+    try {
+      if (existing) {
+        const res = await api('/api/quotas', {
+          method: 'PUT',
+          body: JSON.stringify({ id: existing.id, monthlyLimit: opts.monthlyLimit }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          alert(err.error || 'Gagal simpan limit');
+          return;
+        }
+      } else {
+        const res = await api('/api/quotas', {
+          method: 'POST',
+          body: JSON.stringify({
+            ensure: true,
+            providerId: opts.provider.id,
+            providerName: opts.provider.name,
+            apiKeyName: opts.apiKeyName,
+            model,
+            monthlyLimit: opts.monthlyLimit,
+            resetDay: 1,
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          alert(err.error || 'Gagal buat limit');
+          return;
+        }
+        const created = await res.json();
+        // ensure may return an existing row without applying the new limit
+        if ((created.monthlyLimit ?? 0) !== opts.monthlyLimit) {
+          await api('/api/quotas', {
+            method: 'PUT',
+            body: JSON.stringify({ id: created.id, monthlyLimit: opts.monthlyLimit }),
+          });
+        }
+      }
+      fetchData();
+    } catch {
+      alert('Network error saat simpan limit');
+    }
+  }
+
   function formatTokens(tokens: number): string {
     if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
     if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}K`;
@@ -946,33 +1016,79 @@ export default function Dashboard() {
                                       const groupKey = `${p.id}:${g.name}:`;
                                       const groupResults = modelsList.filter(m => modelTestResults[`${groupKey}${m}`]);
                                       const hasAny = groupResults.length > 0;
+                                      const keyQuota = findQuota(p.id, g.name, '');
+                                      const keyLimit = keyQuota?.monthlyLimit ?? 0;
+                                      const keyUsage = keyQuota?.currentUsage ?? 0;
                                       return (
                                         <div key={g.name} className="rounded-lg border border-slate-200/70 p-2">
-                                          <div className="text-[11px] font-semibold text-slate-500 mb-1 flex items-center gap-1">
+                                          <div className="text-[11px] font-semibold text-slate-500 mb-1 flex items-center gap-1 flex-wrap">
                                             <IconKey size={12} className="text-yellow-500" /> {g.name}
                                             {hasAny && (
                                               <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${groupResults.every(m => modelTestResults[`${groupKey}${m}`]?.status === 'ok') ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
                                                 {groupResults.filter(m => modelTestResults[`${groupKey}${m}`]?.status === 'ok').length}/{groupResults.length} ok
                                               </span>
                                             )}
+                                            <span className="ml-auto text-[10px] font-normal text-slate-400">
+                                              pakai {formatTokens(keyUsage)}{keyLimit > 0 ? ` / ${formatTokens(keyLimit)}` : ' · unlimited'}
+                                            </span>
                                           </div>
+
+                                          {/* Limit per API key */}
+                                          <div className="mb-2 flex items-center gap-1.5 flex-wrap">
+                                            <label className="text-[10px] text-slate-500 whitespace-nowrap">Limit key</label>
+                                            <input
+                                              type="number"
+                                              min={0}
+                                              defaultValue={keyLimit || ''}
+                                              placeholder="0 = unlimited"
+                                              className="input !py-1 !px-2 !text-[11px] w-28"
+                                              id={`limit-key-${p.id}-${g.name}`}
+                                            />
+                                            <button
+                                              type="button"
+                                              className="btn btn-secondary !py-1 !px-2 !text-[11px] !min-h-0"
+                                              onClick={() => {
+                                                const el = document.getElementById(`limit-key-${p.id}-${g.name}`) as HTMLInputElement | null;
+                                                const val = Math.max(0, Number(el?.value || 0));
+                                                handleSaveLimit({ provider: p, apiKeyName: g.name, model: '', monthlyLimit: val });
+                                              }}
+                                            >Simpan</button>
+                                          </div>
+
                                           <div className="flex flex-wrap gap-1">
                                             {modelsList.map(m => {
                                               const rkey = `${groupKey}${m}`;
                                               const result = modelTestResults[rkey];
                                               const statusIcon = result?.status === 'testing' ? <IconSpinner size={11} className="text-slate-400" /> : result?.status === 'ok' ? <IconCheck size={11} className="text-emerald-600" /> : result?.status === 'fail' ? <IconCross size={11} className="text-red-500" /> : null;
                                               const testedBg = result?.status === 'ok' ? 'bg-emerald-50 text-emerald-700' : result?.status === 'fail' ? 'bg-red-50 text-red-700' : 'text-slate-600';
+                                              const modelQuota = findQuota(p.id, g.name, m);
+                                              const modelLimit = modelQuota?.monthlyLimit ?? 0;
                                               return (
                                                 <span key={m} className={`group inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[12.5px] font-mono leading-relaxed ${testedBg}`}>
                                                   {statusIcon && <span className="text-[10px]">{statusIcon}</span>}
                                                   {m}
                                                   {result?.status === 'ok' && result.latencyMs && <span className="text-[10px] opacity-70">{formatLatency(result.latencyMs)}</span>}
+                                                  {modelLimit > 0 && (
+                                                    <span className="text-[9px] px-1 rounded bg-amber-50 text-amber-700 border border-amber-200/60" title={`Limit model: ${formatTokens(modelLimit)}`}>L</span>
+                                                  )}
                                                   <button
                                                     onClick={(e) => { e.stopPropagation(); handleTestSingleModel(p, m, p.apiKeys?.find(k => k.name === g.name)?.key, g.name); }}
                                                     disabled={result?.status === 'testing'}
                                                     className="ml-0.5 opacity-0 group-hover:opacity-100 hover:opacity-100 text-blue-400 hover:text-blue-300 transition-opacity inline-flex items-center"
                                                     title="Test model ini"
                                                   ><IconSearch size={12} /></button>
+                                                  <button
+                                                    type="button"
+                                                    className="opacity-0 group-hover:opacity-100 text-amber-600 hover:text-amber-700 transition-opacity text-[10px] font-semibold"
+                                                    title="Set limit model ini"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      const raw = prompt(`Limit token untuk model ${m} @ ${g.name}\n(0 = unlimited)`, String(modelLimit || 0));
+                                                      if (raw === null) return;
+                                                      const val = Math.max(0, Number(raw) || 0);
+                                                      handleSaveLimit({ provider: p, apiKeyName: g.name, model: m, monthlyLimit: val });
+                                                    }}
+                                                  >limit</button>
                                                 </span>
                                               );
                                             })}
@@ -1265,6 +1381,11 @@ export default function Dashboard() {
               </div>
               <div className="card p-3">
                 <h3 className="text-sm font-semibold text-slate-800 mb-2">Per API Key</h3>
+                <p className="text-[10px] text-slate-400 mb-2">
+                  {(stats?.lifetimeTokenByApiKey?.length ?? 0) > 0
+                    ? 'Total lifetime (tidak ikut terhapus saat log dibersihkan)'
+                    : 'Dari usage quota / log terbaru'}
+                </p>
                 {(stats?.tokenByApiKey?.length ?? 0) === 0 ? (
                   <div className="text-xs text-slate-400 py-4 text-center">Belum ada data token</div>
                 ) : (

@@ -71,10 +71,10 @@ export async function POST(request: NextRequest) {
     if (existingChatGPT) {
       // Update existing
       const { updateProvider } = await import('@/lib/storage');
-      provider = await updateProvider(existingChatGPT.id, providerData as any);
+      provider = await updateProvider(existingChatGPT.id, providerData);
     } else {
       // Create new
-      provider = await addProvider(providerData as any);
+      provider = await addProvider(providerData);
     }
 
     return withCors(NextResponse.json({
@@ -82,9 +82,10 @@ export async function POST(request: NextRequest) {
       provider,
       models,
     }));
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
     return withCors(
-      NextResponse.json({ error: err.message }, { status: 500 })
+      NextResponse.json({ error: msg }, { status: 500 })
     );
   }
 }
