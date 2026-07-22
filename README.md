@@ -40,14 +40,21 @@ Open `http://localhost:3000/dashboard` and add your API providers:
 ### 4. Use the Proxy
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/chat/completions \
-  -H "Authorization: Bearer your-secret-key" \
+# List models (includes Gabung/combo names)
+curl https://your-host/api/v1/models \
+  -H "Authorization: Bearer ***"
+
+# Chat completions — for Gabung, set model = combo name
+curl -X POST https://your-host/api/v1/chat/completions \
+  -H "Authorization: Bearer ***" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "gpt-4",
+    "model": "fast-mix",
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 ```
+
+Gabung (combo) models created in the dashboard appear in `/api/v1/models` and are selected by sending their **name** as `model`.
 
 ## Rotation Modes
 

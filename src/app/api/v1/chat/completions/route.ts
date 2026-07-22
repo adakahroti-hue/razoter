@@ -177,14 +177,18 @@ export async function POST(request: NextRequest) {
   const config = await getConfig();
 
   // ─── Combo resolution (with internal failover) ────────
+  // Only treat as combo if resolveComboModel finds a match.
+  // If model is NOT a Gabung name, fall through to normal provider path.
   if (requestedModel) {
     const comboTriedIndices: number[] = [];
     const comboTriedKeyNames = new Map<string, Set<string>>(); // providerId -> tried key names
     const maxComboAttempts = 20;
+    let comboMatched = false;
 
     for (let comboAttempt = 0; comboAttempt < maxComboAttempts; comboAttempt++) {
       const comboResult = await resolveComboModel(requestedModel, comboTriedIndices);
       if (!comboResult) break;
+      comboMatched = true;
 
       const comboProvider = await getProvider(comboResult.providerId);
       // Allow multi-key providers into combos even if globally disabled (keys are handled per-key)
@@ -330,12 +334,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return withCors(
-      NextResponse.json(
-        { error: { message: `Combo model '${requestedModel}' failed: all items exhausted or provider disabled.`, type: 'server_error' } },
-        { status: 502 }
-      )
-    );
+    // Only hard-fail if this model WAS a Gabung combo.
+    // If no combo matched, fall through to normal provider routing.
+    if (comboMatched) {
+      return withCors(
+        NextResponse.json(
+          { error: { message: `Combo model '${requestedModel}' failed: all items exhausted or provider disabled.`, type: 'server_error' } },
+          { status: 502 }
+        )
+      );
+    }
   }
 
   const enabledProviders = await getEnabledProviders();

@@ -886,7 +886,7 @@ export default function Dashboard() {
             <div className="flex flex-wrap justify-between items-end gap-3">
               <div>
                 <h2 className="text-[23px] font-bold text-slate-900 tracking-tight">Gabung Models</h2>
-                <p className="text-[13px] text-slate-500 mt-1 leading-relaxed max-w-xl">Buat model virtual dari gabungan beberapa provider. Pakai nama gabungan sebagai model di request.</p>
+                <p className="text-[13px] text-slate-500 mt-1 leading-relaxed max-w-xl">Buat model virtual dari gabungan beberapa provider. Nama gabungan muncul di <code className="text-slate-700">/api/v1/models</code> dan dipakai sebagai <code className="text-slate-700">model</code> di request.</p>
               </div>
               <button onClick={openComboModal} className="btn btn-primary text-[13.5px]">+ Buat Gabung</button>
             </div>
@@ -898,8 +898,12 @@ export default function Dashboard() {
                   <div key={c.id} className="card combo-card p-3 flex flex-col">
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <h3 className="font-semibold text-green-600 text-[15px] leading-snug truncate flex-1">{c.name}</h3>
+                        <h3 className="font-semibold text-green-600 text-[15px] leading-snug truncate flex-1" title="Nama ini dipakai sebagai model di request API">{c.name}</h3>
+                        <CopyButton text={c.name} />
                         <button onClick={() => handleToggleCombo(c)} className={`chip ${c.enabled ? 'chip-cyan status-on' : ''} flex-shrink-0`}>{c.enabled ? '● ON' : '○ OFF'}</button>
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-1 font-mono truncate">
+                        model: <span className="text-slate-600">{c.name}</span>
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5 mt-2">
                         <span className={`chip ${c.enabled ? 'chip-cyan' : ''}`}>{c.items.length} models</span>
@@ -953,6 +957,18 @@ export default function Dashboard() {
                 <div className="flex items-center gap-2 bg-slate-50 rounded-lg p-3">
                   <code className="text-sm text-slate-700 font-mono flex-1">{BASE_URL}</code>
                   <CopyButton text={BASE_URL} />
+                </div>
+                <div className="mt-3 space-y-2 text-xs text-slate-500">
+                  <div className="flex items-start gap-2 bg-slate-50 rounded-lg p-2.5">
+                    <code className="font-mono text-slate-700 flex-1">GET {BASE_URL}/models</code>
+                    <CopyButton text={`${BASE_URL}/models`} />
+                  </div>
+                  <p>Endpoint di atas mengembalikan model provider + nama Gabung (combo) yang ON, biar client bisa tarik daftar model.</p>
+                  <div className="flex items-start gap-2 bg-slate-50 rounded-lg p-2.5">
+                    <code className="font-mono text-slate-700 flex-1">POST {BASE_URL}/chat/completions</code>
+                    <CopyButton text={`${BASE_URL}/chat/completions`} />
+                  </div>
+                  <p>Untuk Gabung: set <code className="text-slate-700">model</code> = nama gabungan (mis. <code className="text-slate-700">fast-mix</code>), bukan model asli provider.</p>
                 </div>
               </div>
               <div className="card">
