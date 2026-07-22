@@ -860,7 +860,7 @@ export default function Dashboard() {
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
               <h2 className="text-[23px] font-bold text-slate-900 tracking-tight">Providers</h2>
               <div className="flex gap-2 w-full sm:w-auto">
-                <button onClick={() => { resetProviderForm(); setShowProviderModal(true); }} className="btn btn-primary flex-1 sm:flex-none text-[13.5px] justify-center">+ Add Provider</button>
+                <button onClick={() => { resetProviderForm(); setShowProviderModal(true); }} className="btn btn-primary flex-1 sm:flex-none text-[13.5px] justify-center">+ Tambah Provider</button>
               </div>
             </div>
             {providers.length === 0 ? (
@@ -904,7 +904,7 @@ export default function Dashboard() {
                                       {testingAllModels === p.id ? <IconSpinner size={14} className="text-blue-400" /> : <IconFlask size={14} />}
                                     </button>
                                   </div>
-                                  <span className={`text-[11px] text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}>▾</span>
+                                  <span className="sr-only">{isExpanded ? 'Tutup detail' : 'Buka detail'}</span>
                                 </div>
                                 <div className="text-[13px] text-slate-400 mt-1.5 font-mono truncate leading-relaxed" title={p.baseUrl}>{p.baseUrl}</div>
 
