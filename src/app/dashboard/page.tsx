@@ -623,17 +623,31 @@ export default function Dashboard() {
   }
 
   async function handleToggleCombo(combo: Combo) {
-    try { await api('/api/combos', { method: 'PUT', body: JSON.stringify({ id: combo.id, enabled: !combo.enabled }) }); fetchData(); } catch {}
+    const nextEnabled = !combo.enabled;
+    // Optimistic UI so the switch feels clickable immediately
+    setCombos(prev => prev.map(c => c.id === combo.id ? { ...c, enabled: nextEnabled } : c));
+    try {
+      const res = await api('/api/combos', { method: 'PUT', body: JSON.stringify({ id: combo.id, enabled: nextEnabled }) });
+      if (!res.ok) throw new Error('toggle combo failed');
+    } catch {
+      // Revert on failure
+      setCombos(prev => prev.map(c => c.id === combo.id ? { ...c, enabled: combo.enabled } : c));
+    }
   }
 
   async function handleToggleComboItem(combo: Combo, itemIndex: number) {
     const newItems = combo.items.map((item, i) =>
-      i === itemIndex ? { ...item, enabled: item.enabled === false ? true : false } : item
+      i === itemIndex ? { ...item, enabled: item.enabled === false } : item
     );
+    // Optimistic UI
+    setCombos(prev => prev.map(c => c.id === combo.id ? { ...c, items: newItems } : c));
     try {
-      await api('/api/combos', { method: 'PUT', body: JSON.stringify({ id: combo.id, items: newItems }) });
-      fetchData();
-    } catch {}
+      const res = await api('/api/combos', { method: 'PUT', body: JSON.stringify({ id: combo.id, items: newItems }) });
+      if (!res.ok) throw new Error('toggle combo item failed');
+    } catch {
+      // Revert on failure
+      setCombos(prev => prev.map(c => c.id === combo.id ? { ...c, items: combo.items } : c));
+    }
   }
 
   // ─── Quota actions ───────────────────────────────
@@ -893,14 +907,24 @@ export default function Dashboard() {
             {combos.length === 0 ? (
               <div className="card text-center py-12 text-slate-400"><div className="text-4xl mb-2">🧩</div><p>Belum ada gabungan. Buat gabungan pertama!</p></div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 max-w-3xl">
                 {combos.map(c => (
-                  <div key={c.id} className="card combo-card p-3 flex flex-col">
+                  <div key={c.id} className="card combo-card p-4 flex flex-col">
                     <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <h3 className="font-semibold text-green-600 text-[15px] leading-snug truncate flex-1" title="Nama ini dipakai sebagai model di request API">{c.name}</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-green-600 text-[16px] leading-snug truncate flex-1 min-w-0" title="Nama ini dipakai sebagai model di request API">{c.name}</h3>
                         <CopyButton text={c.name} />
-                        <button onClick={() => handleToggleCombo(c)} className={`chip ${c.enabled ? 'chip-cyan status-on' : ''} flex-shrink-0`}>{c.enabled ? '● ON' : '○ OFF'}</button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleToggleCombo(c); }}
+                          className={`combo-switch ${c.enabled ? 'combo-switch-on' : 'combo-switch-off'}`}
+                          title={c.enabled ? 'Matikan gabungan ini' : 'Nyalakan gabungan ini'}
+                          aria-pressed={c.enabled}
+                          aria-label={c.enabled ? 'Gabungan aktif' : 'Gabungan nonaktif'}
+                        >
+                          <span className="combo-switch-knob" />
+                          <span className="combo-switch-label">{c.enabled ? 'ON' : 'OFF'}</span>
+                        </button>
                       </div>
                       <div className="text-[11px] text-slate-400 mt-1 font-mono truncate">
                         model: <span className="text-slate-600">{c.name}</span>
@@ -910,32 +934,36 @@ export default function Dashboard() {
                         <span className="chip inline-flex items-center gap-1"><IconRoute size={12} /> {c.strategy === 'round-robin' ? 'Round Robin' : 'Failover'}</span>
                         {!c.enabled && <span className="chip" style={{opacity:0.8}}>disabled</span>}
                       </div>
-                      <div className="flex flex-wrap gap-1 mt-2.5">
+                      <div className="flex flex-col gap-1.5 mt-3">
                         {c.items.map((item, i) => {
                           const itemEnabled = item.enabled !== false;
                           return (
-                            <span key={i} className={`chip-model font-mono ${itemEnabled ? '' : 'opacity-40'}`} title={`${item.providerName} → ${item.apiKeyName ? item.apiKeyName + ' → ' : ''}${item.model}`}>
-                              <span className="prov">{item.providerName}</span>
-                              {item.apiKeyName && <><span className="arrow">→</span><span className="key truncate max-w-[6rem] text-yellow-600">{item.apiKeyName}</span></>}
-                              <span className="arrow">→</span>
-                              <span className="model truncate max-w-[7rem]">{item.model}</span>
+                            <div key={i} className={`combo-item-row ${itemEnabled ? '' : 'combo-item-row-off'}`}>
+                              <div className="combo-item-text font-mono min-w-0 flex-1" title={`${item.providerName} → ${item.apiKeyName ? item.apiKeyName + ' → ' : ''}${item.model}`}>
+                                <span className="prov">{item.providerName}</span>
+                                {item.apiKeyName && <><span className="arrow">→</span><span className="key text-yellow-600">{item.apiKeyName}</span></>}
+                                <span className="arrow">→</span>
+                                <span className="model">{item.model}</span>
+                              </div>
                               <button
-                                onClick={(e) => { e.stopPropagation(); handleToggleComboItem(c, i); }}
+                                type="button"
+                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleToggleComboItem(c, i); }}
                                 className={`combo-item-toggle ${itemEnabled ? 'combo-item-on' : 'combo-item-off'}`}
                                 title={itemEnabled ? 'Nonaktifkan model ini' : 'Aktifkan model ini'}
-                                disabled={!c.enabled}
+                                aria-pressed={itemEnabled}
+                                aria-label={itemEnabled ? `Matikan ${item.model}` : `Nyalakan ${item.model}`}
                               >
                                 <span className="combo-item-toggle-knob" />
                               </button>
-                            </span>
+                            </div>
                           );
                         })}
                       </div>
                     </div>
                     <hr className="combo-divider" />
                     <div className="flex gap-2">
-                      <button onClick={() => openEditComboModal(c)} className="btn-xs btn-xs-edit flex-1 inline-flex items-center justify-center gap-1.5"><IconPencil size={13} /> Edit</button>
-                      <button onClick={() => handleDeleteCombo(c.id)} className="btn-xs btn-xs-del flex-1 inline-flex items-center justify-center"><IconTrash size={13} /></button>
+                      <button type="button" onClick={() => openEditComboModal(c)} className="btn-xs btn-xs-edit flex-1 inline-flex items-center justify-center gap-1.5"><IconPencil size={13} /> Edit</button>
+                      <button type="button" onClick={() => handleDeleteCombo(c.id)} className="btn-xs btn-xs-del flex-1 inline-flex items-center justify-center"><IconTrash size={13} /></button>
                     </div>
                   </div>
                 ))}

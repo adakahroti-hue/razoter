@@ -349,6 +349,9 @@ body::before {
   box-shadow: inset 0 1px 0 rgba(53,230,255,0.35), 0 0 12px -4px rgba(53,230,255,0.4);
 }
 .chip-model {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   background: rgba(8, 20, 38, 0.85);
   border: 1px solid rgba(53, 230, 255, 0.12);
   padding: 0.28rem 0.65rem;
@@ -358,46 +361,134 @@ body::before {
 .chip-model .arrow { color: #35E6FF; margin: 0 0.3rem; opacity: 0.8; }
 .chip-model .model { color: #C7D8EC; font-weight: 500; }
 
+/* Combo item rows (1-column friendly, easy to tap) */
+.combo-item-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  background: rgba(8, 20, 38, 0.55);
+  border: 1px solid rgba(53, 230, 255, 0.12);
+  pointer-events: auto;
+}
+.combo-item-row-off {
+  opacity: 0.55;
+}
+.combo-item-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  min-width: 0;
+}
+.combo-item-text .prov { color: #7E97B5; }
+.combo-item-text .arrow { color: #35E6FF; margin: 0 0.35rem; opacity: 0.85; }
+.combo-item-text .model { color: #C7D8EC; font-weight: 500; word-break: break-all; }
+.combo-item-text .key { word-break: break-all; }
+
+/* Main combo ON/OFF switch */
+.combo-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 58px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid rgba(53, 230, 255, 0.25);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0 8px 0 28px;
+  transition: background 180ms ease, border-color 180ms ease;
+  pointer-events: auto;
+  z-index: 2;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+}
+.combo-switch-on {
+  background: rgba(53, 230, 255, 0.28);
+  border-color: rgba(53, 230, 255, 0.55);
+  padding: 0 28px 0 8px;
+}
+.combo-switch-off {
+  background: rgba(80, 90, 110, 0.35);
+  border-color: rgba(140, 150, 170, 0.35);
+  padding: 0 8px 0 28px;
+}
+.combo-switch-knob {
+  position: absolute;
+  top: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.35);
+  transition: left 180ms ease;
+  pointer-events: none;
+}
+.combo-switch-on .combo-switch-knob { left: calc(100% - 24px); }
+.combo-switch-off .combo-switch-knob { left: 4px; }
+.combo-switch-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #E8F4FF;
+  pointer-events: none;
+}
+.combo-switch-off .combo-switch-label { color: #A8B6C8; }
+
 /* Per-item ON/OFF toggle slider for combo models */
 .combo-item-toggle {
   position: relative;
-  width: 28px;
-  height: 16px;
-  border-radius: 10px;
-  border: none;
+  width: 44px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid rgba(53, 230, 255, 0.2);
   cursor: pointer;
-  transition: background 200ms ease;
+  transition: background 180ms ease, border-color 180ms ease;
   flex-shrink: 0;
   padding: 0;
-  margin-left: 0.4rem;
+  margin-left: 0;
   display: inline-flex;
   align-items: center;
+  pointer-events: auto;
+  z-index: 2;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
 }
 .combo-item-toggle:disabled {
   cursor: not-allowed;
   opacity: 0.3;
+  pointer-events: none;
 }
 .combo-item-on {
-  background: rgba(53, 230, 255, 0.55);
+  background: rgba(53, 230, 255, 0.45);
+  border-color: rgba(53, 230, 255, 0.55);
 }
 .combo-item-off {
-  background: rgba(80, 90, 110, 0.45);
+  background: rgba(80, 90, 110, 0.4);
+  border-color: rgba(140, 150, 170, 0.3);
 }
 .combo-item-toggle-knob {
   position: absolute;
-  top: 2px;
-  width: 12px;
-  height: 12px;
+  top: 3px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: #fff;
-  transition: left 200ms ease;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  transition: left 180ms ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  pointer-events: none;
 }
 .combo-item-on .combo-item-toggle-knob {
-  left: 14px;
+  left: 22px;
 }
 .combo-item-off .combo-item-toggle-knob {
-  left: 2px;
+  left: 3px;
 }
 
 /* compact action buttons */
