@@ -17,12 +17,13 @@ export async function OPTIONS() {
 }
 
 /** Per-item timeout for Gabung failover.
- *  Full config.timeoutMs (often 30s) is too slow when several items fail in a row —
- *  the whole request dies before reaching a healthy later item. */
+ *  Earlier hard-cap of 12s was too short for many providers/models (item #2+ often
+ *  need 15–40s to first byte). Use config.timeoutMs with a safer floor/ceiling so
+ *  later combo items can actually succeed, while still bounding runaway waits. */
 function comboItemTimeoutMs(configTimeoutMs: number): number {
   const raw = Number(configTimeoutMs) || 30000;
-  // Cap at 12s per combo item so a chain of 5 failing items finishes ~1 minute.
-  return Math.max(5000, Math.min(raw, 12000));
+  // Floor 20s (slow models), ceiling 90s (or config if lower), never below 10s.
+  return Math.max(10000, Math.min(Math.max(raw, 20000), 90000));
 }
 
 function getClientIp(request: NextRequest): string {
