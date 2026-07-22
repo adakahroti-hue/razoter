@@ -94,6 +94,7 @@ interface Stats {
   errorCount: number;
   successRate: number;
   avgLatency: number;
+  totalTokens?: number;
   providerBreakdown: Array<{
     providerId: string;
     providerName: string;
@@ -103,6 +104,9 @@ interface Stats {
     avgLatency: number;
     totalTokens: number;
   }>;
+  tokenByModel?: Array<{ key: string; tokens: number; requests: number; successes: number }>;
+  tokenByApiKey?: Array<{ key: string; tokens: number; requests: number; successes: number }>;
+  tokenByModelAndKey?: Array<{ model: string; apiKeyName: string; tokens: number; requests: number; successes: number }>;
 }
 
 // ─── Helpers ───────────────────────────────────────
@@ -241,7 +245,7 @@ export default function Dashboard() {
       const [provRes, archRes, logRes, statsRes, configRes, keysRes, combosRes] = await Promise.all([
         api('/api/providers'),
         api('/api/providers?archived=true'),
-        api('/api/logs?limit=50'),
+        api('/api/logs?limit=200'),
         api('/api/stats'),
         api('/api/config'),
         api('/api/api-keys'),
@@ -1150,20 +1154,116 @@ export default function Dashboard() {
               <h2 className="text-lg font-semibold text-slate-900">Request Logs</h2>
               <button onClick={handleClearLogs} className="btn btn-secondary text-sm inline-flex items-center gap-1.5"><IconTrash size={14} /> Clear</button>
             </div>
+
+            {/* Token usage tracker */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+              <div className="card p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-slate-800 inline-flex items-center gap-1.5"><IconCoin size={14} className="text-amber-500" /> Total Token</h3>
+                  <span className="text-sm font-bold text-slate-900">{formatTokens(stats?.totalTokens ?? logs.reduce((s, l) => s + (l.tokensUsed || 0), 0))}</span>
+                </div>
+                <p className="text-[11px] text-slate-500">Dari {stats?.totalRequests ?? logs.length} request terakhir (max 500 di server).</p>
+              </div>
+
+              <div className="card p-3 lg:col-span-1">
+                <h3 className="text-sm font-semibold text-slate-800 mb-2">Per Model</h3>
+                {(stats?.tokenByModel?.length ?? 0) === 0 ? (
+                  <div className="text-xs text-slate-400 py-4 text-center">Belum ada data token</div>
+                ) : (
+                  <div className="max-h-48 overflow-y-auto space-y-1.5">
+                    {(stats?.tokenByModel ?? []).slice(0, 20).map(row => (
+                      <div key={row.key} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="font-mono text-slate-600 truncate" title={row.key}>{row.key}</span>
+                        <span className="font-semibold text-slate-800 whitespace-nowrap">{formatTokens(row.tokens)} <span className="text-slate-400 font-normal">· {row.requests}x</span></span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="card p-3">
+                <h3 className="text-sm font-semibold text-slate-800 mb-2">Per API Key</h3>
+                {(stats?.tokenByApiKey?.length ?? 0) === 0 ? (
+                  <div className="text-xs text-slate-400 py-4 text-center">Belum ada data token</div>
+                ) : (
+                  <div className="max-h-48 overflow-y-auto space-y-1.5">
+                    {(stats?.tokenByApiKey ?? []).slice(0, 20).map(row => (
+                      <div key={row.key} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="font-mono text-yellow-600 truncate" title={row.key}>{row.key}</span>
+                        <span className="font-semibold text-slate-800 whitespace-nowrap">{formatTokens(row.tokens)} <span className="text-slate-400 font-normal">· {row.requests}x</span></span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="card overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-800">Token by Model + API Key</h3>
+                <span className="text-[11px] text-slate-400">urut token tertinggi</span>
+              </div>
+              {/* Desktop table */}
+              <table className="w-full text-sm hidden sm:table">
+                <thead>
+                  <tr className="bg-slate-50 text-left">
+                    <th className="px-4 py-2 text-slate-500 font-medium">Model</th>
+                    <th className="px-4 py-2 text-slate-500 font-medium">API Key</th>
+                    <th className="px-4 py-2 text-slate-500 font-medium">Token</th>
+                    <th className="px-4 py-2 text-slate-500 font-medium">Request</th>
+                    <th className="px-4 py-2 text-slate-500 font-medium">Sukses</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(stats?.tokenByModelAndKey?.length ?? 0) === 0 ? (
+                    <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">Belum ada data token</td></tr>
+                  ) : (
+                    (stats?.tokenByModelAndKey ?? []).slice(0, 50).map((row, i) => (
+                      <tr key={`${row.model}-${row.apiKeyName}-${i}`} className="border-t border-slate-100">
+                        <td className="px-4 py-2 font-mono text-xs text-slate-700">{row.model}</td>
+                        <td className="px-4 py-2 font-mono text-xs text-yellow-600">{row.apiKeyName}</td>
+                        <td className="px-4 py-2 font-semibold text-slate-800">{formatTokens(row.tokens)}</td>
+                        <td className="px-4 py-2 text-slate-600">{row.requests}</td>
+                        <td className="px-4 py-2 text-slate-600">{row.successes}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+              {/* Mobile cards */}
+              <div className="sm:hidden divide-y divide-slate-100">
+                {(stats?.tokenByModelAndKey?.length ?? 0) === 0 ? (
+                  <div className="px-4 py-8 text-center text-slate-400 text-sm">Belum ada data token</div>
+                ) : (
+                  (stats?.tokenByModelAndKey ?? []).slice(0, 30).map((row, i) => (
+                    <div key={`${row.model}-${row.apiKeyName}-m-${i}`} className="p-3">
+                      <div className="font-mono text-xs text-slate-700 truncate">{row.model}</div>
+                      <div className="font-mono text-xs text-yellow-600 mt-0.5">{row.apiKeyName}</div>
+                      <div className="flex items-center justify-between mt-1 text-xs">
+                        <span className="font-semibold text-slate-800 inline-flex items-center gap-1"><IconCoin size={12} className="text-amber-500" />{formatTokens(row.tokens)}</span>
+                        <span className="text-slate-500">{row.successes}/{row.requests} ok</span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
             <div className="card overflow-hidden">
               {/* Desktop table view */}
               <table className="w-full text-sm hidden sm:table">
                 <thead><tr className="bg-slate-50 text-left">
-                  <th className="px-4 py-2 text-slate-500 font-medium">Time</th><th className="px-4 py-2 text-slate-500 font-medium">Provider</th><th className="px-4 py-2 text-slate-500 font-medium">API Key</th><th className="px-4 py-2 text-slate-500 font-medium">Model</th><th className="px-4 py-2 text-slate-500 font-medium">Status</th><th className="px-4 py-2 text-slate-500 font-medium">Keterangan</th>
+                  <th className="px-4 py-2 text-slate-500 font-medium">Time</th><th className="px-4 py-2 text-slate-500 font-medium">Provider</th><th className="px-4 py-2 text-slate-500 font-medium">API Key</th><th className="px-4 py-2 text-slate-500 font-medium">Model</th><th className="px-4 py-2 text-slate-500 font-medium">Token</th><th className="px-4 py-2 text-slate-500 font-medium">Status</th><th className="px-4 py-2 text-slate-500 font-medium">Keterangan</th>
                 </tr></thead>
                 <tbody>
-                  {logs.length === 0 ? <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">Belum ada logs</td></tr> :
+                  {logs.length === 0 ? <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">Belum ada logs</td></tr> :
                     logs.map(log => (
                       <tr key={log.id} className={`border-t border-slate-100 ${log.errorMessage ? 'cursor-pointer hover:bg-red-50 transition-colors' : ''}`} onClick={log.errorMessage ? () => setSelectedLogError(log) : undefined}>
                         <td className="px-4 py-2 text-slate-500 font-mono text-xs">{formatTime(log.createdAt)}</td>
                         <td className="px-4 py-2 text-slate-700">{log.providerName}</td>
                         <td className="px-4 py-2 text-slate-500 text-xs font-mono">{log.apiKeyName || '-'}</td>
                         <td className="px-4 py-2 text-slate-500 font-mono text-xs">{log.model}</td>
+                        <td className="px-4 py-2 text-slate-700 text-xs font-semibold">{log.tokensUsed ? formatTokens(log.tokensUsed) : <span className="text-slate-300">-</span>}</td>
                         <td className="px-4 py-2"><div className="flex items-center gap-1">{statusBadge(log.status)}{log.errorMessage && <span title="View error details">🔴</span>}</div></td>
                         <td className="px-4 py-2 text-xs text-red-600 max-w-[200px] truncate">{log.errorMessage ? log.errorMessage.length > 50 ? log.errorMessage.slice(0, 50) + '...' : log.errorMessage : <span className="text-slate-300">-</span>}</td>
                       </tr>
@@ -1189,6 +1289,7 @@ export default function Dashboard() {
                       )}
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-slate-500 font-mono">{log.apiKeyName || '-'}</span>
+                        <span className="text-xs font-semibold text-slate-700">{log.tokensUsed ? formatTokens(log.tokensUsed) : '-'}</span>
                       </div>
                     </div>
                   ))

@@ -97,6 +97,21 @@ export interface ProviderBreakdown {
   totalTokens: number;
 }
 
+export interface TokenAggRow {
+  key: string;
+  tokens: number;
+  requests: number;
+  successes: number;
+}
+
+export interface TokenModelKeyRow {
+  model: string;
+  apiKeyName: string;
+  tokens: number;
+  requests: number;
+  successes: number;
+}
+
 export interface Stats {
   totalRequests: number;
   successCount: number;
@@ -104,6 +119,10 @@ export interface Stats {
   successRate: number;
   avgLatency: number;
   providerBreakdown: ProviderBreakdown[];
+  totalTokens?: number;
+  tokenByModel?: TokenAggRow[];
+  tokenByApiKey?: TokenAggRow[];
+  tokenByModelAndKey?: TokenModelKeyRow[];
 }
 
 // ─── Rate limit ─────────────────────────────────────

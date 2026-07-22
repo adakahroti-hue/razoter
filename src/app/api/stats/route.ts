@@ -40,13 +40,67 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  const stats: Stats = {
+  // Token tracker: by model + by API key (from recent logs window)
+  type Agg = { key: string; tokens: number; requests: number; successes: number };
+  const modelMap = new Map<string, Agg>();
+  const apiKeyMap = new Map<string, Agg>();
+  const comboMap = new Map<string, Agg>(); // model + api key pair
+  let totalTokensAll = 0;
+
+  for (const l of logs) {
+    const tokens = l.tokensUsed || 0;
+    const model = (l.model || '').trim() || '(unknown model)';
+    const apiKeyName = (l.apiKeyName || '').trim() || 'Default';
+    const ok = l.status === 'success';
+    totalTokensAll += tokens;
+
+    const m = modelMap.get(model) || { key: model, tokens: 0, requests: 0, successes: 0 };
+    m.tokens += tokens;
+    m.requests += 1;
+    if (ok) m.successes += 1;
+    modelMap.set(model, m);
+
+    const k = apiKeyMap.get(apiKeyName) || { key: apiKeyName, tokens: 0, requests: 0, successes: 0 };
+    k.tokens += tokens;
+    k.requests += 1;
+    if (ok) k.successes += 1;
+    apiKeyMap.set(apiKeyName, k);
+
+    const pairKey = `${model}|||${apiKeyName}`;
+    const c = comboMap.get(pairKey) || { key: pairKey, tokens: 0, requests: 0, successes: 0 };
+    c.tokens += tokens;
+    c.requests += 1;
+    if (ok) c.successes += 1;
+    comboMap.set(pairKey, c);
+  }
+
+  const sortByTokens = (a: Agg, b: Agg) => b.tokens - a.tokens || b.requests - a.requests;
+
+  const tokenByModel = [...modelMap.values()].sort(sortByTokens);
+  const tokenByApiKey = [...apiKeyMap.values()].sort(sortByTokens);
+  const tokenByModelAndKey = [...comboMap.values()]
+    .map(row => {
+      const [model, apiKeyName] = row.key.split('|||');
+      return { model, apiKeyName, tokens: row.tokens, requests: row.requests, successes: row.successes };
+    })
+    .sort((a, b) => b.tokens - a.tokens || b.requests - a.requests);
+
+  const stats: Stats & {
+    totalTokens: number;
+    tokenByModel: typeof tokenByModel;
+    tokenByApiKey: typeof tokenByApiKey;
+    tokenByModelAndKey: typeof tokenByModelAndKey;
+  } = {
     totalRequests,
     successCount,
     errorCount,
     successRate: totalRequests > 0 ? Math.round((successCount / totalRequests) * 100) : 0,
     avgLatency,
     providerBreakdown,
+    totalTokens: totalTokensAll,
+    tokenByModel,
+    tokenByApiKey,
+    tokenByModelAndKey,
   };
 
   return withCors(NextResponse.json(stats));
