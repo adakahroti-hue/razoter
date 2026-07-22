@@ -172,7 +172,8 @@ export default function Dashboard() {
 
   // Provider form
   const [providerForm, setProviderForm] = useState({ name: '', baseUrl: '', apiKey: '' });
-  const [providerFormKeys, setProviderFormKeys] = useState<Array<{name: string; key: string; enabled: boolean}>>([{ name: 'Key 1', key: '', enabled: true }]);
+  const [providerFormKeys, setProviderFormKeys] = useState<Array<{name: string; key: string; enabled: boolean; monthlyLimit: number}>>([{ name: 'Key 1', key: '', enabled: true, monthlyLimit: 0 }]);
+  const [providerFormModelLimits, setProviderFormModelLimits] = useState<Record<string, number>>({});
   const [providerFormStrategy, setProviderFormStrategy] = useState<'random' | 'failover-priority' | 'round-robin'>('random');
   const [providerType, setProviderType] = useState<'custom' | 'chatgpt_plus' | null>(null);
   const [discoveredModels, setDiscoveredModels] = useState<string[]>([]);
@@ -450,6 +451,31 @@ export default function Dashboard() {
         : await api('/api/providers', { method: 'POST', body: JSON.stringify({ ...body, apiKey: firstRealKey }) });
       if (res.ok) {
         const data = await res.json();
+        const providerId = editingProvider?.id || data.id;
+        const providerName = providerForm.name;
+        // Persist limits from modal (key-level + model-level)
+        if (providerId) {
+          for (const fk of providerFormKeys) {
+            if (!fk?.name) continue;
+            await handleSaveLimit({
+              provider: { id: providerId, name: providerName } as Provider,
+              apiKeyName: fk.name,
+              model: '',
+              monthlyLimit: Math.max(0, Number(fk.monthlyLimit) || 0),
+            });
+          }
+          for (const model of selectedModels) {
+            const limit = Math.max(0, Number(providerFormModelLimits[model]) || 0);
+            // Apply model limit on first enabled key (or first key)
+            const keyName = (providerFormKeys.find(k => k.enabled !== false) || providerFormKeys[0])?.name || 'Key 1';
+            await handleSaveLimit({
+              provider: { id: providerId, name: providerName } as Provider,
+              apiKeyName: keyName,
+              model,
+              monthlyLimit: limit,
+            });
+          }
+        }
         setShowProviderModal(false); resetProviderForm(); fetchData();
         if (!editingProvider && data.id) {
           handleAutoCreateQuotas(data.id, providerForm.name, providerFormKeys);
@@ -511,9 +537,32 @@ export default function Dashboard() {
     setEditingProvider(provider);
     setProviderForm({ name: provider.name, baseUrl: provider.baseUrl, apiKey: provider.apiKey });
     const existingKeys = (provider.apiKeys && provider.apiKeys.length > 0)
-      ? provider.apiKeys.map(k => ({ name: k.name, key: k.key, enabled: k.enabled !== false }))
-      : [{ name: 'Key 1', key: '', enabled: true }];
+      ? provider.apiKeys.map(k => ({
+          name: k.name,
+          key: k.key,
+          enabled: k.enabled !== false,
+          monthlyLimit: findQuota(provider.id, k.name, '')?.monthlyLimit ?? 0,
+        }))
+      : [{ name: 'Key 1', key: '', enabled: true, monthlyLimit: findQuota(provider.id, 'Key 1', '')?.monthlyLimit ?? 0 }];
     setProviderFormKeys(existingKeys);
+    const modelLimits: Record<string, number> = {};
+    const keyNames = existingKeys.map(k => k.name);
+    for (const model of (provider.selectedModels || [])) {
+      // Prefer first key that has a model-specific limit
+      let limit = 0;
+      for (const kn of keyNames) {
+        const q = findQuota(provider.id, kn, model);
+        if (q && (q.monthlyLimit || 0) > 0) { limit = q.monthlyLimit; break; }
+      }
+      if (!limit) {
+        for (const kn of keyNames) {
+          const q = findQuota(provider.id, kn, model);
+          if (q) { limit = q.monthlyLimit ?? 0; break; }
+        }
+      }
+      modelLimits[model] = limit;
+    }
+    setProviderFormModelLimits(modelLimits);
     setProviderFormStrategy(provider.apiKeyStrategy || 'random');
     setDiscoveredModels(provider.models);
     setSelectedModels(provider.selectedModels);
@@ -523,7 +572,8 @@ export default function Dashboard() {
 
   function resetProviderForm() {
     setProviderForm({ name: '', baseUrl: '', apiKey: '' });
-    setProviderFormKeys([{ name: 'Key 1', key: '', enabled: true }]);
+    setProviderFormKeys([{ name: 'Key 1', key: '', enabled: true, monthlyLimit: 0 }]);
+    setProviderFormModelLimits({});
     setDiscoveredModels([]); setSelectedModels([]); setModelSearch(''); setTestResult(null); setEditingProvider(null);
     setProviderType(null);
     setChatgptStep('idle'); setChatgptUserCode(''); setChatgptDeviceId(''); setChatgptError('');
@@ -1068,28 +1118,6 @@ export default function Dashboard() {
                                             </span>
                                           </div>
 
-                                          {/* Limit per API key */}
-                                          <div className="mb-2 flex items-center gap-1.5 flex-wrap">
-                                            <label className="text-[10px] text-slate-500 whitespace-nowrap">Limit key</label>
-                                            <input
-                                              type="number"
-                                              min={0}
-                                              defaultValue={keyLimit || ''}
-                                              placeholder="0 = unlimited"
-                                              className="input !py-1 !px-2 !text-[11px] w-28"
-                                              id={`limit-key-${p.id}-${g.name}`}
-                                            />
-                                            <button
-                                              type="button"
-                                              className="btn btn-secondary !py-1 !px-2 !text-[11px] !min-h-0"
-                                              onClick={() => {
-                                                const el = document.getElementById(`limit-key-${p.id}-${g.name}`) as HTMLInputElement | null;
-                                                const val = Math.max(0, Number(el?.value || 0));
-                                                handleSaveLimit({ provider: p, apiKeyName: g.name, model: '', monthlyLimit: val });
-                                              }}
-                                            >Simpan</button>
-                                          </div>
-
                                           <div className="flex flex-wrap gap-1">
                                             {modelsList.map(m => {
                                               const rkey = `${groupKey}${m}`;
@@ -1112,18 +1140,6 @@ export default function Dashboard() {
                                                     className="ml-0.5 opacity-0 group-hover:opacity-100 hover:opacity-100 text-blue-400 hover:text-blue-300 transition-opacity inline-flex items-center"
                                                     title="Test model ini"
                                                   ><IconSearch size={12} /></button>
-                                                  <button
-                                                    type="button"
-                                                    className="opacity-0 group-hover:opacity-100 text-amber-600 hover:text-amber-700 transition-opacity text-[10px] font-semibold"
-                                                    title="Set limit model ini"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      const raw = prompt(`Limit token untuk model ${m} @ ${g.name}\n(0 = unlimited)`, String(modelLimit || 0));
-                                                      if (raw === null) return;
-                                                      const val = Math.max(0, Number(raw) || 0);
-                                                      handleSaveLimit({ provider: p, apiKeyName: g.name, model: m, monthlyLimit: val });
-                                                    }}
-                                                  >limit</button>
                                                 </span>
                                               );
                                             })}
@@ -1611,11 +1627,26 @@ export default function Dashboard() {
                               <p className="text-xs text-amber-600 mt-1">API key ini nonaktif — tidak dipakai di routing.</p>
                             )}
                           </div>
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs text-slate-500 whitespace-nowrap">Limit key (token)</label>
+                            <input
+                              type="number"
+                              min={0}
+                              className="input !py-1.5 !text-sm flex-1"
+                              placeholder="0 = unlimited"
+                              value={fk.monthlyLimit || ''}
+                              onChange={e => {
+                                const updated = [...providerFormKeys];
+                                updated[idx] = { ...updated[idx], monthlyLimit: Math.max(0, parseInt(e.target.value) || 0) };
+                                setProviderFormKeys(updated);
+                              }}
+                            />
+                          </div>
                         </div>
                       );
                     })}
                   </div>
-                  <button type="button" onClick={() => setProviderFormKeys(prev => [...prev, { name: `Key ${prev.length + 1}`, key: '', enabled: true }])} className="mt-2 text-sm font-medium text-green-600 hover:text-green-800">+ Tambah Key</button>
+                  <button type="button" onClick={() => setProviderFormKeys(prev => [...prev, { name: `Key ${prev.length + 1}`, key: '', enabled: true, monthlyLimit: 0 }])} className="mt-2 text-sm font-medium text-green-600 hover:text-green-800">+ Tambah Key</button>
                 </div>
               </div>
               <div className="border-t border-slate-200 pt-4">
@@ -1698,6 +1729,30 @@ export default function Dashboard() {
                             </button>
                           </span>
                         ))}
+                      </div>
+
+                      {/* Limit per model (di popup, bukan card overview) */}
+                      <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
+                        <label className="text-sm font-medium text-slate-700">Limit per model (token)</label>
+                        <p className="text-[11px] text-slate-400">0 = unlimited. Disimpan saat klik Simpan Provider.</p>
+                        <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                          {selectedModels.map(model => (
+                            <div key={`lim-${model}`} className="flex items-center gap-2">
+                              <span className="text-xs font-mono text-slate-600 truncate flex-1" title={model}>{model}</span>
+                              <input
+                                type="number"
+                                min={0}
+                                className="input !py-1 !px-2 !text-xs w-28"
+                                placeholder="0"
+                                value={providerFormModelLimits[model] || ''}
+                                onChange={e => {
+                                  const val = Math.max(0, parseInt(e.target.value) || 0);
+                                  setProviderFormModelLimits(prev => ({ ...prev, [model]: val }));
+                                }}
+                              />
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   )}
