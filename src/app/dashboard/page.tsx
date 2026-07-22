@@ -50,6 +50,7 @@ interface ComboItem {
   providerName: string;
   model: string;
   apiKeyName?: string;
+  enabled?: boolean;
 }
 
 interface Combo {
@@ -625,6 +626,16 @@ export default function Dashboard() {
     try { await api('/api/combos', { method: 'PUT', body: JSON.stringify({ id: combo.id, enabled: !combo.enabled }) }); fetchData(); } catch {}
   }
 
+  async function handleToggleComboItem(combo: Combo, itemIndex: number) {
+    const newItems = combo.items.map((item, i) =>
+      i === itemIndex ? { ...item, enabled: item.enabled === false ? true : false } : item
+    );
+    try {
+      await api('/api/combos', { method: 'PUT', body: JSON.stringify({ id: combo.id, items: newItems }) });
+      fetchData();
+    } catch {}
+  }
+
   // ─── Quota actions ───────────────────────────────
 
   async function handleTestSingleModel(provider: Provider, model: string, apiKey?: string, apiKeyName?: string) {
@@ -896,14 +907,25 @@ export default function Dashboard() {
                         {!c.enabled && <span className="chip" style={{opacity:0.8}}>disabled</span>}
                       </div>
                       <div className="flex flex-wrap gap-1 mt-2.5">
-                        {c.items.map((item, i) => (
-                          <span key={i} className="chip-model font-mono" title={`${item.providerName} → ${item.apiKeyName ? item.apiKeyName + ' → ' : ''}${item.model}`}>
-                            <span className="prov">{item.providerName}</span>
-                            {item.apiKeyName && <><span className="arrow">→</span><span className="key truncate max-w-[6rem] text-yellow-600">{item.apiKeyName}</span></>}
-                            <span className="arrow">→</span>
-                            <span className="model truncate max-w-[7rem]">{item.model}</span>
-                          </span>
-                        ))}
+                        {c.items.map((item, i) => {
+                          const itemEnabled = item.enabled !== false;
+                          return (
+                            <span key={i} className={`chip-model font-mono ${itemEnabled ? '' : 'opacity-40'}`} title={`${item.providerName} → ${item.apiKeyName ? item.apiKeyName + ' → ' : ''}${item.model}`}>
+                              <span className="prov">{item.providerName}</span>
+                              {item.apiKeyName && <><span className="arrow">→</span><span className="key truncate max-w-[6rem] text-yellow-600">{item.apiKeyName}</span></>}
+                              <span className="arrow">→</span>
+                              <span className="model truncate max-w-[7rem]">{item.model}</span>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleToggleComboItem(c, i); }}
+                                className={`combo-item-toggle ${itemEnabled ? 'combo-item-on' : 'combo-item-off'}`}
+                                title={itemEnabled ? 'Nonaktifkan model ini' : 'Aktifkan model ini'}
+                                disabled={!c.enabled}
+                              >
+                                <span className="combo-item-toggle-knob" />
+                              </button>
+                            </span>
+                          );
+                        })}
                       </div>
                     </div>
                     <hr className="combo-divider" />

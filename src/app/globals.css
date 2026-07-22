@@ -358,6 +358,48 @@ body::before {
 .chip-model .arrow { color: #35E6FF; margin: 0 0.3rem; opacity: 0.8; }
 .chip-model .model { color: #C7D8EC; font-weight: 500; }
 
+/* Per-item ON/OFF toggle slider for combo models */
+.combo-item-toggle {
+  position: relative;
+  width: 28px;
+  height: 16px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  transition: background 200ms ease;
+  flex-shrink: 0;
+  padding: 0;
+  margin-left: 0.4rem;
+  display: inline-flex;
+  align-items: center;
+}
+.combo-item-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.3;
+}
+.combo-item-on {
+  background: rgba(53, 230, 255, 0.55);
+}
+.combo-item-off {
+  background: rgba(80, 90, 110, 0.45);
+}
+.combo-item-toggle-knob {
+  position: absolute;
+  top: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  transition: left 200ms ease;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+.combo-item-on .combo-item-toggle-knob {
+  left: 14px;
+}
+.combo-item-off .combo-item-toggle-knob {
+  left: 2px;
+}
+
 /* compact action buttons */
 .btn-xs {
   display: inline-flex;

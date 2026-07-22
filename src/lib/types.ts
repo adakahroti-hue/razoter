@@ -45,6 +45,7 @@ export interface ComboItem {
   providerName: string;
   model: string;
   apiKeyName?: string;
+  enabled?: boolean;  // per-item on/off toggle (default: true)
 }
 
 export interface Combo {

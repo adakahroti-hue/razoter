@@ -610,24 +610,33 @@ export async function resolveComboModel(
   const items = data.items as Combo['items'];
   const strategy = (data.strategy as Combo['strategy']) ?? 'failover-priority';
 
+  // Filter out disabled items (enabled === false). Items without `enabled` field default to ON (backward compat).
+  const activeItems = items.map((item, originalIndex) => ({ item, originalIndex }))
+    .filter(({ item }) => item.enabled !== false);
+
+  if (activeItems.length === 0) {
+    return null; // all items disabled
+  }
+
   if (strategy === 'round-robin') {
     const tried = new Set(triedIndices ?? []);
     const idx = comboRoundRobinIndex.get(modelName) ?? 0;
-    // Try each item starting from round-robin index, skip already-tried ones
-    for (let offset = 0; offset < items.length; offset++) {
-      const nextIdx = (idx + offset) % items.length;
-      if (!tried.has(nextIdx)) {
-        comboRoundRobinIndex.set(modelName, nextIdx + 1);
-        return { providerId: items[nextIdx].providerId, model: items[nextIdx].model, itemIndex: nextIdx, apiKeyName: items[nextIdx].apiKeyName };
+    // Try each active item starting from round-robin index, skip already-tried ones
+    for (let offset = 0; offset < activeItems.length; offset++) {
+      const nextPos = (idx + offset) % activeItems.length;
+      const { item, originalIndex } = activeItems[nextPos];
+      if (!tried.has(originalIndex)) {
+        comboRoundRobinIndex.set(modelName, nextPos + 1);
+        return { providerId: item.providerId, model: item.model, itemIndex: originalIndex, apiKeyName: item.apiKeyName };
       }
     }
-    return null; // all items exhausted
+    return null; // all active items exhausted
   } else {
-    // failover-priority: try items in order, skip already-tried ones
+    // failover-priority: try active items in order, skip already-tried ones
     const tried = new Set(triedIndices ?? []);
-    for (let i = 0; i < items.length; i++) {
-      if (!tried.has(i)) {
-        return { providerId: items[i].providerId, model: items[i].model, itemIndex: i, apiKeyName: items[i].apiKeyName };
+    for (const { item, originalIndex } of activeItems) {
+      if (!tried.has(originalIndex)) {
+        return { providerId: item.providerId, model: item.model, itemIndex: originalIndex, apiKeyName: item.apiKeyName };
       }
     }
     return null;
