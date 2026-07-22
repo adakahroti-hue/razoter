@@ -104,6 +104,7 @@ interface Stats {
     avgLatency: number;
     totalTokens: number;
   }>;
+  tokenByProvider?: Array<{ key: string; tokens: number; requests: number; successes: number }>;
   tokenByModel?: Array<{ key: string; tokens: number; requests: number; successes: number }>;
   tokenByApiKey?: Array<{ key: string; tokens: number; requests: number; successes: number }>;
   tokenByModelAndKey?: Array<{ model: string; apiKeyName: string; tokens: number; requests: number; successes: number }>;
@@ -1239,20 +1240,37 @@ export default function Dashboard() {
             </div>
 
             {/* Token usage tracker */}
-            <div className="card p-3">
-              <h3 className="text-sm font-semibold text-slate-800 mb-2">Per API Key</h3>
-              {(stats?.tokenByApiKey?.length ?? 0) === 0 ? (
-                <div className="text-xs text-slate-400 py-4 text-center">Belum ada data token</div>
-              ) : (
-                <div className="max-h-48 overflow-y-auto space-y-1.5">
-                  {(stats?.tokenByApiKey ?? []).slice(0, 20).map(row => (
-                    <div key={row.key} className="flex items-center justify-between gap-2 text-xs">
-                      <span className="font-mono text-yellow-600 truncate" title={row.key}>{row.key}</span>
-                      <span className="font-semibold text-slate-800 whitespace-nowrap">{formatTokens(row.tokens)} <span className="text-slate-400 font-normal">· {row.requests}x</span></span>
-                    </div>
-                  ))}
-                </div>
-              )}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <div className="card p-3">
+                <h3 className="text-sm font-semibold text-slate-800 mb-2">Per Provider</h3>
+                {(stats?.tokenByProvider?.length ?? 0) === 0 ? (
+                  <div className="text-xs text-slate-400 py-4 text-center">Belum ada data token</div>
+                ) : (
+                  <div className="max-h-48 overflow-y-auto space-y-1.5">
+                    {(stats?.tokenByProvider ?? []).slice(0, 20).map(row => (
+                      <div key={row.key} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="font-semibold text-cyan-700 truncate" title={row.key}>{row.key}</span>
+                        <span className="font-semibold text-slate-800 whitespace-nowrap">{formatTokens(row.tokens)} <span className="text-slate-400 font-normal">· {row.requests}x</span></span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="card p-3">
+                <h3 className="text-sm font-semibold text-slate-800 mb-2">Per API Key</h3>
+                {(stats?.tokenByApiKey?.length ?? 0) === 0 ? (
+                  <div className="text-xs text-slate-400 py-4 text-center">Belum ada data token</div>
+                ) : (
+                  <div className="max-h-48 overflow-y-auto space-y-1.5">
+                    {(stats?.tokenByApiKey ?? []).slice(0, 20).map(row => (
+                      <div key={row.key} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="font-mono text-yellow-600 truncate" title={row.key}>{row.key}</span>
+                        <span className="font-semibold text-slate-800 whitespace-nowrap">{formatTokens(row.tokens)} <span className="text-slate-400 font-normal">· {row.requests}x</span></span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="card overflow-hidden">

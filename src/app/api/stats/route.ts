@@ -40,8 +40,9 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  // Token tracker: by model + by API key (from recent logs window)
+  // Token tracker: by provider / model / API key (from recent logs window)
   type Agg = { key: string; tokens: number; requests: number; successes: number };
+  const providerMap = new Map<string, Agg>();
   const modelMap = new Map<string, Agg>();
   const apiKeyMap = new Map<string, Agg>();
   const comboMap = new Map<string, Agg>(); // model + api key pair
@@ -49,10 +50,17 @@ export async function GET(request: NextRequest) {
 
   for (const l of logs) {
     const tokens = l.tokensUsed || 0;
+    const providerName = (l.providerName || '').trim() || '(unknown provider)';
     const model = (l.model || '').trim() || '(unknown model)';
     const apiKeyName = (l.apiKeyName || '').trim() || 'Default';
     const ok = l.status === 'success';
     totalTokensAll += tokens;
+
+    const p = providerMap.get(providerName) || { key: providerName, tokens: 0, requests: 0, successes: 0 };
+    p.tokens += tokens;
+    p.requests += 1;
+    if (ok) p.successes += 1;
+    providerMap.set(providerName, p);
 
     const m = modelMap.get(model) || { key: model, tokens: 0, requests: 0, successes: 0 };
     m.tokens += tokens;
@@ -76,6 +84,7 @@ export async function GET(request: NextRequest) {
 
   const sortByTokens = (a: Agg, b: Agg) => b.tokens - a.tokens || b.requests - a.requests;
 
+  const tokenByProvider = [...providerMap.values()].sort(sortByTokens);
   const tokenByModel = [...modelMap.values()].sort(sortByTokens);
   const tokenByApiKey = [...apiKeyMap.values()].sort(sortByTokens);
   const tokenByModelAndKey = [...comboMap.values()]
@@ -87,6 +96,7 @@ export async function GET(request: NextRequest) {
 
   const stats: Stats & {
     totalTokens: number;
+    tokenByProvider: typeof tokenByProvider;
     tokenByModel: typeof tokenByModel;
     tokenByApiKey: typeof tokenByApiKey;
     tokenByModelAndKey: typeof tokenByModelAndKey;
@@ -98,6 +108,7 @@ export async function GET(request: NextRequest) {
     avgLatency,
     providerBreakdown,
     totalTokens: totalTokensAll,
+    tokenByProvider,
     tokenByModel,
     tokenByApiKey,
     tokenByModelAndKey,
