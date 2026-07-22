@@ -926,9 +926,6 @@ export default function Dashboard() {
                           <span className="combo-switch-label">{c.enabled ? 'ON' : 'OFF'}</span>
                         </button>
                       </div>
-                      <div className="text-[11px] text-slate-400 mt-1 font-mono truncate">
-                        model: <span className="text-slate-600">{c.name}</span>
-                      </div>
                       <div className="flex flex-wrap items-center gap-1.5 mt-2">
                         <span className={`chip ${c.enabled ? 'chip-cyan' : ''}`}>{c.items.length} models</span>
                         <span className="chip inline-flex items-center gap-1"><IconRoute size={12} /> {c.strategy === 'round-robin' ? 'Round Robin' : 'Failover'}</span>
@@ -985,18 +982,6 @@ export default function Dashboard() {
                 <div className="flex items-center gap-2 bg-slate-50 rounded-lg p-3">
                   <code className="text-sm text-slate-700 font-mono flex-1">{BASE_URL}</code>
                   <CopyButton text={BASE_URL} />
-                </div>
-                <div className="mt-3 space-y-2 text-xs text-slate-500">
-                  <div className="flex items-start gap-2 bg-slate-50 rounded-lg p-2.5">
-                    <code className="font-mono text-slate-700 flex-1">GET {BASE_URL}/models</code>
-                    <CopyButton text={`${BASE_URL}/models`} />
-                  </div>
-                  <p>Endpoint di atas mengembalikan model provider + nama Gabung (combo) yang ON, biar client bisa tarik daftar model.</p>
-                  <div className="flex items-start gap-2 bg-slate-50 rounded-lg p-2.5">
-                    <code className="font-mono text-slate-700 flex-1">POST {BASE_URL}/chat/completions</code>
-                    <CopyButton text={`${BASE_URL}/chat/completions`} />
-                  </div>
-                  <p>Untuk Gabung: set <code className="text-slate-700">model</code> = nama gabungan (mis. <code className="text-slate-700">fast-mix</code>), bukan model asli provider.</p>
                 </div>
               </div>
               <div className="card">
