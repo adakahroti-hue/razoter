@@ -14,6 +14,7 @@ export interface Provider {
   selectedModels: string[];
   priority: number;
   enabled: boolean;
+  archived?: boolean; // soft-hide: settings kept, excluded from active routing/UI
   healthStatus: 'healthy' | 'degraded' | 'down' | 'unknown';
   lastHealthCheck: string | null;
   totalRequests: number;

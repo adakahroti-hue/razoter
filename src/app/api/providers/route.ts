@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyDashboardAuth } from '@/lib/auth';
-import { getProviders, getProvider, addProvider, updateProvider, deleteProvider, addQuota } from '@/lib/storage';
+import { getProviders, getProvider, addProvider, updateProvider, deleteProvider, addQuota, archiveProvider } from '@/lib/storage';
 import { withCors, handleCorsPreflight } from '@/lib/cors';
 
 export async function OPTIONS() {
@@ -12,7 +12,12 @@ export async function GET(request: NextRequest) {
     return withCors(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
   }
 
-  const providers = await getProviders();
+  // ?archived=true  → only archived (Arsip tab)
+  // ?archived=all   → everything
+  // default         → active only (Providers tab)
+  const archivedParam = request.nextUrl.searchParams.get('archived');
+  const mode = archivedParam === 'true' ? 'archived' : archivedParam === 'all' ? 'all' : 'active';
+  const providers = await getProviders(mode);
   return withCors(NextResponse.json(providers));
 }
 
@@ -87,6 +92,16 @@ export async function PUT(request: NextRequest) {
       return withCors(NextResponse.json({ error: 'Missing provider id' }, { status: 400 }));
     }
 
+    // Dedicated archive/restore path (also accepted via DELETE ?action=archive)
+    if (typeof updates.archived === 'boolean' && Object.keys(updates).length === 1) {
+      const ok = await archiveProvider(id, updates.archived);
+      if (!ok) {
+        return withCors(NextResponse.json({ error: 'Provider not found' }, { status: 404 }));
+      }
+      const provider = await getProvider(id);
+      return withCors(NextResponse.json(provider ?? { success: true, archived: updates.archived }));
+    }
+
     if (updates.baseUrl) {
       updates.baseUrl = updates.baseUrl.replace(/\/+$/, '');
     }
@@ -142,6 +157,17 @@ export async function DELETE(request: NextRequest) {
   const id = request.nextUrl.searchParams.get('id');
   if (!id) {
     return withCors(NextResponse.json({ error: 'Missing provider id' }, { status: 400 }));
+  }
+
+  // Archive / unarchive action (soft hide) — keeps data, just hides from active list
+  const action = request.nextUrl.searchParams.get('action');
+  if (action === 'archive') {
+    const archived = request.nextUrl.searchParams.get('archived') !== 'false';
+    const ok = await archiveProvider(id, archived);
+    if (!ok) {
+      return withCors(NextResponse.json({ error: 'Provider not found' }, { status: 404 }));
+    }
+    return withCors(NextResponse.json({ success: true, archived }));
   }
 
   const deleted = await deleteProvider(id);

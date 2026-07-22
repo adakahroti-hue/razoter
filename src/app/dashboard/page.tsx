@@ -6,7 +6,7 @@ import RazoterLogo from '@/components/RazoterLogo';
 import {
   IconCopy, IconKey, IconCoin, IconSearch, IconCheck, IconCross,
   IconClock, IconFlask, IconPencil, IconTrash, IconSync, IconRoute, IconPlus,
-  IconWarning, IconPlug, IconChart, IconSpinner, IconSpinnerLg,
+  IconWarning, IconPlug, IconChart, IconSpinner, IconSpinnerLg, IconArchive, IconRestore,
 } from '@/components/AppIcon';
 
 // ─── Types ─────────────────────────────────────────
@@ -144,6 +144,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   const [providers, setProviders] = useState<Provider[]>([]);
+  const [archivedProviders, setArchivedProviders] = useState<Provider[]>([]);
   const [logs, setLogs] = useState<RequestLog[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [config, setConfig] = useState<any>(null);
@@ -151,7 +152,7 @@ export default function Dashboard() {
   const [combos, setCombos] = useState<Combo[]>([]);
   const [quotas, setQuotas] = useState<Quota[]>([]);
 
-  const [activeTab, setActiveTab] = useState<'providers' | 'combos' | 'logs' | 'settings'>('providers');
+  const [activeTab, setActiveTab] = useState<'providers' | 'combos' | 'archive' | 'logs' | 'settings'>('providers');
   const [showProviderModal, setShowProviderModal] = useState(false);
 
   // Token usage per provider (from stats breakdown)
@@ -237,9 +238,9 @@ export default function Dashboard() {
 
   const fetchData = useCallback(async () => {
     try {
-      const providersUrl = '/api/providers';
-      const [provRes, logRes, statsRes, configRes, keysRes, combosRes] = await Promise.all([
-        api(providersUrl),
+      const [provRes, archRes, logRes, statsRes, configRes, keysRes, combosRes] = await Promise.all([
+        api('/api/providers'),
+        api('/api/providers?archived=true'),
         api('/api/logs?limit=50'),
         api('/api/stats'),
         api('/api/config'),
@@ -254,6 +255,15 @@ export default function Dashboard() {
           return tb - ta; // terbaru dulu
         });
         setProviders(provs);
+      }
+      if (archRes.ok) {
+        const arch = await archRes.json();
+        arch.sort((a: any, b: any) => {
+          const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return tb - ta;
+        });
+        setArchivedProviders(arch);
       }
       if (logRes.ok) { const d = await logRes.json(); setLogs(d.logs || d); }
       if (statsRes.ok) setStats(await statsRes.json());
@@ -447,7 +457,46 @@ export default function Dashboard() {
 
   async function handleDeleteProvider(id: string) {
     const url = `/api/providers?id=${id}`;
-    try { await api(url, { method: 'DELETE' }); fetchData(); } catch {}
+    try {
+      await api(url, { method: 'DELETE' });
+      setProviders(prev => prev.filter(p => p.id !== id));
+      setArchivedProviders(prev => prev.filter(p => p.id !== id));
+    } catch {}
+  }
+
+  async function handleArchiveProvider(provider: Provider) {
+    // Soft-hide to Arsip (recycle bin). Settings remain intact.
+    setProviders(prev => prev.filter(p => p.id !== provider.id));
+    setArchivedProviders(prev => [{ ...provider, archived: true }, ...prev]);
+    try {
+      const res = await api('/api/providers', {
+        method: 'PUT',
+        body: JSON.stringify({ id: provider.id, archived: true }),
+      });
+      if (!res.ok) throw new Error('archive failed');
+    } catch {
+      // Revert optimistic move
+      setArchivedProviders(prev => prev.filter(p => p.id !== provider.id));
+      setProviders(prev => [provider, ...prev]);
+      alert('Gagal mengarsipkan provider');
+    }
+  }
+
+  async function handleRestoreProvider(provider: Provider) {
+    // Move back from Arsip to Providers
+    setArchivedProviders(prev => prev.filter(p => p.id !== provider.id));
+    setProviders(prev => [{ ...provider, archived: false }, ...prev]);
+    try {
+      const res = await api('/api/providers', {
+        method: 'PUT',
+        body: JSON.stringify({ id: provider.id, archived: false }),
+      });
+      if (!res.ok) throw new Error('restore failed');
+    } catch {
+      setProviders(prev => prev.filter(p => p.id !== provider.id));
+      setArchivedProviders(prev => [provider, ...prev]);
+      alert('Gagal mengembalikan provider');
+    }
   }
 
   async function handleToggleProvider(provider: Provider) {
@@ -789,12 +838,18 @@ export default function Dashboard() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* Tabs */}
         <div className="tab-bar flex gap-1 rounded-lg p-1 overflow-x-auto flex-nowrap justify-center sm:justify-start">
-          {(['providers', 'combos', 'logs', 'settings'] as const).map(tab => (
-            <button key={tab} aria-label={tab === 'providers' ? 'Providers' : tab === 'combos' ? 'Gabung' : tab === 'settings' ? 'Dokumentasi' : 'Logs'} onClick={() => setActiveTab(tab)} className={`flex-1 sm:flex-none min-w-[3rem] px-3 sm:px-4 py-2.5 sm:py-2 rounded-md text-[15px] sm:text-[16px] font-semibold transition-colors whitespace-nowrap flex items-center justify-center gap-2 ${activeTab === tab ? 'tab-active shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
-              <NavIcon name={tab} active={activeTab === tab} size={19} />
-              <span className="hidden sm:inline">{tab === 'providers' ? 'Providers' : tab === 'combos' ? 'Gabung' : tab === 'settings' ? 'Dokumentasi' : 'Logs'}</span>
-            </button>
-          ))}
+          {(['providers', 'combos', 'archive', 'logs', 'settings'] as const).map(tab => {
+            const label = tab === 'providers' ? 'Providers' : tab === 'combos' ? 'Gabung' : tab === 'archive' ? 'Arsip' : tab === 'settings' ? 'Dokumentasi' : 'Logs';
+            return (
+              <button key={tab} aria-label={label} onClick={() => setActiveTab(tab)} className={`flex-1 sm:flex-none min-w-[3rem] px-3 sm:px-4 py-2.5 sm:py-2 rounded-md text-[15px] sm:text-[16px] font-semibold transition-colors whitespace-nowrap flex items-center justify-center gap-2 ${activeTab === tab ? 'tab-active shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                <NavIcon name={tab} active={activeTab === tab} size={19} />
+                <span className="hidden sm:inline">{label}</span>
+                {tab === 'archive' && archivedProviders.length > 0 && (
+                  <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold">{archivedProviders.length}</span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* ─── Providers Tab ──────────────────────── */}
@@ -882,8 +937,9 @@ export default function Dashboard() {
 
                       <div className="grid grid-cols-2 gap-2 mt-2">
                         <button onClick={() => openEditModal(p)} className="text-[13.5px] px-2 py-2 rounded-lg bg-slate-100 text-slate-700 hover:text-slate-900 hover:bg-slate-200 border border-slate-300/30 hover:border-blue-300/60 transition-colors font-medium inline-flex items-center justify-center gap-1.5"><IconPencil size={14} /> Edit</button>
-                        <button onClick={() => setDeleteTarget(p)} className="text-[13.5px] px-2 py-2 rounded-lg bg-red-50 text-red-300 hover:text-red-200 hover:bg-red-100 border border-red-300/30 hover:border-red-300/60 transition-colors font-medium inline-flex items-center justify-center gap-1.5"><IconTrash size={14} /> Hapus</button>
+                        <button onClick={() => handleArchiveProvider(p)} className="text-[13.5px] px-2 py-2 rounded-lg bg-amber-50 text-amber-700 hover:text-amber-800 hover:bg-amber-100 border border-amber-300/40 hover:border-amber-400/70 transition-colors font-medium inline-flex items-center justify-center gap-1.5"><IconArchive size={14} /> Arsip</button>
                       </div>
+                      <button onClick={() => setDeleteTarget(p)} className="mt-2 text-[12.5px] px-2 py-1.5 rounded-lg bg-red-50/70 text-red-300 hover:text-red-200 hover:bg-red-100 border border-red-300/20 hover:border-red-300/50 transition-colors w-full font-medium inline-flex items-center justify-center gap-1.5"><IconTrash size={13} /> Hapus permanen</button>
                     </div>
                   </div>
                 ))}
@@ -964,6 +1020,78 @@ export default function Dashboard() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ─── Archive Tab (recycle bin for providers) ─ */}
+        {activeTab === 'archive' && (
+          <div className="space-y-4">
+            <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:items-end">
+              <div>
+                <h2 className="text-[23px] font-bold text-slate-900 tracking-tight">Arsip Providers</h2>
+                <p className="text-[13px] text-slate-500 mt-1 leading-relaxed max-w-2xl">
+                  Tempat simpan sementara settingan provider yang tidak aktif. Setting tetap utuh — bisa dikembalikan ke tab Providers kapan saja.
+                </p>
+              </div>
+              {archivedProviders.length > 0 && (
+                <span className="chip chip-cyan self-start sm:self-auto">{archivedProviders.length} tersimpan</span>
+              )}
+            </div>
+
+            {archivedProviders.length === 0 ? (
+              <div className="card text-center py-12 text-slate-400">
+                <div className="text-4xl mb-2">📦</div>
+                <p>Arsip kosong. Provider yang diarsipkan akan muncul di sini.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {archivedProviders.map(p => {
+                  const modelsList = p.selectedModels?.length ? p.selectedModels : (p.models || []);
+                  const keyCount = p.apiKeys?.filter(k => k.enabled !== false).length || 1;
+                  return (
+                    <div key={p.id} className="card flex flex-col p-3 min-h-[180px] opacity-95">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-yellow-500 text-[15px] leading-snug truncate flex-1">{p.name}</h3>
+                        <span className="px-1.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-700">ARSIP</span>
+                      </div>
+                      <div className="text-[13px] text-slate-400 mt-1.5 font-mono truncate leading-relaxed" title={p.baseUrl}>{p.baseUrl}</div>
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        <span className="chip">{modelsList.length} models</span>
+                        <span className="chip inline-flex items-center gap-1"><IconKey size={11} className="text-yellow-500" /> {keyCount} key</span>
+                        <span className={`chip ${p.enabled ? 'chip-cyan' : ''}`}>{p.enabled ? 'was ON' : 'was OFF'}</span>
+                      </div>
+                      {modelsList.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2.5">
+                          {modelsList.slice(0, 6).map(m => (
+                            <span key={m} className="chip-model font-mono text-[11px]">{m}</span>
+                          ))}
+                          {modelsList.length > 6 && (
+                            <span className="chip text-[11px]">+{modelsList.length - 6}</span>
+                          )}
+                        </div>
+                      )}
+                      <hr className="card-divider" />
+                      <div className="card-actions mt-auto">
+                        <button
+                          type="button"
+                          onClick={() => handleRestoreProvider(p)}
+                          className="text-[13.5px] px-2 py-2 rounded-lg bg-emerald-50 text-emerald-700 hover:text-emerald-800 hover:bg-emerald-100 border border-emerald-300/40 hover:border-emerald-400/70 transition-colors w-full font-medium inline-flex items-center justify-center gap-1.5"
+                        >
+                          <IconRestore size={14} /> Kembalikan ke Providers
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(p)}
+                          className="mt-2 text-[12.5px] px-2 py-1.5 rounded-lg bg-red-50/70 text-red-300 hover:text-red-200 hover:bg-red-100 border border-red-300/20 hover:border-red-300/50 transition-colors w-full font-medium inline-flex items-center justify-center gap-1.5"
+                        >
+                          <IconTrash size={13} /> Hapus permanen
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1342,7 +1470,7 @@ export default function Dashboard() {
               </div>
               <div className="flex items-start gap-3 p-3 rounded-lg bg-red-50 border border-red-100">
                 <IconTrash size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-slate-700">Yakin ingin menghapus provider <b className="font-semibold text-slate-900">{deleteTarget.name}</b>? Tindakan ini tidak bisa dibatalkan.</p>
+                <p className="text-sm text-slate-700">Yakin ingin menghapus provider <b className="font-semibold text-slate-900">{deleteTarget.name}</b> secara permanen? Settingan tidak bisa dikembalikan. Kalau cuma mau simpan sementara, pakai <b>Arsip</b>.</p>
               </div>
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setDeleteTarget(null)} className="btn btn-secondary flex-1">Batal</button>

@@ -189,3 +189,22 @@ export function IconSpinnerLg({ size = 36, className }: IconProps) {
     </svg>
   );
 }
+
+export function IconArchive({ size = 14, className }: IconProps) {
+  return (
+    <svg {...common(size, className)}>
+      <rect x="3" y="4" width="18" height="5" rx="1.2" />
+      <path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9" />
+      <line x1="10" y1="13" x2="14" y2="13" />
+    </svg>
+  );
+}
+
+export function IconRestore({ size = 14, className }: IconProps) {
+  return (
+    <svg {...common(size, className)}>
+      <path d="M3 12a9 9 0 1 0 3-6.7" />
+      <polyline points="3 4 3 10 9 10" />
+    </svg>
+  );
+}

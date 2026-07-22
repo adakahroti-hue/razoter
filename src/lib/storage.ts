@@ -13,7 +13,7 @@ const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000
 
 // Explicit provider column list — ensures columns added later (api_keys, api_key_strategy)
 // are always returned even if the Supabase schema cache is stale with select('*').
-const PROVIDER_COLUMNS = 'id, name, base_url, api_key, auth_type, chatgpt_refresh_token, chatgpt_expires_at, models, selected_models, api_keys, api_key_strategy, priority, enabled, health_status, last_health_check, request_count, error_count, avg_latency, rate_limit_remaining, rate_limit_reset, rate_limit_total, created_at';
+const PROVIDER_COLUMNS = 'id, name, base_url, api_key, auth_type, chatgpt_refresh_token, chatgpt_expires_at, models, selected_models, api_keys, api_key_strategy, priority, enabled, archived, health_status, last_health_check, request_count, error_count, avg_latency, rate_limit_remaining, rate_limit_reset, rate_limit_total, created_at';
 
 // ─── Mapping helpers (camelCase ↔ snake_case) ────────────
 
@@ -36,6 +36,7 @@ function dbToProvider(row: any): Provider {
     apiKeyStrategy: row.api_key_strategy ?? 'random',
     priority: row.priority,
     enabled: row.enabled,
+    archived: row.archived ?? false,
     healthStatus: row.health_status ?? 'unknown',
     lastHealthCheck: row.last_health_check ?? null,
     totalRequests: row.request_count ?? 0,
@@ -96,11 +97,22 @@ export function checkRateLimit(ip: string): { allowed: boolean; limit: number; r
 
 // ─── Providers ────────────────────────────────────────────
 
-export async function getProviders(): Promise<Provider[]> {
-  const { data, error } = await supabase
+/**
+ * Get providers.
+ * - mode 'active' (default): only non-archived (Providers tab)
+ * - mode 'archived': only archived (Arsip tab / recycle bin)
+ * - mode 'all': everything
+ */
+export async function getProviders(mode: 'active' | 'archived' | 'all' = 'active'): Promise<Provider[]> {
+  let query = supabase
     .from('providers')
     .select(PROVIDER_COLUMNS)
     .order('priority', { ascending: true });
+
+  if (mode === 'active') query = query.eq('archived', false);
+  if (mode === 'archived') query = query.eq('archived', true);
+
+  const { data, error } = await query;
 
   if (error) {
     console.error('Supabase getProviders error:', error);
@@ -114,6 +126,7 @@ export async function getEnabledProviders(): Promise<Provider[]> {
     .from('providers')
     .select(PROVIDER_COLUMNS)
     .eq('enabled', true)
+    .eq('archived', false)
     .order('priority', { ascending: true });
 
   if (error) {
@@ -121,6 +134,22 @@ export async function getEnabledProviders(): Promise<Provider[]> {
     return [];
   }
   return (data ?? []).map(dbToProvider);
+}
+
+/** Soft-hide / restore provider (recycle-bin style). Keeps all settings. */
+export async function archiveProvider(id: string, archived: boolean): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('providers')
+    .update({ archived })
+    .eq('id', id)
+    .select('id')
+    .maybeSingle();
+
+  if (error) {
+    console.error('Supabase archiveProvider error:', error);
+    return false;
+  }
+  return !!data;
 }
 
 export async function getProvider(id: string): Promise<Provider | undefined> {
@@ -201,6 +230,7 @@ export async function updateProvider(id: string, data: Partial<Provider>): Promi
   }
   if (data.priority !== undefined) updateObj.priority = data.priority;
   if (data.enabled !== undefined) updateObj.enabled = data.enabled;
+  if (data.archived !== undefined) updateObj.archived = data.archived;
   if (data.healthStatus !== undefined) updateObj.health_status = data.healthStatus;
   if ((data as any).apiKeyStrategy !== undefined) updateObj.api_key_strategy = (data as any).apiKeyStrategy;
   if (data.lastHealthCheck !== undefined) updateObj.last_health_check = data.lastHealthCheck;

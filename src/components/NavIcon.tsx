@@ -65,10 +65,22 @@ function SettingsIcon({ active, size = 18 }: IconProps) {
   );
 }
 
+function ArchiveIcon({ active, size = 18 }: IconProps) {
+  // archive box
+  return (
+    <svg {...common(size)} className={active ? 'text-cyan-400 drop-shadow-[0_0_4px_rgba(53,230,255,0.7)]' : 'text-slate-400'}>
+      <rect x="3" y="4" width="18" height="5" rx="1.2" />
+      <path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9" />
+      <line x1="10" y1="13" x2="14" y2="13" />
+    </svg>
+  );
+}
+
 export function NavIcon({ name, active, size }: { name: string; active?: boolean; size?: number }): ReactNode {
   switch (name) {
     case 'providers': return <ProvidersIcon active={active} size={size} />;
     case 'combos': return <CombosIcon active={active} size={size} />;
+    case 'archive': return <ArchiveIcon active={active} size={size} />;
     case 'logs': return <LogsIcon active={active} size={size} />;
     case 'settings': return <SettingsIcon active={active} size={size} />;
     default: return null;
