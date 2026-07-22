@@ -1039,7 +1039,9 @@ export default function Dashboard() {
 
             {archivedProviders.length === 0 ? (
               <div className="card text-center py-12 text-slate-400">
-                <div className="text-4xl mb-2">📦</div>
+                <div className="mx-auto mb-3 w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: 'linear-gradient(180deg, rgba(0,191,255,0.14), rgba(53,230,255,0.06))', border: '1px solid rgba(53,230,255,0.28)', boxShadow: '0 0 24px -8px rgba(53,230,255,0.45)' }}>
+                  <IconArchive size={30} className="text-cyan-400" />
+                </div>
                 <p>Arsip kosong. Provider yang diarsipkan akan muncul di sini.</p>
               </div>
             ) : (
