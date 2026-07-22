@@ -901,12 +901,52 @@ export default function Dashboard() {
                                   )}
                                 </div>
 
+                                {/* Icon-only actions always visible on overview */}
+                                <div className="mt-3 flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTestAllModels(p)}
+                                    disabled={testingAllModels === p.id}
+                                    title="Cek semua model"
+                                    aria-label="Cek semua model"
+                                    className="w-9 h-9 rounded-lg bg-blue-50 text-blue-400 hover:text-blue-300 border border-blue-300/40 hover:border-blue-300/70 transition-colors inline-flex items-center justify-center disabled:opacity-50"
+                                  >
+                                    {testingAllModels === p.id ? <IconSpinner size={15} className="text-blue-400" /> : <IconFlask size={15} />}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditModal(p)}
+                                    title="Edit"
+                                    aria-label="Edit provider"
+                                    className="w-9 h-9 rounded-lg bg-slate-100 text-slate-700 hover:text-slate-900 hover:bg-slate-200 border border-slate-300/30 hover:border-blue-300/60 transition-colors inline-flex items-center justify-center"
+                                  >
+                                    <IconPencil size={15} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleArchiveProvider(p)}
+                                    title="Arsip"
+                                    aria-label="Arsip provider"
+                                    className="w-9 h-9 rounded-lg bg-amber-50 text-amber-700 hover:text-amber-800 hover:bg-amber-100 border border-amber-300/40 hover:border-amber-400/70 transition-colors inline-flex items-center justify-center"
+                                  >
+                                    <IconArchive size={15} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeleteTarget(p)}
+                                    title="Hapus permanen"
+                                    aria-label="Hapus permanen"
+                                    className="w-9 h-9 rounded-lg bg-red-50/80 text-red-400 hover:text-red-300 hover:bg-red-100 border border-red-300/30 hover:border-red-300/60 transition-colors inline-flex items-center justify-center"
+                                  >
+                                    <IconTrash size={15} />
+                                  </button>
+                                </div>
+
                                 {/* Expanded details */}
                                 {isExpanded && (
-                                  <>
-                                <div className="flex flex-col gap-2 mt-2 flex-1 content-start" onClick={(e) => e.stopPropagation()}>
-                                  {/* Group model test results by API key */}
-                                  {keyGroups.map(g => {
+                                  <div className="flex flex-col gap-2 mt-2 flex-1 content-start" onClick={(e) => e.stopPropagation()}>
+                                    {/* Group model test results by API key */}
+                                    {keyGroups.map(g => {
                                       const groupKey = `${p.id}:${g.name}:`;
                                       const groupResults = modelsList.filter(m => modelTestResults[`${groupKey}${m}`]);
                                       const hasAny = groupResults.length > 0;
@@ -944,26 +984,7 @@ export default function Dashboard() {
                                         </div>
                                       );
                                     })}
-                                </div>
-
-                                <hr className="card-divider" />
-
-                                <div className="card-actions mt-1" onClick={(e) => e.stopPropagation()}>
-                                  <button
-                                    onClick={() => handleTestAllModels(p)}
-                                    disabled={testingAllModels === p.id}
-                                    className="text-[13.5px] px-2 py-2 rounded-lg bg-blue-50 text-blue-400 hover:text-blue-300 border border-blue-300/40 hover:border-blue-300/70 transition-colors w-full font-medium"
-                                  >
-                                    {testingAllModels === p.id ? <span className="flex items-center justify-center gap-2"><IconSpinner size={14} className="text-blue-400" /> Testing...</span> : <span className="inline-flex items-center justify-center gap-1.5"><IconFlask size={14} /> Cek Semua Model</span>}
-                                  </button>
-
-                                  <div className="grid grid-cols-2 gap-2 mt-2">
-                                    <button onClick={() => openEditModal(p)} className="text-[13.5px] px-2 py-2 rounded-lg bg-slate-100 text-slate-700 hover:text-slate-900 hover:bg-slate-200 border border-slate-300/30 hover:border-blue-300/60 transition-colors font-medium inline-flex items-center justify-center gap-1.5"><IconPencil size={14} /> Edit</button>
-                                    <button onClick={() => handleArchiveProvider(p)} className="text-[13.5px] px-2 py-2 rounded-lg bg-amber-50 text-amber-700 hover:text-amber-800 hover:bg-amber-100 border border-amber-300/40 hover:border-amber-400/70 transition-colors font-medium inline-flex items-center justify-center gap-1.5"><IconArchive size={14} /> Arsip</button>
                                   </div>
-                                  <button onClick={() => setDeleteTarget(p)} className="mt-2 text-[12.5px] px-2 py-1.5 rounded-lg bg-red-50/70 text-red-300 hover:text-red-200 hover:bg-red-100 border border-red-300/20 hover:border-red-300/50 transition-colors w-full font-medium inline-flex items-center justify-center gap-1.5"><IconTrash size={13} /> Hapus permanen</button>
-                                </div>
-                                  </>
                                 )}
                               </div>
                               );
