@@ -43,39 +43,27 @@ Razoter uses [Supabase](https://supabase.com) (artinya: layanan database online 
 4. Choose a region close to your users.
 5. Wait ~2 minutes for the project to provision.
 
-#### Step 2b — Run the Database Schema
+#### Step 2b — Run the Database Setup Script
 
-Once your project is ready:
+Once your Supabase project is ready:
 
 1. Open your Supabase project dashboard.
-2. Go to **SQL Editor** (left sidebar → click `SQL Editor`).
+2. Go to **SQL Editor** (left sidebar).
 3. Click **New query**.
-4. Copy the entire contents of [`supabase/schema.sql`](./supabase/schema.sql) from this repo, paste it into the SQL Editor, and click **Run**. This creates the core tables: `providers`, `request_logs`, `app_config`, and enables Row Level Security.
+4. Copy the entire contents of [`supabase/setup.sql`](./supabase/setup.sql) from this repo, paste it into the SQL Editor, and click **Run**.
 
-#### Step 2c — Run Migration Files
+That's it — one file, one run. This script does everything:
+- Creates all tables (providers, request_logs, users, api_keys, quotas, combos, app_config, api_key_token_totals)
+- Enables Row Level Security (RLS) on all tables
+- Adds all columns from migrations (multi API key, ChatGPT auth, archive, quotas, etc.)
+- Creates all indexes and unique constraints
+- Creates all atomic RPC functions
 
-After the schema, run each migration file **in order** (001 → 009). Each file adds or modifies columns/tables. For each file:
-
-1. Open a **New query** in Supabase SQL Editor.
-2. Copy the contents of the file, paste, and **Run**.
-
-| Order | File | What it does |
-|-------|------|-------------|
-| 1 | `supabase/migrations/001_users.sql` | Creates `users` table (for dashboard login) with RLS |
-| 2 | `supabase/migrations/002_chatgpt_plus_auth.sql` | Adds ChatGPT Plus OAuth columns to providers |
-| 3 | `supabase/migrations/003_quota_per_model.sql` | Adds model column to quotas table |
-| 4 | `supabase/migrations/004_multi_api_key.sql` | Adds multi API key support (JSONB array per provider) |
-| 5 | `supabase/migrations/005_quota_per_api_key.sql` | Adds per-API-key quota tracking |
-| 6 | `supabase/migrations/006_log_api_key_name.sql` | Adds API key name to request logs |
-| 7 | `supabase/migrations/007_api_key_strategy.sql` | Adds API key selection strategy column |
-| 8 | `supabase/migrations/008_archive_providers.sql` | Adds archive (soft-delete) column to providers |
-| 9 | `supabase/migrations/009_api_key_token_totals.sql` | Creates lifetime token totals table per API key |
-
-> **Tip:** You can also combine all migrations into one query and run them all at once — they're designed to be idempotent (artinya: aman dijalankan berulang, tidak akan error kalau tabel/kolom sudah ada karena pakai `IF NOT EXISTS`).
+> 💡 The script is **idempotent** (artinya: aman dijalankan berulang — tidak akan error kalau tabel/kolom sudah ada, karena pakai `IF NOT EXISTS` dan `OR REPLACE`). Jadi kalau ada error di tengah, kamu bisa fix lalu re-run tanpa masalah.
 
 On first login to the dashboard, Razoter will **auto-create a default admin user** (username: `admin`, password: `admin123`). **Change this password immediately after first login.**
 
-#### Step 2d — Get Your Supabase Credentials
+#### Step 2c — Get Your Supabase Credentials
 
 From your Supabase project dashboard:
 
@@ -86,7 +74,7 @@ From your Supabase project dashboard:
 
 > ⚠️ **Important:** Use the **service_role** key, not the `anon` public key. The service_role key bypasses RLS and allows Razoter to read/write data. Never expose this key in client-side code or public repos.
 
-#### Step 2e — Get Your JWT Secret
+#### Step 2d — Get Your JWT Secret
 
 Razoter also needs a `JWT_SECRET` for signing auth tokens. You can:
 
