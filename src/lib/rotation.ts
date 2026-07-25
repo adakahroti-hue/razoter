@@ -58,13 +58,18 @@ export async function selectProvider(mode: RotationMode): Promise<Provider | nul
   }
 }
 
+/**
+ * Get next provider in failover — accepts providers array to avoid re-querying DB.
+ * Falls back to DB query if no providers passed (backward compatibility).
+ */
 export async function getNextProvider(
   mode: RotationMode,
   currentId: string,
-  triedIds: Set<string>
+  triedIds: Set<string>,
+  providers?: Provider[]
 ): Promise<Provider | null> {
-  const providers = filterProvidersWithModels(await getEnabledProviders());
-  const available = providers.filter(p => !triedIds.has(p.id));
+  const allProviders = providers ?? filterProvidersWithModels(await getEnabledProviders());
+  const available = allProviders.filter(p => !triedIds.has(p.id));
   if (available.length === 0) return null;
 
   switch (mode) {

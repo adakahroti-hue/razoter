@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
   const providerMap = new Map<string, Agg>();
   const modelMap = new Map<string, Agg>();
   const apiKeyMap = new Map<string, Agg>();
+  const providerApiKeyMap = new Map<string, Agg>(); // NEW: provider + apiKey combined
   const comboMap = new Map<string, Agg>();
   let totalTokensAll = 0;
 
@@ -75,6 +76,14 @@ export async function GET(request: NextRequest) {
     if (ok) k.successes += 1;
     apiKeyMap.set(apiKeyName, k);
 
+    // NEW: Combined provider + apiKey for disambiguation
+    const providerApiKeyKey = `${providerName}|||${apiKeyName}`;
+    const pk = providerApiKeyMap.get(providerApiKeyKey) || { key: providerApiKeyKey, tokens: 0, requests: 0, successes: 0 };
+    pk.tokens += tokens;
+    pk.requests += 1;
+    if (ok) pk.successes += 1;
+    providerApiKeyMap.set(providerApiKeyKey, pk);
+
     const pairKey = `${model}|||${apiKeyName}`;
     const c = comboMap.get(pairKey) || { key: pairKey, tokens: 0, requests: 0, successes: 0 };
     c.tokens += tokens;
@@ -86,6 +95,9 @@ export async function GET(request: NextRequest) {
   const sortByTokens = (a: Agg, b: Agg) => b.tokens - a.tokens || b.requests - a.requests;
   const tokenByProvider = Array.from(providerMap.values()).sort(sortByTokens);
   const tokenByModel = Array.from(modelMap.values()).sort(sortByTokens);
+  const tokenByApiKey = Array.from(apiKeyMap.values()).sort(sortByTokens);
+  // NEW: Provider + API Key combined (for dashboard display with disambiguation)
+  const tokenByProviderApiKey = Array.from(providerApiKeyMap.values()).sort(sortByTokens);
   const tokenByModelAndKey = Array.from(comboMap.values())
     .map(row => {
       const [model, apiKeyName] = row.key.split('|||');
@@ -94,17 +106,25 @@ export async function GET(request: NextRequest) {
     .sort((a, b) => b.tokens - a.tokens || b.requests - a.requests);
 
   // Prefer lifetime totals when available; fall back to recent-window key totals.
-  let tokenByApiKey: TokenAggRow[] = lifetimeTokenByApiKey.length > 0
-    ? lifetimeTokenByApiKey
-    : Array.from(apiKeyMap.values()).sort(sortByTokens);
-
-  // Also merge recent keys that may not yet be in lifetime table
+  let lifetimeTokenByProviderApiKey: TokenAggRow[] = [];
   if (lifetimeTokenByApiKey.length > 0) {
-    const map = new Map(lifetimeTokenByApiKey.map(r => [r.key, { ...r }]));
-    for (const row of Array.from(apiKeyMap.values())) {
-      if (!map.has(row.key)) map.set(row.key, row);
+    // Build provider+apiKey map from lifetime data
+    const lifetimeMap = new Map<string, TokenAggRow>();
+    for (const row of lifetimeTokenByApiKey) {
+      // Try to match with providers to get provider name
+      const matchedProvider = providers.find(p => 
+        p.apiKeys?.some(k => k.name === row.key) || 
+        (p.apiKeys?.length === 0 && row.key === 'Default')
+      );
+      const providerName = matchedProvider?.name || '(unknown provider)';
+      const combinedKey = `${providerName}|||${row.key}`;
+      lifetimeMap.set(combinedKey, { 
+        ...row, 
+        key: combinedKey,
+        providerName 
+      });
     }
-    tokenByApiKey = Array.from(map.values()).sort(sortByTokens);
+    lifetimeTokenByProviderApiKey = Array.from(lifetimeMap.values()).sort(sortByTokens);
   }
 
   const stats: Stats = {
@@ -118,8 +138,10 @@ export async function GET(request: NextRequest) {
     tokenByProvider,
     tokenByModel,
     tokenByApiKey,
+    tokenByProviderApiKey, // NEW
     tokenByModelAndKey,
     lifetimeTokenByApiKey,
+    lifetimeTokenByProviderApiKey, // NEW
   };
 
   return withCors(NextResponse.json(stats));

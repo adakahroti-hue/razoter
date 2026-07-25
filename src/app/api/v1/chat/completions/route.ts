@@ -475,7 +475,7 @@ export async function POST(request: NextRequest) {
             const enabledKeys = (currentProvider.apiKeys || []).filter((k: { enabled?: boolean }) => k.enabled !== false);
             const tried = triedKeyNames.get(currentProvider.id)!;
             if (enabledKeys.length > tried.size) { attempt--; continue; }
-            const next = await getNextProvider(config.mode, currentProvider.id, triedIds);
+            const next = await getNextProvider(config.mode, currentProvider.id, triedIds, enabledProviders);
             if (next) { currentProvider = next; attempt--; continue; }
             lastError = { message: `Quota exceeded for key '${akName}'` };
             break;
@@ -513,7 +513,7 @@ export async function POST(request: NextRequest) {
           const enabledKeys = (currentProvider.apiKeys || []).filter((k: { enabled?: boolean }) => k.enabled !== false);
           const tried = triedKeyNames.get(currentProvider.id)!;
           if (enabledKeys.length > tried.size) { attempt--; continue; }
-          const next = await getNextProvider(config.mode, currentProvider.id, triedIds);
+          const next = await getNextProvider(config.mode, currentProvider.id, triedIds, enabledProviders);
           if (next) { currentProvider = next; attempt--; continue; }
           lastError = { message: `Quota exceeded for key '${stdAkName}'` };
           break;
@@ -683,7 +683,7 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        const next = await getNextProvider(config.mode, currentProvider.id, triedIds);
+        const next = await getNextProvider(config.mode, currentProvider.id, triedIds, enabledProviders);
         if (!next) break;
         currentProvider = next;
         continue;
@@ -750,7 +750,7 @@ export async function POST(request: NextRequest) {
       continue;
     } else {
       // All keys exhausted for this provider → failover to next provider
-      const next = await getNextProvider(config.mode, currentProvider.id, triedIds);
+      const next = await getNextProvider(config.mode, currentProvider.id, triedIds, enabledProviders);
       if (!next) break;
       currentProvider = next;
     }

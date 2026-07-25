@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { NavIcon } from '@/components/NavIcon';
 import RazoterLogo from '@/components/RazoterLogo';
 import {
@@ -107,8 +107,10 @@ interface Stats {
   tokenByProvider?: Array<{ key: string; tokens: number; requests: number; successes: number }>;
   tokenByModel?: Array<{ key: string; tokens: number; requests: number; successes: number }>;
   tokenByApiKey?: Array<{ key: string; tokens: number; requests: number; successes: number }>;
+  tokenByProviderApiKey?: Array<{ key: string; tokens: number; requests: number; successes: number }>;  // NEW
   tokenByModelAndKey?: Array<{ model: string; apiKeyName: string; tokens: number; requests: number; successes: number }>;
   lifetimeTokenByApiKey?: Array<{ key: string; tokens: number; requests: number; successes: number }>;
+  lifetimeTokenByProviderApiKey?: Array<{ key: string; tokens: number; requests: number; successes: number }>;  // NEW
 }
 
 // ─── Helpers ───────────────────────────────────────
@@ -149,6 +151,15 @@ export default function Dashboard() {
   const [loginError, setLoginError] = useState('');
   const [loading, setLoading] = useState(true);
 
+  // Toast notification state
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type });
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 3500);
+  }, []);
+
   const [providers, setProviders] = useState<Provider[]>([]);
   const [archivedProviders, setArchivedProviders] = useState<Provider[]>([]);
   const [logs, setLogs] = useState<RequestLog[]>([]);
@@ -161,11 +172,11 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<'providers' | 'combos' | 'archive' | 'logs' | 'settings'>('providers');
   const [showProviderModal, setShowProviderModal] = useState(false);
 
-  // Token usage per provider (from stats breakdown)
-  const tokenByProvider = (stats?.providerBreakdown ?? []).reduce<Record<string, number>>((acc, b) => {
+  // Token usage per provider (from stats breakdown) — memoized to avoid recompute on every render
+  const tokenByProvider = useMemo(() => (stats?.providerBreakdown ?? []).reduce<Record<string, number>>((acc, b) => {
     acc[b.providerId] = b.totalTokens;
     return acc;
-  }, {});
+  }, {}), [stats]);
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Provider | null>(null);
   const [expandedProviderId, setExpandedProviderId] = useState<string | null>(null);
@@ -421,9 +432,9 @@ export default function Dashboard() {
     if (!providerForm.name || !providerForm.baseUrl) return;
     // New provider needs at least one key with a value
     const validNewKeys = providerFormKeys.filter(k => k.key && !k.key.startsWith('•'));
-    if (!editingProvider && validNewKeys.length === 0) { alert('Masukkan minimal 1 API key!'); return; }
-    if (discoveredModels.length === 0) { alert('Test connection dulu untuk discover models!'); return; }
-    if (selectedModels.length === 0) { alert('Pilih minimal 1 model!'); return; }
+    if (!editingProvider && validNewKeys.length === 0) { showToast('Masukkan minimal 1 API key!', 'error'); return; }
+    if (discoveredModels.length === 0) { showToast('Test connection dulu untuk discover models!', 'error'); return; }
+    if (selectedModels.length === 0) { showToast('Pilih minimal 1 model!', 'error'); return; }
     try {
       const body: Record<string, unknown> = { name: providerForm.name, baseUrl: providerForm.baseUrl, models: discoveredModels, selectedModels, priority: 10, enabled: true };
       // Build apiKeys array — send the FULL providerFormKeys in current order.
@@ -481,8 +492,8 @@ export default function Dashboard() {
           handleAutoCreateQuotas(data.id, providerForm.name, providerFormKeys);
         }
       }
-      else { const err = await res.json(); alert(err.error || 'Failed'); }
-    } catch { alert('Network error'); }
+      else { const err = await res.json(); showToast(err.error || 'Failed', 'error'); }
+    } catch { showToast('Network error', 'error'); }
   }
 
   async function handleDeleteProvider(id: string) {
@@ -491,7 +502,7 @@ export default function Dashboard() {
       await api(url, { method: 'DELETE' });
       setProviders(prev => prev.filter(p => p.id !== id));
       setArchivedProviders(prev => prev.filter(p => p.id !== id));
-    } catch {}
+    } catch { showToast('Operasi gagal', 'error'); }
   }
 
   async function handleArchiveProvider(provider: Provider) {
@@ -508,7 +519,7 @@ export default function Dashboard() {
       // Revert optimistic move
       setArchivedProviders(prev => prev.filter(p => p.id !== provider.id));
       setProviders(prev => [provider, ...prev]);
-      alert('Gagal mengarsipkan provider');
+      showToast('Gagal mengarsipkan provider', 'error');
     }
   }
 
@@ -525,12 +536,12 @@ export default function Dashboard() {
     } catch {
       setProviders(prev => prev.filter(p => p.id !== provider.id));
       setArchivedProviders(prev => [provider, ...prev]);
-      alert('Gagal mengembalikan provider');
+      showToast('Gagal mengembalikan provider', 'error');
     }
   }
 
   async function handleToggleProvider(provider: Provider) {
-    try { await api('/api/providers', { method: 'PUT', body: JSON.stringify({ id: provider.id, enabled: !provider.enabled }) }); fetchData(); } catch {}
+    try { await api('/api/providers', { method: 'PUT', body: JSON.stringify({ id: provider.id, enabled: !provider.enabled }) }); fetchData(); } catch { showToast('Operasi gagal', 'error'); }
   }
 
   function openEditModal(provider: Provider) {
@@ -599,8 +610,24 @@ export default function Dashboard() {
     }
   }
 
+  // Ref to track ChatGPT poll interval for cleanup
+  const chatgptPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const chatgptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (chatgptPollRef.current) clearInterval(chatgptPollRef.current);
+      if (chatgptTimeoutRef.current) clearTimeout(chatgptTimeoutRef.current);
+    };
+  }, []);
+
   function startChatgptPoll(deviceAuthId: string, userCode: string) {
-    const pollInterval = setInterval(async () => {
+    // Clear any existing poll
+    if (chatgptPollRef.current) clearInterval(chatgptPollRef.current);
+    if (chatgptTimeoutRef.current) clearTimeout(chatgptTimeoutRef.current);
+
+    chatgptPollRef.current = setInterval(async () => {
       try {
         const res = await api('/api/auth/chatgpt/poll', {
           method: 'POST',
@@ -608,7 +635,7 @@ export default function Dashboard() {
         });
         const data = await res.json();
         if (data.status === 'success') {
-          clearInterval(pollInterval);
+          if (chatgptPollRef.current) clearInterval(chatgptPollRef.current);
           setChatgptStep('done');
           setShowProviderModal(false);
           resetProviderForm();
@@ -616,7 +643,7 @@ export default function Dashboard() {
         } else if (data.status === 'pending') {
           // Still waiting, continue polling
         } else {
-          clearInterval(pollInterval);
+          if (chatgptPollRef.current) clearInterval(chatgptPollRef.current);
           setChatgptStep('error');
           setChatgptError(data.error || 'Login failed');
         }
@@ -625,7 +652,9 @@ export default function Dashboard() {
       }
     }, 5000);
     // Clear after 10 minutes
-    setTimeout(() => clearInterval(pollInterval), 600000);
+    chatgptTimeoutRef.current = setTimeout(() => {
+      if (chatgptPollRef.current) clearInterval(chatgptPollRef.current);
+    }, 600000);
   }
 
   // ─── API Key actions ─────────────────────────────
@@ -640,13 +669,13 @@ export default function Dashboard() {
         setNewKeyName('');
         fetchData();
       }
-    } catch {}
+    } catch { showToast('Operasi gagal', 'error'); }
   }
 
   async function handleDeleteApiKey(id: string) {
     if (!confirm('Hapus API key ini?')) return;
     const url = `/api/api-keys?id=${id}`;
-    try { await api(url, { method: 'DELETE' }); fetchData(); } catch {}
+    try { await api(url, { method: 'DELETE' }); fetchData(); } catch { showToast('Operasi gagal', 'error'); }
   }
 
   // ─── Combo actions ───────────────────────────────
@@ -697,9 +726,9 @@ export default function Dashboard() {
   }
 
   async function handleSaveCombo() {
-    if (!comboForm.name.trim()) { alert('Nama combo wajib diisi!'); return; }
-    if (comboItems.length === 0) { alert('Tambah minimal 1 model!'); return; }
-    if (comboItems.some(item => !item.providerId || !item.model)) { alert('Isi semua field!'); return; }
+    if (!comboForm.name.trim()) { showToast('Nama combo wajib diisi!', 'error'); return; }
+    if (comboItems.length === 0) { showToast('Tambah minimal 1 model!', 'error'); return; }
+    if (comboItems.some(item => !item.providerId || !item.model)) { showToast('Isi semua field!', 'error'); return; }
     try {
       if (editingCombo) {
         const res = await api('/api/combos', {
@@ -707,22 +736,22 @@ export default function Dashboard() {
           body: JSON.stringify({ id: editingCombo.id, name: comboForm.name.trim(), items: comboItems, strategy: comboForm.strategy }),
         });
         if (res.ok) { setShowComboModal(false); fetchData(); }
-        else { const err = await res.json(); alert(err.error || 'Failed'); }
+        else { const err = await res.json(); showToast(err.error || 'Failed', 'error'); }
       } else {
         const res = await api('/api/combos', {
           method: 'POST',
           body: JSON.stringify({ name: comboForm.name.trim(), items: comboItems, strategy: comboForm.strategy }),
         });
         if (res.ok) { setShowComboModal(false); fetchData(); }
-        else { const err = await res.json(); alert(err.error || 'Failed'); }
+        else { const err = await res.json(); showToast(err.error || 'Failed', 'error'); }
       }
-    } catch { alert('Network error'); }
+    } catch { showToast('Network error', 'error'); }
   }
 
   async function handleDeleteCombo(id: string) {
     if (!confirm('Hapus combo ini?')) return;
     const url = `/api/combos?id=${id}`;
-    try { await api(url, { method: 'DELETE' }); fetchData(); } catch {}
+    try { await api(url, { method: 'DELETE' }); fetchData(); } catch { showToast('Operasi gagal', 'error'); }
   }
 
   async function handleToggleCombo(combo: Combo) {
@@ -740,13 +769,18 @@ export default function Dashboard() {
 
   async function handleToggleComboItem(combo: Combo, itemIndex: number) {
     const newItems = combo.items.map((item, i) =>
-      i === itemIndex ? { ...item, enabled: item.enabled === false } : item
+      i === itemIndex ? { ...item, enabled: item.enabled !== false ? false : true } : item
     );
     // Optimistic UI
     setCombos(prev => prev.map(c => c.id === combo.id ? { ...c, items: newItems } : c));
     try {
       const res = await api('/api/combos', { method: 'PUT', body: JSON.stringify({ id: combo.id, items: newItems }) });
       if (!res.ok) throw new Error('toggle combo item failed');
+      // Use server response to sync (don't re-fetch all data)
+      const updated = await res.json();
+      if (updated && updated.items) {
+        setCombos(prev => prev.map(c => c.id === combo.id ? { ...c, items: updated.items } : c));
+      }
     } catch {
       // Revert on failure
       setCombos(prev => prev.map(c => c.id === combo.id ? { ...c, items: combo.items } : c));
@@ -801,7 +835,7 @@ export default function Dashboard() {
   }
 
   async function handleSaveQuota() {
-    if (!quotaForm.providerId) { alert('Pilih provider!'); return; }
+    if (!quotaForm.providerId) { showToast('Pilih provider!', 'error'); return; }
     const provider = providers.find(p => p.id === quotaForm.providerId);
     if (!provider) return;
     try {
@@ -810,14 +844,14 @@ export default function Dashboard() {
         body: JSON.stringify({ providerId: quotaForm.providerId, providerName: provider.name, model: '', monthlyLimit: quotaForm.monthlyLimit, resetDay: quotaForm.resetDay }),
       });
       if (res.ok) { setShowQuotaModal(false); fetchData(); }
-      else { const err = await res.json(); alert(err.error || 'Failed'); }
-    } catch { alert('Network error'); }
+      else { const err = await res.json(); showToast(err.error || 'Failed', 'error'); }
+    } catch { showToast('Network error', 'error'); }
   }
 
   async function handleDeleteQuota(id: string) {
     if (!confirm('Hapus quota ini?')) return;
     const url = `/api/quotas?id=${id}`;
-    try { await api(url, { method: 'DELETE' }); fetchData(); } catch {}
+    try { await api(url, { method: 'DELETE' }); fetchData(); } catch { showToast('Operasi gagal', 'error'); }
   }
 
   function findQuota(providerId: string, apiKeyName: string, model: string = ''): Quota | undefined {
@@ -844,7 +878,7 @@ export default function Dashboard() {
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          alert(err.error || 'Gagal simpan limit');
+          showToast(err.error || 'Gagal simpan limit', 'error');
           return;
         }
       } else {
@@ -862,7 +896,7 @@ export default function Dashboard() {
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          alert(err.error || 'Gagal buat limit');
+          showToast(err.error || 'Gagal buat limit', 'error');
           return;
         }
         const created = await res.json();
@@ -876,7 +910,32 @@ export default function Dashboard() {
       }
       fetchData();
     } catch {
-      alert('Network error saat simpan limit');
+      // Retry once after short delay (Supabase can be slow)
+      try {
+        await new Promise(r => setTimeout(r, 1000));
+        if (existing) {
+          await api('/api/quotas', {
+            method: 'PUT',
+            body: JSON.stringify({ id: existing.id, monthlyLimit: opts.monthlyLimit }),
+          });
+        } else {
+          await api('/api/quotas', {
+            method: 'POST',
+            body: JSON.stringify({
+              ensure: true,
+              providerId: opts.provider.id,
+              providerName: opts.provider.name,
+              apiKeyName: opts.apiKeyName,
+              model,
+              monthlyLimit: opts.monthlyLimit,
+              resetDay: 1,
+            }),
+          });
+        }
+        fetchData();
+      } catch {
+        showToast('Koneksi ke server timeout. Coba lagi dalam beberapa detik.', 'error');
+      }
     }
   }
 
@@ -889,7 +948,7 @@ export default function Dashboard() {
   // ─── Settings ────────────────────────────────────
 
   async function handleChangeMode(mode: string) {
-    try { await api('/api/config', { method: 'PUT', body: JSON.stringify({ mode }) }); fetchData(); } catch {}
+    try { await api('/api/config', { method: 'PUT', body: JSON.stringify({ mode }) }); fetchData(); } catch { showToast('Operasi gagal', 'error'); }
   }
 
   async function handleClearLogs() {
@@ -898,7 +957,7 @@ export default function Dashboard() {
       const res = await api('/api/logs', { method: 'DELETE' });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        alert(err.error || 'Gagal reset logs');
+        showToast(err.error || 'Gagal reset logs', 'error');
         return;
       }
       // Clear local UI immediately so no stale numbers flash
@@ -928,7 +987,7 @@ export default function Dashboard() {
       setQuotas(prev => prev.map(q => ({ ...q, currentUsage: 0 })));
       await fetchData();
     } catch {
-      alert('Network error saat reset logs');
+      showToast('Network error saat reset logs', 'error');
     }
   }
 
@@ -942,7 +1001,15 @@ export default function Dashboard() {
   function formatTime(ts: string) { return new Date(ts).toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
   function formatLatency(ms: number) { return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`; }
 
-  const BASE_URL = 'https://razoter.vercel.app/api/v1';
+  // Dynamic BASE_URL — auto-detect domain tempat app dipasang.
+  // Misal: razoter.vercel.app → "https://razoter.vercel.app/api/v1"
+  //        localhost:3000    → "http://localhost:3000/api/v1"
+  const BASE_URL = useMemo(() => {
+    if (typeof window !== 'undefined') {
+      return `${window.location.origin}/api/v1`;
+    }
+    return '/api/v1'; // fallback SSR (jarang dipakai di client component)
+  }, []);
 
   // ─── Login screen ──────────────────────────────
 
@@ -1377,14 +1444,13 @@ export default function Dashboard() {
                       <tr key={log.id} className={`border-t border-slate-100 ${log.errorMessage ? 'cursor-pointer hover:bg-red-50 transition-colors' : ''}`} onClick={log.errorMessage ? () => setSelectedLogError(log) : undefined}>
                         <td className="px-4 py-2 text-slate-500 font-mono text-xs">{formatTime(log.createdAt)}</td>
                         <td className="px-4 py-2 text-slate-700">{log.providerName}</td>
-                        <td className="px-4 py-2 text-slate-500 text-xs font-mono">{log.apiKeyName || '-'}</td>
+                        <td className="px-4 py-2 text-slate-500 text-xs font-mono">{log.apiKeyName ? `${log.providerName} → ${log.apiKeyName}` : '-'}</td>
                         <td className="px-4 py-2 text-slate-500 font-mono text-xs">{log.model}</td>
                         <td className="px-4 py-2 text-slate-700 text-xs font-semibold">{log.tokensUsed ? formatTokens(log.tokensUsed) : <span className="text-slate-300">-</span>}</td>
                         <td className="px-4 py-2"><div className="flex items-center gap-1">{statusBadge(log.status)}{log.errorMessage && <span title="View error details">🔴</span>}</div></td>
                         <td className="px-4 py-2 text-xs text-red-600 max-w-[200px] truncate">{log.errorMessage ? log.errorMessage.length > 50 ? log.errorMessage.slice(0, 50) + '...' : log.errorMessage : <span className="text-slate-300">-</span>}</td>
                       </tr>
-                    ))
-                  }
+                    ))}
                 </tbody>
               </table>
               {/* Mobile card view */}
@@ -1404,52 +1470,67 @@ export default function Dashboard() {
                         <div className="mt-1 text-xs text-red-600 truncate">{log.errorMessage.length > 50 ? log.errorMessage.slice(0, 50) + '...' : log.errorMessage}</div>
                       )}
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-slate-500 font-mono">{log.apiKeyName || '-'}</span>
+                        <span className="text-xs text-slate-500 font-mono">{log.apiKeyName ? `${log.providerName} → ${log.apiKeyName}` : '-'}</span>
                         <span className="text-xs font-semibold text-slate-700">{log.tokensUsed ? formatTokens(log.tokensUsed) : '-'}</span>
                       </div>
                     </div>
-                  ))
-                }
+                  ))}
               </div>
             </div>
 
-            {/* Token usage tracker */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              <div className="card p-3">
-                <h3 className="text-sm font-semibold text-slate-800 mb-2">Per Provider</h3>
-                {(stats?.tokenByProvider?.length ?? 0) === 0 ? (
-                  <div className="text-xs text-slate-400 py-4 text-center">Belum ada data token</div>
-                ) : (
-                  <div className="max-h-48 overflow-y-auto space-y-1.5">
-                    {(stats?.tokenByProvider ?? []).slice(0, 20).map(row => (
-                      <div key={row.key} className="flex items-center justify-between gap-2 text-xs">
-                        <span className="font-semibold text-cyan-700 truncate" title={row.key}>{row.key}</span>
-                        <span className="font-semibold text-slate-800 whitespace-nowrap">{formatTokens(row.tokens)} <span className="text-slate-400 font-normal">· {row.requests}x</span></span>
+            {/* Token usage tracker - grouped by provider with API key breakdown */}
+            <div className="space-y-3">
+              {(stats?.tokenByProvider?.length ?? 0) === 0 ? (
+                <div className="card p-3 text-center">
+                  <div className="text-xs text-slate-400 py-4">Belum ada data token</div>
+                </div>
+              ) : (
+                (stats?.tokenByProvider ?? []).slice(0, 20).map(providerRow => {
+                  // Find API keys for this provider from combined data
+                  const providerApiKeys = (stats?.tokenByProviderApiKey ?? []).filter(row => {
+                    const [providerPart] = row.key.split('|||');
+                    return providerPart === providerRow.key;
+                  });
+                  return (
+                    <div key={providerRow.key} className="card p-3">
+                      {/* Provider header with total tokens */}
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-sm font-semibold text-slate-800">{providerRow.key}</h3>
+                        <span className="font-semibold text-cyan-700 text-xs whitespace-nowrap">
+                          {formatTokens(providerRow.tokens)} <span className="text-slate-400 font-normal">· {providerRow.requests}x</span>
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="card p-3">
-                <h3 className="text-sm font-semibold text-slate-800 mb-2">Per API Key</h3>
-                <p className="text-[10px] text-slate-400 mb-2">
-                  {(stats?.lifetimeTokenByApiKey?.length ?? 0) > 0
-                    ? 'Total lifetime (tidak ikut terhapus saat log dibersihkan)'
-                    : 'Dari usage quota / log terbaru'}
-                </p>
-                {(stats?.tokenByApiKey?.length ?? 0) === 0 ? (
-                  <div className="text-xs text-slate-400 py-4 text-center">Belum ada data token</div>
-                ) : (
-                  <div className="max-h-48 overflow-y-auto space-y-1.5">
-                    {(stats?.tokenByApiKey ?? []).slice(0, 20).map(row => (
-                      <div key={row.key} className="flex items-center justify-between gap-2 text-xs">
-                        <span className="font-mono text-yellow-600 truncate" title={row.key}>{row.key}</span>
-                        <span className="font-semibold text-slate-800 whitespace-nowrap">{formatTokens(row.tokens)} <span className="text-slate-400 font-normal">· {row.requests}x</span></span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                      
+                      {/* API Keys under this provider */}
+                      {providerApiKeys.length === 0 ? (
+                        <div className="text-xs text-slate-400 text-center py-2">Belum ada data per API key</div>
+                      ) : (
+                        <div className="space-y-1 max-h-48 overflow-y-auto pl-2 border-l border-slate-200">
+                          {providerApiKeys.slice(0, 10).map(keyRow => {
+                            const [, apiKeyPart] = keyRow.key.split('|||');
+                            const displayApiKey = apiKeyPart || '(unknown key)';
+                            return (
+                              <div key={keyRow.key} className="flex items-center justify-between gap-2 text-[11px] py-1">
+                                <span className="font-mono text-yellow-600 truncate max-w-[60%]" title={displayApiKey}>
+                                  {displayApiKey}
+                                </span>
+                                <span className="font-semibold text-slate-700 whitespace-nowrap text-right">
+                                  {formatTokens(keyRow.tokens)} <span className="text-slate-400 font-normal">· {keyRow.requests}x</span>
+                                </span>
+                              </div>
+                            );
+                          })}
+                          {providerApiKeys.length > 10 && (
+                            <div className="text-[10px] text-slate-400 text-center pt-1">
+                              +{providerApiKeys.length - 10} key lainnya
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
             </div>
 
           </div>
@@ -1799,7 +1880,7 @@ export default function Dashboard() {
       {showComboModal && (
         <div className="fixed inset-0 bg-black/50 z-50 p-0 sm:p-4 flex flex-col sm:items-center sm:justify-center">
           <div className="flex-1 sm:flex-none" onClick={() => { setShowComboModal(false); setEditingCombo(null); }} />
-          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full sm:max-w-4xl max-h-[90vh] overflow-y-auto">
             <div className="p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-slate-900">{editingCombo ? 'Edit Combo' : 'Buat Combo Model'}</h3>
@@ -1950,6 +2031,21 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Toast notification */}
+      {toast && (
+        <div
+          className={`fixed bottom-6 right-6 z-[100] px-4 py-3 rounded-lg shadow-lg text-sm font-medium animate-in fade-in slide-in-from-bottom-2 ${
+            toast.type === 'error'
+              ? 'bg-red-600 text-white'
+              : toast.type === 'success'
+              ? 'bg-emerald-600 text-white'
+              : 'bg-slate-800 text-slate-100'
+          }`}
+        >
+          {toast.message}
         </div>
       )}
     </div>

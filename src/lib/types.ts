@@ -102,6 +102,7 @@ export interface TokenAggRow {
   tokens: number;
   requests: number;
   successes: number;
+  providerName?: string;  // Optional: for provider+apiKey combined rows
 }
 
 export interface TokenModelKeyRow {
@@ -123,9 +124,11 @@ export interface Stats {
   tokenByProvider?: TokenAggRow[];
   tokenByModel?: TokenAggRow[];
   tokenByApiKey?: TokenAggRow[];
+  tokenByProviderApiKey?: TokenAggRow[];  // NEW: provider + apiKey combined
   tokenByModelAndKey?: TokenModelKeyRow[];
   /** Lifetime totals (not limited by request_logs cleanup) */
   lifetimeTokenByApiKey?: TokenAggRow[];
+  lifetimeTokenByProviderApiKey?: TokenAggRow[];  // NEW: lifetime with provider name
 }
 
 // ─── Rate limit ─────────────────────────────────────

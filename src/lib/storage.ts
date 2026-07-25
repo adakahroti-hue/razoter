@@ -149,6 +149,16 @@ export async function archiveProvider(id: string, archived: boolean): Promise<bo
     console.error('Supabase archiveProvider error:', error);
     return false;
   }
+
+  // Cascade: remove from combos when archiving (restore when unarchiving)
+  if (archived && data) {
+    try {
+      await removeProviderFromCombos(id);
+    } catch (e) {
+      console.error('Supabase archiveProvider combo cascade error:', e);
+    }
+  }
+
   return !!data;
 }
 
@@ -248,6 +258,13 @@ export async function updateProvider(id: string, data: Partial<Provider>): Promi
   if (data.rateLimitReset !== undefined) updateObj.rate_limit_reset = data.rateLimitReset;
   if (data.rateLimitTotal !== undefined) updateObj.rate_limit_total = data.rateLimitTotal;
 
+  // Get old selected models before update to detect removed models
+  let oldSelectedModels: string[] | null = null;
+  if (data.selectedModels !== undefined) {
+    const oldProvider = await getProvider(id);
+    oldSelectedModels = oldProvider?.selectedModels ?? null;
+  }
+
   const { data: updated, error } = await supabase
     .from('providers')
     .update(updateObj)
@@ -259,6 +276,28 @@ export async function updateProvider(id: string, data: Partial<Provider>): Promi
     console.error('Supabase updateProvider error:', error);
     return null;
   }
+
+  // Cascade: remove combo items that used models no longer in selectedModels
+  if (data.selectedModels !== undefined && oldSelectedModels && updated) {
+    const removedModels = oldSelectedModels.filter(m => !data.selectedModels!.includes(m));
+    if (removedModels.length > 0) {
+      try {
+        await removeModelFromCombos(id, removedModels);
+      } catch (e) {
+        console.error('Supabase updateProvider combo model cascade error:', e);
+      }
+    }
+  }
+
+  // Cascade: remove from combos when provider is disabled
+  if (data.enabled === false && updated) {
+    try {
+      await removeProviderFromCombos(id);
+    } catch (e) {
+      console.error('Supabase updateProvider combo disable cascade error:', e);
+    }
+  }
+
   return updated ? dbToProvider(updated) : null;
 }
 
@@ -286,40 +325,52 @@ export async function deleteProvider(id: string): Promise<boolean> {
     console.error('Supabase deleteProvider quota cascade error:', e);
   }
 
+  // Cascade: remove combo items that reference this provider
+  try {
+    await removeProviderFromCombos(id);
+  } catch (e) {
+    console.error('Supabase deleteProvider combo cascade error:', e);
+  }
+
   return (count ?? 0) > 0;
 }
 
 export async function updateProviderStats(providerId: string, success: boolean, latencyMs: number): Promise<void> {
-  const provider = await getProvider(providerId);
-  if (!provider) return;
-
-  const prevCount = provider.totalRequests || 0;
-  const newRequestCount = prevCount + 1;
-  const newErrorCount = (provider.errorCount || 0) + (success ? 0 : 1);
-
-  // Guard against divide-by-zero on first request
-  const newAvgLatency = prevCount === 0
-    ? latencyMs
-    : Math.round((provider.avgLatencyMs * prevCount + latencyMs) / newRequestCount);
-
-  const errorRate = newErrorCount / newRequestCount;
-  let healthStatus: string;
-  if (errorRate < 0.1) healthStatus = 'healthy';
-  else if (errorRate < 0.3) healthStatus = 'degraded';
-  else healthStatus = 'down';
-
-  const { error } = await supabase
-    .from('providers')
-    .update({
-      request_count: newRequestCount,
-      error_count: newErrorCount,
-      avg_latency: newAvgLatency,
-      health_status: healthStatus,
-    })
-    .eq('id', providerId);
+  // Try atomic RPC first
+  const { error } = await supabase.rpc('update_provider_stats', {
+    p_provider_id: providerId,
+    p_success: success,
+    p_latency_ms: latencyMs,
+  });
 
   if (error) {
-    console.error('Supabase updateProviderStats error:', error);
+    // Fallback to read-then-write if RPC doesn't exist yet
+    const provider = await getProvider(providerId);
+    if (!provider) return;
+
+    const prevCount = provider.totalRequests || 0;
+    const newRequestCount = prevCount + 1;
+    const newErrorCount = (provider.errorCount || 0) + (success ? 0 : 1);
+    const newAvgLatency = prevCount === 0
+      ? latencyMs
+      : Math.round((provider.avgLatencyMs * prevCount + latencyMs) / newRequestCount);
+    const errorRate = newErrorCount / newRequestCount;
+    let healthStatus: string;
+    if (errorRate < 0.1) healthStatus = 'healthy';
+    else if (errorRate < 0.3) healthStatus = 'degraded';
+    else healthStatus = 'down';
+
+    const { error: updateErr } = await supabase
+      .from('providers')
+      .update({
+        request_count: newRequestCount,
+        error_count: newErrorCount,
+        avg_latency: newAvgLatency,
+        health_status: healthStatus,
+      })
+      .eq('id', providerId);
+
+    if (updateErr) console.error('Supabase updateProviderStats fallback error:', updateErr);
   }
 }
 
@@ -348,7 +399,16 @@ export async function updateProviderRateLimit(
 
 // ─── Config ───────────────────────────────────────────────
 
+// In-memory cache for getConfig — avoids DB hit on every proxy request
+let _configCache: { data: AppConfig | null; expiresAt: number } = { data: null, expiresAt: 0 };
+const CONFIG_CACHE_TTL_MS = 60_000; // 60 seconds
+
 export async function getConfig(): Promise<AppConfig> {
+  // Return cached config if still valid
+  if (_configCache.data && Date.now() < _configCache.expiresAt) {
+    return _configCache.data;
+  }
+
   const { data, error } = await supabase
     .from('app_config')
     .select('*')
@@ -365,7 +425,10 @@ export async function getConfig(): Promise<AppConfig> {
       timeoutMs: 30000,
     };
   }
-  return dbToConfig(data);
+
+  const config = dbToConfig(data);
+  _configCache = { data: config, expiresAt: Date.now() + CONFIG_CACHE_TTL_MS };
+  return config;
 }
 
 export async function updateConfig(data: Partial<AppConfig>): Promise<AppConfig> {
@@ -388,6 +451,9 @@ export async function updateConfig(data: Partial<AppConfig>): Promise<AppConfig>
     const current = await getConfig();
     return { ...current, ...data };
   }
+
+  // Invalidate cache so next getConfig fetches fresh data
+  _configCache = { data: null, expiresAt: 0 };
 
   return updated ? dbToConfig(updated) : await getConfig();
 }
@@ -432,29 +498,7 @@ export async function addLog(log: Omit<RequestLog, 'id' | 'createdAt'>): Promise
     return { ...log, id, createdAt: timestamp };
   }
 
-  // Auto-delete oldest logs if total exceeds 15
-  try {
-    const { count } = await supabase
-      .from('request_logs')
-      .select('*', { count: 'exact', head: true });
-    if (count && count > 15) {
-      // Get IDs of logs beyond the latest 15
-      const { data: oldLogs } = await supabase
-        .from('request_logs')
-        .select('id')
-        .order('timestamp', { ascending: false })
-        .range(15, count - 1);
-      if (oldLogs && oldLogs.length > 0) {
-        await supabase
-          .from('request_logs')
-          .delete()
-          .in('id', oldLogs.map((l: any) => l.id));
-      }
-    }
-  } catch (cleanupErr) {
-    console.error('Log auto-cleanup error:', cleanupErr);
-  }
-
+  // Auto-cleanup removed — handled by cron job cleanup_request_logs.py at 06:00 WIB
   return dbToLog(data);
 }
 
@@ -473,13 +517,48 @@ export async function getLogs(limit = 50, offset = 0): Promise<RequestLog[]> {
 }
 
 export async function clearLogs(): Promise<void> {
-  const { error } = await supabase
-    .from('request_logs')
-    .delete()
-    .neq('id', '00000000-0000-0000-0000-000000000000');
+  // Delete by batch chunks (much faster than neq('id', ...) for large tables)
+  const BATCH_SIZE = 5000;
+  let batchDeleted = true;
+  let totalDeleted = 0;
 
-  if (error) {
-    console.error('Supabase clearLogs error:', error);
+  while (batchDeleted) {
+    // Get first batch of IDs to delete
+    const { data: batch, error: fetchErr } = await supabase
+      .from('request_logs')
+      .select('id')
+      .limit(BATCH_SIZE);
+
+    if (fetchErr || !batch || batch.length === 0) break;
+
+    const ids = batch.map((r: any) => r.id);
+    
+    // Delete the batch
+    const { error: deleteErr } = await supabase
+      .from('request_logs')
+      .delete()
+      .in('id', ids);
+    
+    if (deleteErr) {
+      console.error('Batch delete error:', deleteErr.message);
+      // If individual deletes fail, try delete with limit (faster but may leave some rows)
+      const { error: limitErr } = await supabase
+        .from('request_logs')
+        .delete()
+        .lte('id', ids[ids.length - 1]);
+      
+      if (limitErr) {
+        console.error('Limit delete also failed, skipping:', limitErr.message);
+      } else {
+        totalDeleted += ids.length;
+      }
+      break;
+    }
+
+    totalDeleted += ids.length;
+    
+    // Stop after processing (one-shot clear)
+    batchDeleted = false;
   }
 }
 
@@ -694,6 +773,71 @@ export async function updateCombo(id: string, updates: Partial<Combo>): Promise<
   return { id: data.id, name: data.name, items: data.items ?? [], strategy: data.strategy ?? 'failover-priority', enabled: data.enabled, createdAt: data.created_at };
 }
 
+// ─── Cascade: remove provider from all combos ─────────
+
+export async function removeProviderFromCombos(providerId: string): Promise<number> {
+  let updated = 0;
+  const { data: combos, error } = await supabase
+    .from('combos')
+    .select('id, items')
+    .eq('enabled', true);
+
+  if (error || !combos) return 0;
+
+  for (const combo of combos) {
+    const items: any[] = combo.items ?? [];
+    const filtered = items.filter((item: any) => item.providerId !== providerId);
+
+    // Only update if items actually changed
+    if (filtered.length !== items.length) {
+      // If combo now empty → delete combo entirely
+      if (filtered.length === 0) {
+        await supabase.from('combos').delete().eq('id', combo.id);
+        updated++;
+      } else {
+        // Update combo with remaining items
+        await supabase.from('combos').update({ items: filtered }).eq('id', combo.id);
+        updated++;
+      }
+    }
+  }
+  return updated;
+}
+
+// ─── Cascade: remove specific models from all combos (for a given provider) ───
+
+export async function removeModelFromCombos(providerId: string, removedModels: string[]): Promise<number> {
+  let updated = 0;
+  const { data: combos, error } = await supabase
+    .from('combos')
+    .select('id, items')
+    .eq('enabled', true);
+
+  if (error || !combos) return 0;
+
+  for (const combo of combos) {
+    const items: any[] = combo.items ?? [];
+    const filtered = items.filter((item: any) => {
+      // Remove if this item belongs to the provider AND its model was removed
+      if (item.providerId === providerId && removedModels.includes(item.model)) {
+        return false; // remove this item
+      }
+      return true; // keep
+    });
+
+    if (filtered.length !== items.length) {
+      if (filtered.length === 0) {
+        await supabase.from('combos').delete().eq('id', combo.id);
+        updated++;
+      } else {
+        await supabase.from('combos').update({ items: filtered }).eq('id', combo.id);
+        updated++;
+      }
+    }
+  }
+  return updated;
+}
+
 export async function deleteCombo(id: string): Promise<boolean> {
   const { error, count } = await supabase
     .from('combos')
@@ -790,11 +934,37 @@ export async function addQuota(providerId: string, providerName: string, model: 
   const id = randomUUID();
   const now = new Date().toISOString();
 
-  const { data, error } = await supabase
+  // Check if quota already exists for this provider+model
+  const { data: existing } = await supabase
     .from('quotas')
-    .insert({ id, provider_id: providerId, provider_name: providerName, model: model || '', monthly_limit: monthlyLimit, current_usage: 0, reset_day: resetDay, api_key_name: apiKeyName, created_at: now })
-    .select()
-    .single();
+    .select('id')
+    .eq('provider_id', providerId)
+    .eq('model', model || '')
+    .maybeSingle();
+
+  let data: any;
+  let error: any;
+
+  if (existing) {
+    // Update existing instead of inserting duplicate
+    const { data: updated, error: updateError } = await supabase
+      .from('quotas')
+      .update({ monthly_limit: monthlyLimit, reset_day: resetDay, api_key_name: apiKeyName })
+      .eq('id', existing.id)
+      .select()
+      .single();
+    data = updated;
+    error = updateError;
+  } else {
+    // Insert new
+    const result = await supabase
+      .from('quotas')
+      .insert({ id, provider_id: providerId, provider_name: providerName, model: model || '', monthly_limit: monthlyLimit, current_usage: 0, reset_day: resetDay, api_key_name: apiKeyName, created_at: now })
+      .select()
+      .single();
+    data = result.data;
+    error = result.error;
+  }
 
   if (error) {
     console.error('Supabase addQuota error:', error);
@@ -928,10 +1098,17 @@ export async function incrementQuotaUsage(
 
   await Promise.all(
     Array.from(targets.values()).map(async (row) => {
-      await supabase
-        .from('quotas')
-        .update({ current_usage: (row.current_usage ?? 0) + tokens })
-        .eq('id', row.id);
+      const { error } = await supabase.rpc('increment_quota_usage', {
+        p_quota_id: row.id,
+        p_tokens: tokens,
+      });
+      if (error) {
+        // Fallback to direct update if RPC doesn't exist
+        await supabase
+          .from('quotas')
+          .update({ current_usage: (row.current_usage ?? 0) + tokens })
+          .eq('id', row.id);
+      }
     })
   );
 
@@ -1005,31 +1182,38 @@ export async function incrementLifetimeApiKeyTokens(apiKeyName: string, tokens: 
   const ok = await ensureLifetimeTokenTable();
   if (!ok) return;
 
-  const now = new Date().toISOString();
-  const { data: existing } = await supabase
-    .from('api_key_token_totals')
-    .select('api_key_name, total_tokens, total_requests')
-    .eq('api_key_name', name)
-    .maybeSingle();
+  const { error } = await supabase.rpc('increment_lifetime_tokens', {
+    p_api_key_name: name,
+    p_tokens: tokens,
+  });
+  if (error) {
+    // Fallback to manual upsert if RPC doesn't exist
+    const now = new Date().toISOString();
+    const { data: existing } = await supabase
+      .from('api_key_token_totals')
+      .select('api_key_name, total_tokens, total_requests')
+      .eq('api_key_name', name)
+      .maybeSingle();
 
-  if (existing) {
-    await supabase
-      .from('api_key_token_totals')
-      .update({
-        total_tokens: (existing.total_tokens ?? 0) + tokens,
-        total_requests: (existing.total_requests ?? 0) + 1,
-        updated_at: now,
-      })
-      .eq('api_key_name', name);
-  } else {
-    await supabase
-      .from('api_key_token_totals')
-      .insert({
-        api_key_name: name,
-        total_tokens: tokens,
-        total_requests: 1,
-        updated_at: now,
-      });
+    if (existing) {
+      await supabase
+        .from('api_key_token_totals')
+        .update({
+          total_tokens: (existing.total_tokens ?? 0) + tokens,
+          total_requests: (existing.total_requests ?? 0) + 1,
+          updated_at: now,
+        })
+        .eq('api_key_name', name);
+    } else {
+      await supabase
+        .from('api_key_token_totals')
+        .insert({
+          api_key_name: name,
+          total_tokens: tokens,
+          total_requests: 1,
+          updated_at: now,
+        });
+    }
   }
 }
 
