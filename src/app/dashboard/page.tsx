@@ -768,9 +768,11 @@ export default function Dashboard() {
   }
 
   async function handleToggleComboItem(combo: Combo, itemIndex: number) {
-    const newItems = combo.items.map((item, i) =>
-      i === itemIndex ? { ...item, enabled: item.enabled !== false ? false : true } : item
+    const toggled = combo.items.map((item, i) =>
+      i === itemIndex ? { ...item, enabled: item.enabled === false ? true : false } : item
     );
+    // Urutkan: enabled dulu (true), lalu disabled (false). Urutan relatif di tiap grup dipertahankan (stable sort).
+    const newItems = [...toggled].sort((a, b) => (a.enabled === false ? 1 : 0) - (b.enabled === false ? 1 : 0));
     // Optimistic UI
     setCombos(prev => prev.map(c => c.id === combo.id ? { ...c, items: newItems } : c));
     try {
